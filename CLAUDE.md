@@ -69,6 +69,7 @@
 - `npm run build`：以上全套（类型检查 → 单测 → 网页 → 小游戏）。
 - 截图录屏：`node tools/cap.mjs <url> <输出目录> <动作 JSON> [宽x高] [dpr] [vt]`，`vt` 是虚拟时钟逐帧录制。
 - 游戏启动完成会设 `window.__dhready = true`；调试接口 `window.__dh`（`info()`、`stats()` 等，模块自己往里加）。
+- **发布前必须在严格安全策略下测一遍**：Artifact 页面禁止 fetch，data: 链接也算在内（2026-11-12 show-02 因此黑屏）。内嵌资源一律用 atob 直接解码。测法：`cd dist/web && python ../../tools/csp_serve.py 8799`（发 `connect-src 'none'` 等响应头），再用 cap.mjs 打开 http://127.0.0.1:8799/index.html 截图。
 - pxui 编辑器还没接到本工程（它的开发服务器只认 `main.js` 入口），等 UI 正式铺开时再接。
 
 ---
