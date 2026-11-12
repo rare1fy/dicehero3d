@@ -5,6 +5,7 @@
 // draw a soft bevel highlight on every block edge — the blocks stay readable as blocks even at a distance.
 import * as THREE from 'three';
 import { toon } from './toon';
+import { PXU } from './pixel';
 import type { Bone } from '../actors/rig';
 
 export type Col = number;
@@ -15,7 +16,12 @@ const DIRS: Array<[number, number, number]> = [[1, 0, 0], [-1, 0, 0], [0, 1, 0],
 const TAN: Array<[[number, number, number], [number, number, number]]> = [[[0, 1, 0], [0, 0, 1]], [[0, 1, 0], [0, 0, 1]], [[0, 0, 1], [1, 0, 0]], [[0, 0, 1], [1, 0, 0]], [[1, 0, 0], [0, 1, 0]], [[1, 0, 0], [0, 1, 0]]];
 const AO = [0.52, 0.7, 0.86, 1];
 
-/** the block material: toon + bevel highlight on block edges (attribute aVox) */
+/**
+ * the block material: toon + bevel highlight on block edges (attribute aVox).
+ * Pixel look (look/pixel.ts, shared uniform uPx): flat per-face tones (top bright, bottom dark, sides in between) and, on faces at least
+ * 6 art pixels across, a crisp 1-art-pixel bevel: light on the open edges that face up-left on screen, a darker line on those facing
+ * down-right. Smaller faces (character cells) keep their flat colour so nothing turns into speckle.
+ */
 const matCache = new Map<string, THREE.MeshToonMaterial>();
 export function voxToon(o: { rim?: number; self?: number; edge?: number } = {}) {
   const k = `${o.rim ?? 0.6}|${o.self ?? 0.05}|${o.edge ?? 0.2}`;
@@ -24,12 +30,31 @@ export function voxToon(o: { rim?: number; self?: number; edge?: number } = {}) 
   const src = toon(0xffffff, { vertexColors: true, rim: o.rim ?? 0.6, self: o.self ?? 0.05 }), m = src.clone(), edge = o.edge ?? 0.2;
   m.onBeforeCompile = (sh, r) => {
     src.onBeforeCompile(sh, r);
-    sh.vertexShader = 'attribute vec2 aVox; attribute vec2 aSize; attribute vec4 aOpen; varying vec2 vVox; varying vec2 vSize; varying vec4 vOpen;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vVox = aVox; vSize = aSize; vOpen = aOpen;');
-    sh.fragmentShader = 'varying vec2 vVox; varying vec2 vSize; varying vec4 vOpen;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.uniforms.uPx = PXU.uPx; sh.uniforms.uPxEdge = PXU.uPxEdge;
+    sh.vertexShader = 'attribute vec2 aVox; attribute vec2 aSize; attribute vec4 aOpen; varying vec2 vVox; varying vec2 vSize; varying vec4 vOpen; varying vec3 vWN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vVox = aVox; vSize = aSize; vOpen = aOpen; vWN = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = 'varying vec2 vVox; varying vec2 vSize; varying vec4 vOpen; varying vec3 vWN; uniform float uPx, uPxEdge;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float d = 1.0; if (vOpen.x > 0.5) d = min(d, vVox.x); if (vOpen.y > 0.5) d = min(d, vSize.x - vVox.x); if (vOpen.z > 0.5) d = min(d, vVox.y); if (vOpen.w > 0.5) d = min(d, vSize.y - vVox.y);
-        diffuseColor.rgb *= 1.0 + ${edge.toFixed(3)} * (1.0 - smoothstep(0.03, 0.1, d)); }`);
+        float bev = 1.0 + ${edge.toFixed(3)} * (1.0 - smoothstep(0.03, 0.1, d));
+        if (uPx > 0.5) {
+          vec3 wn = normalize(vWN);
+          float tone = wn.y > 0.6 ? 1.06 : wn.y < -0.6 ? 0.66 : wn.x > 0.6 ? 0.9 : wn.x < -0.6 ? 0.92 : wn.z > 0.6 ? 1.0 : 0.84;
+          vec2 gx = dFdx(vVox), gy = dFdy(vVox), fw = max(abs(gx) + abs(gy), vec2(1e-4));
+          float span = min(vSize.x / fw.x, vSize.y / fw.y), hl = 0.0, dk = 0.0;
+          if (span > 6.0) {
+            vec2 ux = normalize(vec2(gx.x, gy.x) + 1e-6), uy = normalize(vec2(gx.y, gy.y) + 1e-6), L = vec2(-0.5, 0.866);
+            float e0 = vOpen.x > 0.5 ? vVox.x / fw.x : 1e4, e1 = vOpen.y > 0.5 ? (vSize.x - vVox.x) / fw.x : 1e4;
+            float e2 = vOpen.z > 0.5 ? vVox.y / fw.y : 1e4, e3 = vOpen.w > 0.5 ? (vSize.y - vVox.y) / fw.y : 1e4;
+            float s0 = dot(-ux, L), s1 = dot(ux, L), s2 = dot(-uy, L), s3 = dot(uy, L);
+            if (e0 < 1.0) { hl = max(hl, step(0.2, s0)); dk = max(dk, step(s0, -0.2)); }
+            if (e1 < 1.0) { hl = max(hl, step(0.2, s1)); dk = max(dk, step(s1, -0.2)); }
+            if (e2 < 1.0) { hl = max(hl, step(0.2, s2)); dk = max(dk, step(s2, -0.2)); }
+            if (e3 < 1.0) { hl = max(hl, step(0.2, s3)); dk = max(dk, step(s3, -0.2)); }
+          }
+          bev = tone * (1.0 + uPxEdge * hl) * (1.0 - 0.2 * dk * (1.0 - hl));
+        }
+        diffuseColor.rgb *= bev; }`);
   };
-  m.customProgramCacheKey = () => src.customProgramCacheKey() + '|vox' + edge;
+  m.customProgramCacheKey = () => src.customProgramCacheKey() + '|vox' + edge + '|px';
   matCache.set(k, m); return m;
 }
 const glowMats = new Map<number, THREE.MeshBasicMaterial>();

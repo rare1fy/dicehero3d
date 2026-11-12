@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { scene, canvasTex, WHITE, TAU } from './world';
 import { lerp, ease } from './clock';
+import { PXU } from '../look/pixel';
 
 export const TILE = { glow: 0, spark: 1, smoke: 2, ring: 3, flare: 4, pixel: 5, streak: 6, disc: 7 } as const;
 export type TileName = keyof typeof TILE;
@@ -39,13 +40,23 @@ function paintTiles(g: CanvasRenderingContext2D, style: 'pixel' | 'soft') {
   });
 }
 
-const VS = `attribute vec3 aPos; attribute vec3 aVel; attribute vec4 aCol; attribute vec4 aMisc; varying vec2 vUv; varying vec4 vCol; varying float vTile;
+// Pixel look (look/pixel.ts, shared uPx): every quad is at least uPxMin art pixels wide so sparks never vanish between art pixels,
+// alpha falls in stepped bands (stepped halos), and glows / sparks / flares get a square full-bright core.
+const VS = `attribute vec3 aPos; attribute vec3 aVel; attribute vec4 aCol; attribute vec4 aMisc; uniform float uPx, uArtH, uPxMin; varying vec2 vUv; varying vec4 vCol; varying float vTile;
   void main(){ vec4 mv = modelViewMatrix * vec4(aPos, 1.0); float size = aMisc.x, rot = aMisc.y, st = aMisc.w; vec2 ax, ay;
+    if (uPx > 0.5) size = max(size, uPxMin * 2.0 * max(-mv.z, 0.01) / (projectionMatrix[1][1] * uArtH));
     if (st > 0.0) { vec2 d = (modelViewMatrix * vec4(aVel, 0.0)).xy; float L = length(d); d = L > 1e-4 ? d / L : vec2(1.0, 0.0); ax = d * size * (1.0 + L * st); ay = vec2(-d.y, d.x) * size; }
     else { float c = cos(rot), s = sin(rot); ax = vec2(c, s) * size; ay = vec2(-s, c) * size; }
     mv.xy += ax * position.x + ay * position.y; gl_Position = projectionMatrix * mv; vUv = uv; vCol = aCol; vTile = aMisc.z; }`;
-const FS = `uniform sampler2D uTex; varying vec2 vUv; varying vec4 vCol; varying float vTile;
-  void main(){ vec4 t = texture2D(uTex, vec2((vUv.x + vTile) / 8.0, vUv.y)); float a = t.a * vCol.a; if (a < 0.002) discard; gl_FragColor = vec4(vCol.rgb * t.rgb, a); }`;
+const FS = `uniform sampler2D uTex; uniform float uPx; varying vec2 vUv; varying vec4 vCol; varying float vTile;
+  void main(){ vec4 t = texture2D(uTex, vec2((vUv.x + vTile) / 8.0, vUv.y)); float a0 = t.a; vec3 c = vCol.rgb * t.rgb;
+    if (uPx > 0.5) {
+      vec2 q = abs(vUv - 0.5) * 2.0; float m = max(q.x, q.y);
+      float core = (vTile < 1.5 || abs(vTile - 4.0) < 0.5) ? step(m, 0.3) : 0.0;
+      a0 = a0 > 0.8 ? 1.0 : max(floor(a0 * 4.0 + 0.5) / 4.0, min(a0, 0.125));   // rounded bands; the faint tail stays soft so haze keeps its energy
+      a0 = max(a0, core); c *= 1.0 + 0.6 * core;
+    }
+    float a = a0 * vCol.a; if (a < 0.002) discard; gl_FragColor = vec4(c, a); }`;
 
 export interface Emit {
   p: THREE.Vector3; v?: THREE.Vector3; c0?: THREE.Color; c1?: THREE.Color; bright?: number; bright1?: number;
@@ -63,7 +74,7 @@ export class ParticlePool {
     g.index = quad.index; g.setAttribute('position', quad.attributes.position); g.setAttribute('uv', quad.attributes.uv);
     const A = (k: string, s: number) => { const a = new THREE.InstancedBufferAttribute(new Float32Array(max * s), s); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(k, a); return a; };
     this.aPos = A('aPos', 3); this.aVel = A('aVel', 3); this.aCol = A('aCol', 4); this.aMisc = A('aMisc', 4); g.instanceCount = 0; this.geo = g;
-    this.mat = new THREE.ShaderMaterial({ uniforms: { uTex: { value: tex } }, vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
+    this.mat = new THREE.ShaderMaterial({ uniforms: { uTex: { value: tex }, uPx: PXU.uPx, uArtH: PXU.uArtH, uPxMin: PXU.uPxMin }, vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending });
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = order; scene.add(this.mesh);
     const F = (k: number) => new Float32Array(max * k);
     this.p = F(3); this.v = F(3); this.c0 = F(3); this.c1 = F(3); this.s = F(2); this.lf = F(2); this.m = F(8);

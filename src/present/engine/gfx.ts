@@ -8,6 +8,7 @@ import { updatePrims } from './prims';
 import { updateDice } from '../dice/die3d';
 import type { Platform } from '../../platform/index';
 import { Post } from '../look/post';
+import { PX, onPixelChange } from '../look/pixel';
 
 /** The camera rig: directors write base / look / fov / roll / shift; the loop adds shake and renders. */
 export const CAM = { base: V3(0, 12, 12), look: V3(0, 0, 0), fov: 30, off: V3(), shift: 0, shakeAmt: 0.22 };
@@ -25,6 +26,8 @@ export function createGfx(platform: Platform, canvas: any, o: { preserve?: boole
     renderer.setPixelRatio(view.dpr); renderer.setSize(s.w, s.h, false); post.setSize(s.w, s.h, view.dpr);
   };
   fit(); platform.onResize(fit);
+  // the pixel look (look/pixel.ts): the post pipeline swaps to the low-res art buffer; the canvas and the HUD keep full resolution
+  const px = () => post.setPixel(PX.on ? PX.size : 0); px(); onPixelChange(px);
   const stats = { calls: 0, tris: 0, ms: 16 };
   const shk = V3();
   let last = platform.now();

@@ -18,6 +18,7 @@ import { legoCast } from './present/bestiary/lego';
 import { initLegoEnv, legoEnvTex } from './present/look/legokit';
 import { figCast, setFigEnv } from './present/bestiary/figs';
 import { GRADE } from './present/look/post';
+import { PX, PXU, readPixelFlag, installPixelKeys, setPixel } from './present/look/pixel';
 import type { Env } from './present/look/env';
 import './present/director';
 import './audio/audio';
@@ -26,14 +27,21 @@ const TEST: { fixedTime?: number; preserve?: boolean } = G.__PXUI_TEST || {};
 const platform = initPlatform();
 const flags = readFlags(k => platform.query(k));
 const canvas = platform.createCanvas();
+// the 3D-pixel render style (look/pixel.ts): #px / #px3 / #bestiary&px or ?px / ?px=1|2|3; P toggles, [ ] pixel size
+const hash = readPixelFlag(typeof location !== 'undefined' ? location.hash.slice(1) : '', k => platform.query(k));   // artifact links only pass a plain #name
 const gfx = createGfx(platform, canvas, { preserve: !!TEST.preserve });
+installPixelKeys();
 initParticles('soft'); initPrims();
 let env: Env | null = null;
 let show: BattleShow | null = null, frames = 0;
 
 dh.add({
   info: () => ({ build: __BUILD__, dev: __DEV__, platform: platform.name, flags }),
-  stats: () => ({ calls: gfx.stats.calls, tris: gfx.stats.tris, ms: Math.round(gfx.stats.ms * 10) / 10 }),
+  stats: () => ({ calls: gfx.stats.calls, tris: gfx.stats.tris, ms: Math.round(gfx.stats.ms * 10) / 10, px: PX.on ? PX.size : 0 }),
+  /** the pixel render style: __dh.px(true, 2) / __dh.px(false) */
+  px: (on = true, size?: number) => setPixel(on, size),
+  /** live tuning of the pixel look: __dh.pxLook.ink = 0.6 … (see look/pixel.ts PX) */
+  pxLook: PX, pxU: PXU,
   frames: () => frames,
   battle: () => show?.b,
   show: () => show,
@@ -48,7 +56,6 @@ dh.add({
 });
 dh.install();
 
-const hash = typeof location !== 'undefined' ? location.hash.slice(1) : '';   // artifact links only pass a plain #name
 // the moonlit graveyard (procedural) + the original chunky-voxel cast. (The KayKit cast in actors/kk.ts is kept in the repo, not booted.)
 Promise.resolve().then(() => {
   // the voxel graveyard + the bestiary cast (#classic: the smooth graveyard with the show-04 cast, for comparison)

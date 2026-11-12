@@ -7,6 +7,7 @@ import { showStage, CUT, type Stage } from './stage';
 import { BActor } from '../bestiary/bactor';
 import { ROSTER } from '../bestiary/models';
 import { GRADE } from '../look/post';
+import { PX, togglePixel, onPixelChange } from '../look/pixel';
 
 /** the landscape battle framing (also used by the battle in landscape) */
 export const BATTLE_CAM = { base: V3(0.3, 12.6, 14.6), look: V3(0, -0.2, -3.0), fov: 42 };
@@ -35,7 +36,7 @@ export function sceneViewer() {
   const ui = document.createElement('div'); ui.className = 'sv'; document.body.appendChild(ui);
   ui.innerHTML = `<div class="pane info"><div class="t">第一章 · 幽暗森林 · 场景预览</div><div class="n"></div><div class="r"></div><div class="q"></div></div>
     <div class="pane list"></div>
-    <div class="pane bar"><button class="b on" data-c="battle">战斗视角</button><button class="b" data-c="orbit">自由环视</button><button class="b" data-c="fight">让他们打一下</button><button class="b" data-c="roof">屋顶：自动</button></div>`;
+    <div class="pane bar"><button class="b on" data-c="battle">战斗视角</button><button class="b" data-c="orbit">自由环视</button><button class="b" data-c="fight">让他们打一下</button><button class="b" data-c="roof">屋顶：自动</button><button class="b" data-c="px">渲染：标准</button></div>`;
   const $ = (s: string) => ui.querySelector(s) as HTMLElement, list = $('.list');
   let lastG = '';
   for (const d of SCENES) {
@@ -66,6 +67,9 @@ export function sceneViewer() {
   $('[data-c="orbit"]').onclick = () => setMode('orbit');
   const roofB = $('[data-c="roof"]'), roofModes: Array<typeof CUT.mode> = ['auto', 'show', 'hide'], roofCN = { auto: '屋顶：自动', show: '屋顶：显示', hide: '屋顶：隐藏' };
   roofB.onclick = () => { CUT.mode = roofModes[(roofModes.indexOf(CUT.mode) + 1) % 3]; roofB.textContent = roofCN[CUT.mode]; roofB.classList.toggle('on', CUT.mode !== 'auto'); };
+  // render style switch (look/pixel.ts): standard ↔ 3D pixel (also P key; [ ] pixel size)
+  const pxB = $('[data-c="px"]'), pxLabel = () => { pxB.textContent = PX.on ? `渲染：像素 ${PX.size}×` : '渲染：标准'; pxB.classList.toggle('on', PX.on); };
+  pxB.onclick = () => togglePixel(); onPixelChange(pxLabel); pxLabel();
   $('[data-c="fight"]').onclick = () => { actors.forEach((a, i) => { if (i === 0) a.attack(); else setTimeout(() => a.attack(), 500 + i * 300); }); };
   // orbit input
   const cv = document.querySelector('canvas') as HTMLCanvasElement; cv.style.touchAction = 'none';
