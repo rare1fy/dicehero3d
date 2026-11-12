@@ -52,7 +52,7 @@ export const SIG: Record<string, Sig> = {
     for (let i = 0; i < n; i++) PADD.emit({ p: p.clone().add(k === 'idle' ? V3(R(-0.3, 0.3), -0.35, R(-0.3, 0.3)) : sp()), v: k === 'idle' ? V3(0, -0.4, 0) : V3(R(-2, 2), R(1, 3.5), R(-2, 2)), s0: R(0.05, 0.1), s1: 0.02, life: R(0.4, 0.8), c0: C(0xff3a2a), c1: C(0x5a0808), bright: 1.6, tile: TILE.glow, grav: 7, drag: 0.6 });
     if (k === 'trig') { fxRing(V3(p.x, 0.05, p.z), 0xc81a1a, 1.4, { life: 0.5, width: 0.2, fill: 0.2, bright: 1.6 }); decalFx(V3(p.x, 0, p.z), { radius: 0.8, alpha: 0.5, life: 2 }); } } },
   w_ironwall: { extras: ['rivets'], fx: (k, p) => {
-    if (k === 'idle') { if (Math.random() < 0.4) PADD.emit({ p: p.clone().add(V3(R(-0.4, 0.4), R(0.2, 0.45), R(-0.4, 0.4))), s0: 0.18, s1: 0, life: 0.35, c0: WHITE, bright: 3, tile: TILE.flare, spin: 4 }); return; }
+    if (k === 'idle') { if (Math.random() < 0.3) PADD.emit({ p: p.clone().add(V3(R(-0.4, 0.4), R(0.2, 0.45), R(-0.4, 0.4))), s0: 0.1, s1: 0, life: 0.35, c0: WHITE, bright: 1.3, tile: TILE.flare, spin: 4 }); return; }
     fxShield(V3(p.x, 0, p.z), k === 'trig' ? 1.0 : 0.6); if (k === 'trig') fxSparks(p, 0xbfe0ff, 16, 3, { life: 0.4, grav: 4 }); } },
   w_fury: { fx: (k, p) => { fxEmbers(p.clone().add(V3(0, 0.2, 0)), 0xff6a1a, k === 'trig' ? 26 : k === 'land' ? 8 : 2, { r: 0.35 }); if (k === 'trig') { fxGlow(p, 0xff6a1a, 1.8, 0.4, 2.4); fxRing(V3(p.x, 0.05, p.z), 0xff6a1a, 1.5, { life: 0.5, width: 0.2, bright: 2.4 }); } } },
   w_titanfist: { extras: ['caps'], fx: (k, p) => {

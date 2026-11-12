@@ -138,10 +138,10 @@ export function updateDice(dt: number, rdt: number) {
       d.root.position.lerp(_pa, 1 - Math.exp(-20 * dt)); d.root.quaternion.slerp(_qb, 1 - Math.exp(-14 * dt));
     }
     if (d.spinPart) d.spinPart.rotation.y += dt * (d.mode === 'rest' ? (d.glow ? 6 : 1.2) : 3);
-    d.omat.opacity = damp(d.omat.opacity, d.glow ? 0.85 * Math.min(1, d.glow * 1.6) : 0, 12, rdt); d.omat.color.copy(d.glowCol); d.outline.visible = d.omat.opacity > 0.02;
+    d.omat.opacity = damp(d.omat.opacity, d.glow ? 0.5 * Math.min(1, d.glow * 1.6) : 0, 12, rdt); d.omat.color.copy(d.glowCol); d.outline.visible = d.omat.opacity > 0.02;
     d.mat.emissive.setRGB(1, 1, 1);
     const F = FAM[famKey(d.defId)], base = F.emis || F.glowPip ? 1.7 : 0;
-    d.mat.emissiveIntensity = base + d.glow * (0.16 + 0.06 * Math.sin(clock.rtime * 6)) * 4;
+    d.mat.emissiveIntensity = base + d.glow * (0.16 + 0.06 * Math.sin(clock.rtime * 6)) * 2;
   }
 }
 

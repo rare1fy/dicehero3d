@@ -8,6 +8,8 @@ export const FLAG_DEFS = {
   cam: { values: ['director', 'v6'], def: 'director' },
   /** Debug overlay (fps, draw calls). */
   debug: { values: ['0', '1'], def: '0' },
+  /** What to show: the battle, or a character turntable (actors) */
+  view: { values: ['battle', 'actors'], def: 'battle' },
 } as const;
 
 export type FlagName = keyof typeof FLAG_DEFS;

@@ -7,27 +7,29 @@ import { updateParticles } from './particles';
 import { updatePrims } from './prims';
 import { updateDice } from '../dice/die3d';
 import type { Platform } from '../../platform/index';
+import { Post } from '../look/post';
 
 /** The camera rig: directors write base / look / fov / roll / shift; the loop adds shake and renders. */
 export const CAM = { base: V3(0, 12, 12), look: V3(0, 0, 0), fov: 30, off: V3(), shift: 0, shakeAmt: 0.22 };
 
-export interface Gfx { renderer: THREE.WebGLRenderer; start(onFrame: (dt: number, rdt: number) => void, afterRender: () => void): void; stats: { calls: number; tris: number; ms: number } }
+export interface Gfx { renderer: THREE.WebGLRenderer; post: Post; start(onFrame: (dt: number, rdt: number) => void, afterRender: () => void): void; stats: { calls: number; tris: number; ms: number } }
 
 export function createGfx(platform: Platform, canvas: any, o: { preserve?: boolean; fixedDt?: number | null } = {}): Gfx {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!o.preserve });
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.info.autoReset = false;
+  const post = new Post(renderer);
   const fit = () => {
     const s = platform.canvasSize(); view.w = s.w; view.h = s.h; view.dpr = Math.min(platform.dpr(), 2);
-    renderer.setPixelRatio(view.dpr); renderer.setSize(s.w, s.h, false);
+    renderer.setPixelRatio(view.dpr); renderer.setSize(s.w, s.h, false); post.setSize(s.w, s.h, view.dpr);
   };
   fit(); platform.onResize(fit);
   const stats = { calls: 0, tris: 0, ms: 16 };
   const shk = V3();
   let last = platform.now();
   return {
-    renderer, stats,
+    renderer, stats, post,
     start(onFrame, afterRender) {
       const frame = () => {
         platform.raf(frame);
@@ -46,7 +48,7 @@ export function createGfx(platform: Platform, canvas: any, o: { preserve?: boole
         if (CAM.shift) camera.setViewOffset(view.w, view.h, 0, CAM.shift, view.w, view.h); else camera.clearViewOffset();
         camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
         renderer.info.reset();
-        renderer.render(scene, camera);
+        post.render(scene, camera, clock.rtime);
         stats.calls = renderer.info.render.calls; stats.tris = renderer.info.render.triangles;
         afterRender();
       };

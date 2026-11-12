@@ -1,7 +1,4 @@
-// Boot: platform → renderer + frame loop → pxui (same WebGL context) → battle set → battle controller. Same code in browsers and mini-games.
-import { createUI } from 'pxui/core/pxui.js';
-import font from '../ui/font.js';
-import layout from '../ui/layout.json';
+// Boot: platform → renderer + post → the graveyard arena → the battle show (actors, director, HUD, relic bar, audio).
 import { initPlatform, G } from './platform/index';
 import { readFlags } from './debug/flags';
 import { dh } from './debug/dh';
@@ -9,42 +6,45 @@ import { createGfx } from './present/engine/gfx';
 import { initParticles } from './present/engine/particles';
 import { initPrims } from './present/engine/prims';
 import { FX } from './present/engine/clock';
-import { buildSet } from './present/battle/stageSet';
-import { BattleController } from './present/battle/controller';
+import { buildEnv } from './present/look/env';
+import { BattleShow, SHOTS } from './present/show';
+import { Vector3 } from 'three';
+import { actorGallery } from './present/actors/gallery';
+import './present/director';
+import './audio/audio';
 
 const TEST: { fixedTime?: number; preserve?: boolean } = G.__PXUI_TEST || {};
 const platform = initPlatform();
 const flags = readFlags(k => platform.query(k));
 const canvas = platform.createCanvas();
 const gfx = createGfx(platform, canvas, { preserve: !!TEST.preserve });
-const UI = createUI({ platform, gl: gfx.renderer.getContext(), three: gfx.renderer, font });
-
-initParticles('pixel'); initPrims(); buildSet();
-let ctl: BattleController | null = null;
-let frames = 0;
+initParticles('soft'); initPrims();
+const env = buildEnv();
+let show: BattleShow | null = null, frames = 0;
 
 dh.add({
   info: () => ({ build: __BUILD__, dev: __DEV__, platform: platform.name, flags }),
-  stats: () => ({ calls: gfx.stats.calls, tris: gfx.stats.tris, ms: Math.round(gfx.stats.ms * 10) / 10, ui: G.__pxuiStats }),
+  stats: () => ({ calls: gfx.stats.calls, tris: gfx.stats.tris, ms: Math.round(gfx.stats.ms * 10) / 10 }),
   frames: () => frames,
-  battle: () => ctl?.b,
-  ctl: () => ctl,
-  bot: (on = true) => ctl?.bot(on),
-  idle: () => !!ctl && ctl.idle(),
-  restart: (seed?: number) => ctl?.start(seed),
-  select: (uids: number[]) => ctl?.selectUids(uids),
-  act: (k: 'reroll' | 'play' | 'end') => ctl?.act(k),
+  battle: () => show?.b,
+  show: () => show,
+  bot: (on = true) => show?.bot(on),
+  idle: () => !!show && show.idle(),
+  select: (uids: number[]) => show?.selectUids(uids),
+  act: (k: 'reroll' | 'play' | 'end') => show?.act(k),
   speed: (s: number) => { FX.speed = s; },
   last: () => '',
+  /** tune a director shot live: __dh.setShot('battle', [x,y,z], [x,y,z], fov) */
+  setShot: (name: string, base: number[], look: number[], fov: number) => { const m = SHOTS as Record<string, unknown>; m[name] = () => ({ base: new Vector3(...base), look: new Vector3(...look), fov }); show?.refreshShot(); },
 });
 dh.install();
 
-UI.registerState('battle', { label: '战斗', group: '战斗', setup() { UI.only('plates', 'hud', 'banner', 'toast'); } });
-
-UI.load(layout).then(() => {
-  UI.only('plates', 'hud', 'banner', 'toast');
-  ctl = new BattleController(UI, platform, flags.seed ?? undefined);
-  gfx.start(() => {}, () => { G.__pxuiStats = UI.render(); frames++; });
-  ctl.start();
-  dh.ready();
-}).catch(e => { platform.log('[boot] ' + ((e && e.stack) || e)); dh.fail(e); });
+if (flags.view === 'actors') {
+  G.__actors = actorGallery(platform.query('shot'));
+  gfx.start(() => {}, () => { frames++; });
+} else {
+  show = new BattleShow(platform, env, flags.seed ?? undefined);
+  gfx.start(() => {}, () => { show!.relics.render(gfx.renderer); show!.hud.render(gfx.renderer); frames++; });
+  show.start();
+}
+dh.ready();
