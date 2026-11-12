@@ -73,7 +73,7 @@ Promise.resolve().then(() => {
     gfx.start(() => {}, () => { frames++; });
   } else {
     show = new BattleShow(platform, env, cast, flags.seed ?? undefined);
-    gfx.start(() => {}, () => { show!.relics.render(gfx.renderer); show!.hud.render(gfx.renderer); frames++; });
+    gfx.start(() => {}, () => { show!.hud.render(gfx.renderer); show!.relics.render(gfx.renderer); frames++; });
     show.start();
   }
   dh.ready();

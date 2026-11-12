@@ -21,6 +21,7 @@ import type { Cast, HeroLike, LichLike, GhoulLike } from './actors/cast';
 import type { Actor } from './actors/actor';
 import { popText, slamTitle, fadeOut, flyText, Counter, speech } from './battle/text3d';
 import { fxImpact, fxRing, fxGlow, fxSparks, fxStatus, fxHeal, fxShield, fxSmoke, fxEmbers, fxFlare, fxChips, trailSeg, COL } from './fx/fx';
+import { CAM } from './engine/gfx';
 import { shot, staticShot, orbitShot } from './director';
 import { Hud } from './hud/hud';
 import { RelicBar, relicModel } from './hud/relics';
@@ -75,10 +76,13 @@ export class BattleShow {
   resize() {
     const s = this.platform.canvasSize(), sa = this.platform.safeArea(); this.hud.resize(s.w, s.h, this.platform.dpr(), sa.top, sa.bottom);
     const L = this.hud.landscape;
-    this.relics.resize(s.w, s.h, L ? { x: 0, w: 300 } : this.hud.col, L ? 64 + sa.top : 10 + sa.top);
+    this.relics.place = L ? (i: number) => this.hud.relicSlot(i) : null;
+    this.relics.resize(s.w, s.h, this.hud.col, 10 + sa.top);
     // landscape: a wider, slightly lower battle framing (the HUD sits in the corners, not in a column under the field)
-    SHOTS.battle = L ? staticShot(V3(0.3, 12.8, 14.2), V3(0, -0.6, -2.4), 42) : staticShot(V3(0.6, 12.2, 11.8), V3(-0.1, 0.8, -0.6), 46);
-    SHOTS.enemy = L ? staticShot(V3(1.4, 11.4, 13.0), V3(-0.2, 0.4, -2.8), 40) : staticShot(V3(1.6, 10.0, 10.2), V3(-0.4, 1.2, -0.6), 44);
+    // landscape: the hotbar owns the bottom band, so the whole picture is lifted (lens shift) and framed a little wider
+    CAM.shift = L ? Math.round(s.h * 0.06) : 0;
+    SHOTS.battle = L ? staticShot(V3(0.3, 13.4, 14.9), V3(0, -0.6, -2.4), 42) : staticShot(V3(0.6, 12.2, 11.8), V3(-0.1, 0.8, -0.6), 46);
+    SHOTS.enemy = L ? staticShot(V3(1.4, 12.4, 14.0), V3(-0.2, 0.2, -2.6), 40) : staticShot(V3(1.6, 10.0, 10.2), V3(-0.4, 1.2, -0.6), 44);
     if (this.stage === 'battle' && !this.busy) shot('battle', SHOTS.battle, { speed: 4 });
   }
 
@@ -150,7 +154,7 @@ export class BattleShow {
     this.hud.setBoss(true, '枯骨巫妖', '墓园之主 · 第一章首领'); this.hud.showBanner('枯骨巫妖', '墓园之主', 1.6, ['#d8ffe8', '#4affa0']);
     await this.say('enter');
     shot('battle', SHOTS.battle, { speed: 1.4 });
-    this.relics.set(this.b.player.relics); this.counter.clear();
+    this.relics.set(this.b.player.relics); this.hud.setRelicCount(this.relics.slots.length); this.relics.layout(); this.counter.clear();
     await wait(0.8);
     this.stage = 'battle'; this.hud.uiOn = true; if (!this.botOn) FX.speed = 1;
     this.run(this.b.start());
@@ -487,7 +491,7 @@ export class BattleShow {
     for (const o of this.rewardModels) if (o !== m) anim(0.3, k => o.scale.setScalar(Math.max(0.01, 0.9 * (1 - k))), () => scene.remove(o));
     const to = this.relics.slotWorld(this.relics.slots.length, 4.5); let last = m.position.clone();
     await animP(0.6, k => { m.position.lerp(to, ease.inCubic(k) * 0.35); m.rotation.y += 0.3; m.scale.setScalar(lerp(0.9, 0.3, k)); trailSeg(last, m.position.clone(), 0xffd060, 0.1, { life: 0.3 }); last = m.position.clone(); });
-    scene.remove(m); this.relics.add(id);
+    scene.remove(m); this.relics.add(id); this.hud.setRelicCount(this.relics.slots.length); this.relics.layout();
     this.hud.showBanner(`获得  ${DATA.relics[id].name}`, DATA.relics[id].desc, 999, ['#fff6c8', '#ffb43a'], 0.12);
     // clear the floating names
     for (const o of [...scene.children]) if ((o as THREE.Sprite).isSprite && (o as THREE.Sprite).userData.base) scene.remove(o);

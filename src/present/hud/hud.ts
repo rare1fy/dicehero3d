@@ -123,11 +123,16 @@ export class Hud {
   uiOn = false;
   /** column: the phone-width strip the HUD lays out in (centred on desktop) */
   col = { x: 0, w: 1 };
-  /** landscape: console / landscape-mobile arrangement (boss bar top-centre, hero bottom-left, action cluster bottom-right) */
+  /** landscape: console / landscape-mobile arrangement (boss bar top-centre; one hotbar at the bottom centre, the way Minecraft
+   *  Dungeons does it: relic slots on the left, the health orb in the middle, the action slots with their key glyphs on the right) */
   landscape = false;
+  hotbar: Pane; orb: Pane; relicN = 3;
+  /** hotbar geometry (CSS px): plate rect, scale, relic well size and the orb box */
+  hb = { x: 0, y: 0, w: 0, h: 0, u: 1, well: 60, relic0: 0, orb: { x: 0, y: 0, d: 92 } };
   constructor() {
     this.boss = { name: new Pane(this, 15), bar: new Bar(this, '#b8283a', { marker: 0.4 }), status: new Pane(this, 15), on: false };
     this.hero = { bar: new Bar(this, '#d83a30'), info: new Pane(this, 15) };
+    this.hotbar = new Pane(this, 8); this.orb = new Pane(this, 16);
     this.piles = new Pane(this, 15); this.preview = new Pane(this, 18); this.hint = new Pane(this, 18); this.banner = new Pane(this, 30); this.sub = new Pane(this, 30); this.toastP = new Pane(this, 31); this.subtitleP = new Pane(this, 29); this.subtitleP.alpha = 0;
     this.buttons = { reroll: new Button(this), play: new Button(this), end: new Button(this) };
     this.banner.alpha = 0; this.sub.alpha = 0; this.toastP.alpha = 0; this.preview.alpha = 0;
@@ -148,18 +153,83 @@ export class Hud {
     this.repaintStatic();
   }
   private layoutLandscape() {
-    const w = this.w, h = this.h, top = 12 + this.safeTop, bot = h - 16 - this.safeBottom, R = w - 20, L = 20;
+    const w = this.w, h = this.h, top = 12 + this.safeTop, bot = h - 12 - this.safeBottom;
     const bw = Math.min(640, w * 0.46); this.col = { x: (w - bw) / 2, w: bw };
     this.boss.bar.layout({ x: this.col.x, y: top + 30, w: bw, h: 16 });
-    const pw = Math.min(170, w * 0.13), ph = 86, sw = Math.min(124, w * 0.1), sh = 64;
-    this.buttons.play.layout({ x: R - pw, y: bot - ph, w: pw, h: ph });
-    this.buttons.reroll.layout({ x: R - pw - 14 - sw, y: bot - sh, w: sw, h: sh });
-    this.buttons.end.layout({ x: R - pw, y: bot - ph - 14 - 54, w: pw, h: 54 });
-    this.hero.bar.layout({ x: L + 4, y: bot - 30, w: Math.min(340, w * 0.25), h: 18 });
+    // the hotbar: [piles] [relic wells] [health orb] [reroll] [play] [end], one plate, centred
+    const u = Math.max(0.72, Math.min(1.1, w / 1180, h / 640)), well = Math.round(60 * u), gap = Math.round(8 * u), pad = Math.round(14 * u);
+    const pilesW = Math.round(58 * u), orbD = Math.round(96 * u), bS = { w: Math.round(84 * u), h: Math.round(64 * u) }, bP = { w: Math.round(104 * u), h: Math.round(76 * u) };
+    const n = Math.max(3, this.relicN), relicsW = n * well + (n - 1) * gap;
+    const W = pad + pilesW + gap * 2 + relicsW + gap * 2 + orbD + gap * 2 + bS.w + gap + bP.w + gap + bS.w + pad, H = Math.round(84 * u);
+    const x0 = Math.round((w - W) / 2), y0 = bot - H;
+    let x = x0 + pad + pilesW + gap * 2;
+    this.hb = { x: x0, y: y0, w: W, h: H, u, well, relic0: x, orb: { x: 0, y: 0, d: orbD } };
+    x += relicsW + gap * 2;
+    this.hb.orb = { x, y: bot - orbD - Math.round(10 * u), d: orbD }; x += orbD + gap * 2;
+    const cy = y0 + H / 2;
+    this.buttons.reroll.layout({ x, y: Math.round(cy - bS.h / 2), w: bS.w, h: bS.h }); x += bS.w + gap;
+    this.buttons.play.layout({ x, y: Math.round(cy - bP.h / 2 - 6 * u), w: bP.w, h: bP.h }); x += bP.w + gap;
+    this.buttons.end.layout({ x, y: Math.round(cy - bS.h / 2), w: bS.w, h: bS.h });
+    this.hero.bar.layout({ x: this.hb.orb.x, y: this.hb.orb.y, w: orbD, h: 4 });   // drives the orb's animated values; its quads stay hidden
+    this.paintHotbar();
     this.repaintStatic();
+    if (this.pilesV) this.setPiles(this.pilesV[0], this.pilesV[1]);
   }
-  /** the bottom-centre slot of the hand preview in landscape */
-  private previewRect() { const W = Math.min(560, this.w * 0.42); return { x: (this.w - W) / 2, y: this.h - 16 - this.safeBottom - 62, w: W }; }
+  private pilesV: [number, number] | null = null;
+  /** centre of relic well i (landscape) */
+  relicSlot(i: number) { const b = this.hb; return { x: b.relic0 + b.well / 2 + i * (b.well + Math.round(8 * b.u)), y: b.y + b.h / 2 }; }
+  setRelicCount(n: number) { if (n === this.relicN) return; this.relicN = n; if (this.landscape) this.layoutLandscape(); }
+  /** the plate: dark stone with a bevel, recessed wells for the relics, a socket for the orb */
+  private paintHotbar() {
+    const b = this.hb, n = Math.max(3, this.relicN);
+    this.hotbar.paint(`hb${b.w}x${b.h}n${n}`, b.w, b.h + 10, (g, k) => {
+      const W = b.w * k, H = b.h * k, r = 14 * k * b.u;
+      roundRect(g, 0, 8 * k, W, H, r); g.fillStyle = 'rgba(0,0,0,0.45)'; g.fill();
+      roundRect(g, 0, 4 * k, W, H, r); const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(58,52,72,0.94)'); gr.addColorStop(1, 'rgba(24,20,34,0.94)'); g.fillStyle = gr; g.fill();
+      g.lineWidth = 2 * k; g.strokeStyle = '#8a7a5a'; g.stroke();
+      roundRect(g, 5 * k, 8 * k, W - 10 * k, H * 0.3, r * 0.7); g.fillStyle = 'rgba(255,255,255,0.06)'; g.fill();
+      for (let i = 0; i < n; i++) {
+        const c = this.relicSlot(i), wx = (c.x - b.x - b.well / 2) * k, wy = (c.y - b.y - b.well / 2 + 4) * k, ws = b.well * k;
+        roundRect(g, wx, wy, ws, ws, 9 * k * b.u); g.fillStyle = 'rgba(8,6,14,0.75)'; g.fill(); g.lineWidth = 1.5 * k; g.strokeStyle = 'rgba(200,170,110,0.45)'; g.stroke();
+        roundRect(g, wx + 3 * k, wy + ws * 0.62, ws - 6 * k, ws * 0.3, 6 * k * b.u); g.fillStyle = 'rgba(255,220,150,0.05)'; g.fill();
+      }
+      const o = b.orb, ocx = (o.x - b.x + o.d / 2) * k, ocy = (o.y - b.y + o.d / 2 + 4) * k;
+      g.beginPath(); g.arc(ocx, ocy, (o.d / 2 + 7 * b.u) * k, 0, Math.PI * 2); g.fillStyle = 'rgba(20,16,28,0.95)'; g.fill(); g.lineWidth = 2 * k; g.strokeStyle = '#8a7a5a'; g.stroke();
+    });
+    this.hotbar.at(b.x, b.y - 4);
+  }
+  /** the health orb: red liquid to the current fraction (a pale ghost above it drains after a hit), the number, an armour badge */
+  private paintOrb() {
+    const bar = this.hero.bar, o = this.hb.orb, D = o.d, shown = Math.max(0, Math.min(1, bar.shown)), ghost = Math.max(shown, Math.min(1, bar.ghostV));
+    const key = `o${D}|${Math.round(shown * 90)}|${Math.round(ghost * 90)}|${Math.round(bar.v)}|${bar.max}|${bar.armorV}`;
+    this.orb.paint(key, D + 24, D + 8, (g, k) => {
+      const cx = (D / 2) * k, cy = (D / 2 + 4) * k, R = (D / 2) * k;
+      g.save(); g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.clip();
+      g.fillStyle = '#1a0c12'; g.fillRect(0, 0, (D + 24) * k, (D + 8) * k);
+      const lvl = (f: number) => cy + R - f * 2 * R;
+      g.fillStyle = 'rgba(255,236,200,0.55)'; g.fillRect(0, lvl(ghost), (D + 24) * k, 2 * R);
+      const gr = g.createLinearGradient(0, cy - R, 0, cy + R); gr.addColorStop(0, '#ff6a50'); gr.addColorStop(1, '#8a1420'); g.fillStyle = gr; g.fillRect(0, lvl(shown), (D + 24) * k, 2 * R);
+      g.fillStyle = 'rgba(255,190,160,0.55)'; g.fillRect(0, lvl(shown), (D + 24) * k, 2.5 * k);
+      g.beginPath(); g.ellipse(cx - R * 0.35, cy - R * 0.45, R * 0.32, R * 0.18, -0.5, 0, Math.PI * 2); g.fillStyle = 'rgba(255,255,255,0.22)'; g.fill();
+      g.restore();
+      g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.lineWidth = 3 * k; g.strokeStyle = '#d8b46a'; g.stroke();
+      g.beginPath(); g.arc(cx, cy, R - 3 * k, 0, Math.PI * 2); g.lineWidth = 1.5 * k; g.strokeStyle = 'rgba(0,0,0,0.6)'; g.stroke();
+      const big: TextStyle = { size: Math.round(26 * this.hb.u), color: '#fff8ec', stroke: 'rgba(40,0,0,0.95)', strokeW: 5, weight: 900 }, t1: Span[] = [{ t: String(Math.max(0, Math.round(bar.v))) }], m1 = measure(t1, big);
+      drawSpans(g, t1, big, cx - (m1.w * k) / 2, cy + 6 * k * this.hb.u, k);
+      const sm: TextStyle = { size: Math.round(12 * this.hb.u), color: '#ffd8c8', stroke: 'rgba(40,0,0,0.9)', strokeW: 3, weight: 800 }, t2: Span[] = [{ t: '/ ' + bar.max }], m2 = measure(t2, sm);
+      drawSpans(g, t2, sm, cx - (m2.w * k) / 2, cy + 22 * k * this.hb.u, k);
+      if (bar.armorV > 0) {   // a shield badge on the orb's shoulder
+        const bx = cx + R * 0.62, by = cy - R * 0.7, s = 15 * k * this.hb.u;
+        g.beginPath(); g.moveTo(bx - s, by - s * 0.8); g.lineTo(bx + s, by - s * 0.8); g.lineTo(bx + s, by + s * 0.2); g.lineTo(bx, by + s * 1.05); g.lineTo(bx - s, by + s * 0.2); g.closePath();
+        g.fillStyle = '#3a78c8'; g.fill(); g.lineWidth = 2 * k; g.strokeStyle = '#c8e4ff'; g.stroke();
+        const at: TextStyle = { size: Math.round(14 * this.hb.u), color: '#ffffff', stroke: 'rgba(0,20,60,0.95)', strokeW: 3, weight: 900 }, ta: Span[] = [{ t: String(bar.armorV) }], ma = measure(ta, at);
+        drawSpans(g, ta, at, bx - (ma.w * k) / 2, by + 4 * k * this.hb.u, k);
+      }
+    });
+    this.orb.at(o.x, o.y - 4);
+  }
+  /** the slot of the hand preview in landscape: centred just above the hotbar */
+  private previewRect() { const W = Math.min(560, this.w * 0.42); return { x: (this.w - W) / 2, y: this.hb.y - 58 - 14, w: W }; }
   private bossName = ''; private bossTitle = '';
   setBoss(on: boolean, name = '', title = '') { this.boss.on = on; this.bossName = name; this.bossTitle = title; this.repaintStatic(); }
   private repaintStatic() {
@@ -180,13 +250,23 @@ export class Hud {
     this.hero.bar.set(hp, max, armor);
     const c = this.col, r = this.hero.bar.r;
     this.hero.info.paint(JSON.stringify(lines) + c.w, c.w - 24, 22, (g, k) => drawSpans(g, lines, { size: 12, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }, 0, 15 * k, k));
-    this.hero.info.at(r.x, r.y - 22);
+    if (this.landscape) this.hero.info.at(this.hb.relic0, this.hb.y - 30); else this.hero.info.at(r.x, r.y - 22);
   }
   setPiles(bag: number, disc: number) {
+    this.pilesV = [bag, disc];
     const sp: Span[] = [{ t: '骰袋 ', c: '#a898c0' }, { t: String(bag), c: '#f4e8d0' }, { t: '   弃骰 ', c: '#a898c0' }, { t: String(disc), c: '#f4e8d0' }];
     const r = this.hero.bar.r;
+    if (this.landscape) {
+      const b = this.hb, pw = Math.round(58 * b.u), st: TextStyle = { size: 11, stroke: 'rgba(0,0,0,0.9)', strokeW: 3, weight: 700 }, big: TextStyle = { size: Math.round(18 * b.u), color: '#f4e8d0', stroke: 'rgba(0,0,0,0.9)', strokeW: 4, weight: 900 };
+      this.piles.paint('pL' + bag + '|' + disc + b.u, pw, b.h - 8, (g, k) => {
+        const rows: Array<[string, number]> = [['骰袋', bag], ['弃骰', disc]];
+        rows.forEach(([lab, v], i) => { const y = (i ? b.h * 0.72 : b.h * 0.34) * k; drawSpans(g, [{ t: lab, c: '#a898c0' }], st, 2 * k, y - 2 * k, k); const t: Span[] = [{ t: String(v) }], m = measure(t, big); drawSpans(g, t, big, (pw - 2) * k - m.w * k, y + 2 * k, k); });
+      });
+      this.piles.at(b.x + Math.round(14 * b.u), b.y + 4);
+      return;
+    }
     this.piles.paint(JSON.stringify(sp), 140, 20, (g, k) => drawSpans(g, sp, { size: 12, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }, 0, 14 * k, k));
-    if (this.landscape) this.piles.at(r.x + r.w + 18, r.y - 2); else this.piles.at(this.col.x + this.col.w - 150, r.y - 4);
+    this.piles.at(this.col.x + this.col.w - 150, r.y - 4);
   }
   setPreview(lines: Span[][] | null) {
     if (!lines) { this.preview.alpha = Math.max(0, this.preview.alpha); this.previewOn = false; return; }
@@ -221,7 +301,7 @@ export class Hud {
   subtitle(text: string, life = 2.5, who = '枯骨巫妖') {
     const sp: Span[] = [{ t: who + '  ', c: '#7affb0', s: 13 }, { t: text, c: '#f4ecdc' }], st: TextStyle = { size: 16, stroke: 'rgba(0,0,0,0.95)', strokeW: 4, weight: 700 }, m = measure(sp, st), W = Math.min(this.w - 16, m.w + 40);
     this.subtitleP.paint('st' + text, W, 40, (g, k) => { const gr = g.createLinearGradient(0, 0, W * k, 0); gr.addColorStop(0, 'rgba(6,4,12,0)'); gr.addColorStop(0.15, 'rgba(6,4,12,0.78)'); gr.addColorStop(0.85, 'rgba(6,4,12,0.78)'); gr.addColorStop(1, 'rgba(6,4,12,0)'); g.fillStyle = gr; g.fillRect(0, 0, W * k, 40 * k); drawSpans(g, sp, st, ((W - m.w) / 2) * k, 27 * k, k); });
-    this.subtitleP.at(this.w / 2 - this.subtitleP.w / 2, this.landscape ? this.h - this.safeBottom - 128 : this.h * 0.6);
+    this.subtitleP.at(this.w / 2 - this.subtitleP.w / 2, this.landscape ? this.hb.y - 150 : this.h * 0.6);
     const p = this.subtitleP, seq = ++this.subSeq; anim(0.2, k => { if (seq === this.subSeq) p.alpha = k; }, undefined, { real: true }); setTimeoutReal(life, () => anim(0.4, k => { if (seq === this.subSeq) p.alpha = 1 - k; }, undefined, { real: true }));
   }
   toast(text: string, life = 1.2) {
@@ -243,7 +323,8 @@ export class Hud {
     this.boss.bar.setVisible(showBoss); this.boss.name.visible = showBoss; this.boss.status.visible = showBoss;
     if (showBoss) this.boss.bar.update(dt);
     this.boss.name.sync(); this.boss.status.sync();
-    this.hero.bar.update(dt); this.hero.bar.setVisible(on); this.hero.info.visible = on; this.piles.visible = on; this.hint.visible = on; this.hero.info.sync(); this.piles.sync();
+    this.hero.bar.update(dt); this.hero.bar.setVisible(on && !this.landscape); this.hero.info.visible = on;
+    const L = on && this.landscape; this.hotbar.visible = L; this.orb.visible = L; if (L) this.paintOrb(); this.hotbar.sync(); this.orb.sync(); this.piles.visible = on; this.hint.visible = on; this.hero.info.sync(); this.piles.sync();
     this.preview.alpha += ((this.previewOn && on ? 1 : 0) - this.preview.alpha) * Math.min(1, dt * 12); this.preview.sync();
     this.hint.sync(); this.banner.sync(); this.sub.sync(); this.toastP.sync(); this.subtitleP.sync();
     for (const b of Object.values(this.buttons)) { b.pane.visible = on; b.update(dt); }

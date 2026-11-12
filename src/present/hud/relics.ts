@@ -55,8 +55,10 @@ export class RelicBar {
     const v = V3((x / this.w) * 2 - 1, -(y / this.h) * 2 + 1, 0.5).unproject(this.cam), d = v.sub(this.cam.position).normalize();
     return this.cam.position.clone().addScaledVector(d, -this.cam.position.z / d.z);
   }
-  slotPx(i: number) { return { x: this.col.x + 30, y: this.top + 92 + i * 54 }; }
-  private layout() { this.slots.forEach((s, i) => { const p = this.slotPx(i); s.base.copy(this.toScene(p.x, p.y)); const sz = this.toScene(p.x + 38, p.y).x - s.base.x; s.model.scale.setScalar(sz); }); }
+  /** where slot i sits (CSS px); landscape hands the hotbar's wells in here */
+  place: ((i: number) => { x: number; y: number }) | null = null;
+  slotPx(i: number) { return this.place ? this.place(i) : { x: this.col.x + 30, y: this.top + 92 + i * 54 }; }
+  layout() { this.slots.forEach((s, i) => { const p = this.slotPx(i); s.base.copy(this.toScene(p.x, p.y)); const sz = this.toScene(p.x + 38, p.y).x - s.base.x; s.model.scale.setScalar(sz); }); }
   update(dt: number) {
     const t = clock.rtime;
     this.slots.forEach((s, i) => {
