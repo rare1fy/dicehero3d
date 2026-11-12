@@ -1,0 +1,7 @@
+{
+  "name": "dicehero3d",
+  "title": "六面史诗",
+  "orientation": "portrait",
+  "wechat": { "appid": "touristappid" },
+  "douyin": { "appid": "testappid" }
+}

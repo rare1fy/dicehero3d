@@ -1,0 +1,29 @@
+{
+  "name": "dicehero3d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "六面史诗 3D：骰子肉鸽的 3D 化正式工程",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build:web": "vite build",
+    "build:minigame": "node tools/build-minigame.mjs",
+    "sandbox": "node tools/minigame-sandbox.mjs",
+    "font": "node tools/bake-font.mjs",
+    "build": "npm run typecheck && npm test && npm run build:web && npm run build:minigame"
+  },
+  "dependencies": {
+    "cannon-es": "0.20.0",
+    "three": "0.162.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.162.0",
+    "esbuild": "0.24.0",
+    "typescript": "5.6.3",
+    "vite": "5.4.21",
+    "vite-plugin-singlefile": "2.0.3",
+    "vitest": "2.1.9"
+  }
+}

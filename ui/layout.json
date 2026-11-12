@@ -1,0 +1,225 @@
+{
+  "pxui": 1,
+  "game": "dicehero3d",
+  "title": "六面史诗",
+  "unit": {
+    "artPx": 2
+  },
+  "column": {
+    "maxWidth": 240
+  },
+  "theme": {
+    "preset": "dungeon",
+    "palette": {
+      "ink": "#120a06",
+      "soot": "#16100c",
+      "umber": "#2a1c14",
+      "umber2": "#3a281a",
+      "stone": "#5a5650",
+      "stoneL": "#7e786e",
+      "stoneD": "#3a3632",
+      "mortar": "#24201c",
+      "iron": "#5a5e66",
+      "ironL": "#a8aeb8",
+      "ironD": "#30333a",
+      "wood": "#5a3a22",
+      "wood2": "#4a301c",
+      "woodL": "#7a5634",
+      "woodD": "#2a180c",
+      "parch": "#e6d2a2",
+      "parchL": "#f6e8c4",
+      "parchD": "#b0905a",
+      "burn": "#6a4a2a",
+      "brass": "#b08a3a",
+      "brassL": "#f0c860",
+      "brassD": "#6a4a1a",
+      "blood": "#7a1612",
+      "bloodL": "#c8302a",
+      "bloodD": "#3a0806",
+      "teal": "#14403e",
+      "tealL": "#3ad8c4",
+      "tealD": "#08201e",
+      "gold": "#f2c24a",
+      "goldL": "#fff0a0",
+      "bone": "#e8dcc0",
+      "cream": "#fff0c8"
+    },
+    "frames": {
+      "plate": {
+        "proc": "plate",
+        "n": 12,
+        "s": 4
+      },
+      "plateL": {
+        "proc": "plate",
+        "n": 24,
+        "s": 8
+      },
+      "parch": {
+        "proc": "parch",
+        "n": 24,
+        "s": 8
+      },
+      "parchS": {
+        "proc": "parch",
+        "n": 12,
+        "s": 4
+      },
+      "wood": {
+        "proc": "wood",
+        "n": 12,
+        "s": 4
+      },
+      "woodL": {
+        "proc": "wood",
+        "n": 24,
+        "s": 8
+      },
+      "pressed": {
+        "proc": "pressed",
+        "n": 12,
+        "s": 4
+      },
+      "brass": {
+        "proc": "brass",
+        "n": 12,
+        "s": 4
+      },
+      "brassL": {
+        "proc": "brass",
+        "n": 24,
+        "s": 8
+      },
+      "blood": {
+        "proc": "blood",
+        "n": 12,
+        "s": 4
+      },
+      "teal": {
+        "proc": "teal",
+        "n": 12,
+        "s": 4
+      },
+      "stone": {
+        "proc": "stone",
+        "n": 24,
+        "s": 8
+      }
+    },
+    "font": {
+      "name": "fusion-pixel-12",
+      "sizes": [
+        12,
+        24,
+        36,
+        48
+      ]
+    }
+  },
+  "assets": {},
+  "screens": {
+    "hud": {
+      "attach": "column",
+      "visible": true,
+      "z": 10,
+      "safe": true,
+      "children": [
+        {
+          "id": "top_title",
+          "type": "text",
+          "text": "六面史诗 3D",
+          "fontSize": 24,
+          "color": "cream",
+          "outline": "ink",
+          "frame": "plate",
+          "pad": [
+            2,
+            0
+          ],
+          "ax": "center",
+          "y": 4
+        },
+        {
+          "id": "look_chip",
+          "type": "text",
+          "text": "外观 {look}",
+          "mock": {
+            "look": "A"
+          },
+          "fontSize": 12,
+          "color": "parch",
+          "outline": "ink",
+          "ax": "right",
+          "x": 4,
+          "y": 24
+        },
+        {
+          "id": "actions",
+          "type": "group",
+          "name": "操作按钮",
+          "ax": "center",
+          "ay": "bottom",
+          "y": 6,
+          "layout": {
+            "dir": "row",
+            "gap": 4,
+            "align": "center"
+          },
+          "children": [
+            {
+              "id": "b_reroll",
+              "type": "button",
+              "frame": "wood",
+              "framePressed": "pressed",
+              "label": "重投",
+              "w": 56,
+              "h": 32
+            },
+            {
+              "id": "b_play",
+              "type": "button",
+              "frame": "blood",
+              "framePressed": "pressed",
+              "label": "出牌",
+              "w": 64,
+              "h": 32
+            },
+            {
+              "id": "b_end",
+              "type": "button",
+              "frame": "brass",
+              "framePressed": "pressed",
+              "label": "结束回合",
+              "w": 56,
+              "h": 32
+            }
+          ]
+        }
+      ]
+    },
+    "toast": {
+      "attach": "column",
+      "visible": true,
+      "z": 30,
+      "children": [
+        {
+          "id": "toast",
+          "type": "text",
+          "text": "提示",
+          "fontSize": 24,
+          "color": "cream",
+          "outline": "ink",
+          "frame": "plate",
+          "pad": [
+            2,
+            0
+          ],
+          "ax": "center",
+          "ay": "center",
+          "y": -40,
+          "visible": false
+        }
+      ]
+    }
+  }
+}
