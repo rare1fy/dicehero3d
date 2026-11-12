@@ -75,6 +75,16 @@ export function pxLightsBegin(scene: THREE.Scene) {
 }
 export function pxLightsEnd() { for (const [L, i] of saved) L.intensity = i; saved.length = 0; }
 
+// ---------------------------------------------------------------- the UI-layer 3D scene (src/present/ui3d)
+// UI models (dice tray, heart flask, skill tablet, stone buttons…) live in their own scene + camera, drawn on top of the world.
+// In the pixel look they go through the same art buffer (same art pixel size, 1-art-pixel ink outline, stepped glow) and are
+// composited over the world before the upscale; in the standard look they are drawn straight on top. Text stays full resolution
+// (the UI layer draws its own text overlay after the frame).
+export interface Ui3DLayer { scene: THREE.Scene; camera: THREE.PerspectiveCamera | THREE.OrthographicCamera; on: boolean; /** exposure for the UI models (default 1) */ exposure?: number }
+export const UI3D: { layer: Ui3DLayer | null } = { layer: null };
+/** register (or clear) the UI-layer 3D scene; post.ts renders it every frame while layer.on */
+export function setUi3DLayer(layer: Ui3DLayer | null) { UI3D.layer = layer; }
+
 // ---------------------------------------------------------------- overlays kept at full resolution
 // Floating combat text is a camera-facing sprite drawn on top of everything (renderOrder ≥ 40, no depth test): it belongs to the UI,
 // so in the pixel look it is lifted out of the art buffer and drawn crisp after the upscale.

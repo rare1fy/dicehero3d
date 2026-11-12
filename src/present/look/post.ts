@@ -4,7 +4,7 @@
 // target with 1-art-pixel silhouette outlines, and a last pass blows it up to the screen with nearest sampling.
 import * as THREE from 'three';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { PX, PXU, pxLightsBegin, pxLightsEnd, liftOverlays, drawOverlays } from './pixel';
+import { PX, PXU, UI3D, pxLightsBegin, pxLightsEnd, liftOverlays, drawOverlays } from './pixel';
 import { PADD } from '../engine/particles';
 
 const VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
@@ -81,6 +81,33 @@ void main(){
 const BLIT_FS = `precision highp float; uniform sampler2D tLo; uniform vec2 uLoRes, uOff; uniform float uK;
 void main(){ vec2 p = floor((gl_FragCoord.xy - uOff) / uK); gl_FragColor = texture2D(tLo, (clamp(p, vec2(0.0), uLoRes - 1.0) + 0.5) / uLoRes); }`;
 
+// the UI-layer 3D scene (look/pixel.ts UI3D) in the pixel look: rendered into the art buffer on a clear background, then this pass
+// tone-maps it, draws a 1-art-pixel ink outline around its silhouettes (and on depth steps between UI models) and blends it over the
+// world's low-res frame, so UI models get exactly the world's art pixels and outlines.
+const UI_FS = `precision highp float;
+uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 uRes; uniform float uExposure, uInk, uNear, uFar; uniform vec3 uInkCol; varying vec2 vUv;
+float lin(float d){ float z = d * 2.0 - 1.0; return (2.0 * uNear * uFar) / (uFar + uNear - z * (uFar - uNear)); }
+vec3 aces(vec3 x){ const float a=2.51,b=0.03,c=2.43,d=0.59,e=0.14; return clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0); }
+vec3 toSRGB(vec3 c){ return mix(c * 12.92, 1.055 * pow(c, vec3(1.0/2.4)) - 0.055, step(0.0031308, c)); }
+void main(){
+  vec2 px = 1.0 / uRes; vec4 c = texture2D(tColor, vUv); float r0 = texture2D(tDepth, vUv).r, d0 = lin(r0);
+  // coverage comes from depth (solid UI models write depth; particles do not, so sparks never get an ink ring)
+  float cov = 0.0, ink = 0.0;
+  for (int i = 0; i < 4; i++) {
+    vec2 o = i == 0 ? vec2(-px.x, 0.0) : i == 1 ? vec2(px.x, 0.0) : i == 2 ? vec2(0.0, px.y) : vec2(0.0, -px.y);
+    float r1 = texture2D(tDepth, vUv + o).r, d1 = lin(r1);
+    cov = max(cov, step(r1, 0.99999));
+    if (r0 < 0.99999 && r1 < 0.99999 && (d0 - d1) / d1 > 0.06) ink = 1.0;   // a clearly nearer UI model next to this pixel: inner contour
+  }
+  // the art buffer holds premultiplied colour over a clear background (opaque models a = 1, glass / glows a < 1, additive a ≈ 0)
+  // tone map the straight colour, then premultiply again (the sRGB curve on premultiplied glass would wash it out to white)
+  float a = c.a; vec3 col = a > 0.02 ? toSRGB(aces(c.rgb / a * uExposure)) * a : toSRGB(aces(c.rgb * uExposure));
+  if (r0 >= 0.99999 && cov > 0.5) { gl_FragColor = vec4(mix(col, uInkCol * 0.25, uInk), max(c.a, uInk)); return; }   // outer silhouette
+  if (c.a < 0.002 && max(c.r, max(c.g, c.b)) < 0.002) discard;
+  col = mix(col, uInkCol * 0.25, ink * uInk);
+  gl_FragColor = vec4(col, c.a);
+}`;
+
 export const GRADE = {
   ink: 0.85, exposure: 1.05, sat: 1.12, vig: 0.55, desat: 0,
   lift: new THREE.Color(0.02, 0.015, 0.05), gain: new THREE.Color(1.0, 0.98, 1.02), inkCol: new THREE.Color(0.05, 0.03, 0.08),
@@ -154,9 +181,32 @@ export class Post {
     u.uFlash.value = GRADE.flash; u.uSplit.value = GRADE.split; u.uTime.value = time % 100; u.uDesat.value = GRADE.desat;
     (u.uFlashCol.value as THREE.Color).copy(GRADE.flashCol); (u.uLift.value as THREE.Color).copy(GRADE.lift); (u.uGain.value as THREE.Color).copy(GRADE.gain); (u.uInkCol.value as THREE.Color).copy(GRADE.inkCol);
     this.quad.material = m;
-    if (!pix) { r.setRenderTarget(null); r.render(this.qs, this.cam); return; }
+    if (!pix) { r.setRenderTarget(null); r.render(this.qs, this.cam); this.renderUi3D(false); return; }
     r.setRenderTarget(this.lo); r.render(this.qs, this.cam);
+    this.renderUi3D(true);
     r.setRenderTarget(null); r.render(this.bs, this.cam);
     drawOverlays(r, scene, camera);
+  }
+  /** the UI-layer 3D scene (look/pixel.ts UI3D): pixel look → art buffer + ink, composited into the low-res frame; standard → on top */
+  private uiMat: THREE.ShaderMaterial | null = null; private uiQs = new THREE.Scene(); private cc = new THREE.Color();
+  private renderUi3D(pix: boolean) {
+    const L = UI3D.layer; if (!L || !L.on) return;
+    const r = this.renderer, tm = r.toneMapping, te = r.toneMappingExposure;
+    if (!pix) {
+      r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = GRADE.exposure;
+      const ac = r.autoClear; r.autoClear = false; r.setRenderTarget(null); r.clearDepth(); r.render(L.scene, L.camera); r.autoClear = ac;
+      r.toneMapping = tm; r.toneMappingExposure = te; return;
+    }
+    if (!this.uiMat) {
+      this.uiMat = new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: UI_FS, depthTest: false, depthWrite: false, transparent: true,
+        blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+        uniforms: { tColor: { value: this.rt.texture }, tDepth: { value: this.rt.depthTexture }, uRes: { value: new THREE.Vector2() }, uExposure: { value: 1 }, uInk: { value: 1 }, uInkCol: { value: new THREE.Color() }, uNear: { value: 1 }, uFar: { value: 2 } } });
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.uiMat); q.frustumCulled = false; this.uiQs.add(q);
+    }
+    const u = this.uiMat.uniforms, ca = r.getClearAlpha(); r.getClearColor(this.cc);
+    r.setRenderTarget(this.rt); r.setClearColor(0x000000, 0); r.clear(); r.render(L.scene, L.camera); r.setClearColor(this.cc, ca);
+    (u.uRes.value as THREE.Vector2).set(this.rt.width, this.rt.height); u.uExposure.value = GRADE.exposure * PX.exposure; u.uInk.value = PX.ink; (u.uInkCol.value as THREE.Color).copy(GRADE.inkCol);
+    u.uNear.value = L.camera.near; u.uFar.value = L.camera.far;
+    const ac = r.autoClear; r.autoClear = false; r.setRenderTarget(this.lo); r.render(this.uiQs, this.cam); r.autoClear = ac;
   }
 }

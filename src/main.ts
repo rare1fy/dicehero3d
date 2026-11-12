@@ -17,6 +17,7 @@ import { bestiaryCast } from './present/bestiary/battle';
 import { legoCast } from './present/bestiary/lego';
 import { initLegoEnv, legoEnvTex } from './present/look/legokit';
 import { figCast, setFigEnv } from './present/bestiary/figs';
+import { ui3dDemo, ui3dPointer } from './present/ui3d/demo';
 import { GRADE } from './present/look/post';
 import { PX, PXU, readPixelFlag, installPixelKeys, setPixel } from './present/look/pixel';
 import type { Env } from './present/look/env';
@@ -72,7 +73,13 @@ Promise.resolve().then(() => {
   const cast = fig ? figCast() : brick ? legoCast() : classic ? voxelCast() : bestiaryCast();
   // the model viewer page: a separate build (VITE_ENTRY=bestiary) or #bestiary on the game build
   const entry = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_ENTRY;
-  if (entry === 'bestiary' || hash === 'bestiary') {
+  if (entry === 'ui3d' || hash === 'ui3d') {   // the UI-layer 3D kit demo (present/ui3d/demo.ts)
+    const D = ui3dDemo(env, cast, () => ({ ...platform.canvasSize(), dpr: Math.min(platform.dpr(), 2) }));
+    platform.onResize(() => (D as unknown as { layout(): void }).layout());
+    platform.onPointer(ev => ui3dPointer(D, ev.type, ev.x, ev.y));
+    G.__ui3d = D;
+    gfx.start(() => {}, () => { D.L.renderText(gfx.renderer); frames++; });
+  } else if (entry === 'bestiary' || hash === 'bestiary') {
     G.__bv = bestiaryViewer(env);
     gfx.start(() => {}, () => { frames++; });
   } else if (flags.view === 'actors' || hash === 'actors' || hash === 'hero') {

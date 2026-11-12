@@ -8,12 +8,14 @@ import { dieDef } from '../../core/data';
 import { paintFace, famKey, FAM } from './style';
 import { DIE, sigOf, extra, TRIM_MAT, trimGeometry, type DieFxKind } from './signature';
 import { dieGeometry, assignFaceValues } from './faces';
+import { paintSuitFace, SUIT_T } from '../ui3d/suitFace';
+import { SPECIALS, skinFaces, type SuitSkin } from '../ui3d/suitData';
 
 export const DT = 48;   // texels per face (one texel ~ one art pixel at the battle view)
 const GEO = dieGeometry(DIE), SHELL = dieGeometry(DIE * 1.16);
 export type DieMode = 'hidden' | 'play' | 'rest' | 'fly' | 'present' | 'queue' | 'gone';
 
-export interface ThrowRec { rel: number; f: number[]; impacts: Array<{ t: number; v: number }>; top: number; qEnd: THREE.Quaternion; pEnd: THREE.Vector3; dur: number }
+export interface ThrowRec { rel: number; f: number[]; impacts: Array<{ t: number; v: number }>; top: number; qEnd: THREE.Quaternion; pEnd: THREE.Vector3; dur: number; /** optional start scale, eased to 1 over sT s (UI → world hand-over); default: v1 grow-in */ s0?: number; sT?: number }
 
 export const DICE3D = new Set<Die3D>();
 let seq = 1;
@@ -39,9 +41,13 @@ export class Die3D {
   uid: number | null = null;
   value = 1;
 
-  constructor(readonly defId: string, o: { parent?: THREE.Object3D; T?: number } = {}) {
-    const def = dieDef(defId), T = o.T || DT;
-    this.faceVals = (def.faces.length === 6 ? def.faces : [1, 2, 3, 4, 5, 6]).slice();
+  /** v2 suit faces (ui3d/suitData.ts): when set, the die paints suit faces instead of the v1 numeral style */
+  suit: SuitSkin | null = null;
+
+  constructor(readonly defId: string, o: { parent?: THREE.Object3D; T?: number; suit?: SuitSkin } = {}) {
+    const def = dieDef(defId), T = o.T || (o.suit ? SUIT_T[o.suit.scheme] : DT);
+    this.suit = o.suit || null;
+    this.faceVals = (this.suit ? skinFaces(this.suit) : def.faces.length === 6 ? def.faces : [1, 2, 3, 4, 5, 6]).slice();
     this.seed = (defId.length * 977 + this.id * 31) | 0;
     this.tex = canvasTex(T * 6, T, () => {}, { nearest: true }); this.etex = canvasTex(T * 6, T, () => {}, { nearest: true });
     this.mat = new THREE.MeshStandardMaterial({ map: this.tex, emissiveMap: this.etex, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.4 });
@@ -59,6 +65,7 @@ export class Die3D {
 
   /** Repaint the atlas (after the faces were renumbered or the top tile turned). */
   paint() {
+    if (this.suit) { this.paintSuit(); return; }
     const T = (this.tex.image as { height: number }).height;
     const g = this.tex.userData.canvas.getContext('2d') as CanvasRenderingContext2D, eg = this.etex.userData.canvas.getContext('2d') as CanvasRenderingContext2D;
     this.faceVals.forEach((v, i) => {
@@ -76,7 +83,29 @@ export class Die3D {
 
   /** Put `value` on face `top`, painted upright for the viewer. */
   setValue(value: number, top: number, turns: number) {
-    this.value = value; this.faceVals = assignFaceValues(dieDef(this.defId).faces, value, top); this.topIdx = top; this.topTurns = turns; this.paint();
+    this.value = value; this.faceVals = assignFaceValues(this.suit ? skinFaces(this.suit) : dieDef(this.defId).faces, value, top); this.topIdx = top; this.topTurns = turns; this.paint();
+  }
+
+  /** Switch to (or between) suit skins; keeps the shown value on the same face. The atlas is resized when the scheme's tile size changes. */
+  setSuit(skin: SuitSkin | null) {
+    const top = this.topIdx, v = this.value; this.suit = skin;
+    const T = skin ? SUIT_T[skin.scheme] : DT;
+    for (const t of [this.tex, this.etex]) { const c = t.userData.canvas; if (c.height !== T) { c.width = T * 6; c.height = T; t.dispose(); } }
+    this.faceVals = assignFaceValues(skin ? skinFaces(skin) : dieDef(this.defId).faces, v, top); this.paint();
+  }
+  private paintSuit() {
+    const s = this.suit!, T = (this.tex.image as { height: number }).height;
+    const g = this.tex.userData.canvas.getContext('2d') as CanvasRenderingContext2D, eg = this.etex.userData.canvas.getContext('2d') as CanvasRenderingContext2D;
+    this.faceVals.forEach((v, i) => {
+      const turns = i === this.topIdx ? this.topTurns : 0;
+      if (!turns) { paintSuitFace(g, eg, i * T, T, v, s); return; }
+      const tg = scratch(T, 0), te = scratch(T, 1); paintSuitFace(tg.g, te.g, 0, T, v, s);
+      for (const [ctx, src] of [[g, tg.c], [eg, te.c]] as const) { ctx.save(); ctx.translate(i * T + T / 2, T / 2); ctx.rotate(-turns * Math.PI / 2); ctx.drawImage(src, -T / 2, -T / 2, T, T); ctx.restore(); }
+    });
+    this.tex.needsUpdate = true; this.etex.needsUpdate = true;
+    const sp = s.special ? SPECIALS[s.special] : null, m = this.mat;
+    m.roughness = sp?.metal ? 0.3 : 0.55; m.metalness = sp?.metal ? sp.metal * 0.5 : 0; m.opacity = 1; m.transparent = false;
+    m.emissiveIntensity = 1.6; m.needsUpdate = true;
   }
 
   fx(kind: DieFxKind) { sigOf(this.defId).fx(kind, this.root.getWorldPosition(V3())); }
@@ -125,7 +154,7 @@ export function updateDice(dt: number, rdt: number) {
       const fi = t * SIM_FPS, i0 = Math.min(nF - 1, Math.floor(fi)), i1 = Math.min(nF - 1, i0 + 1), a = Math.min(1, fi - i0);
       _pa.set(F[i0 * 7], F[i0 * 7 + 1], F[i0 * 7 + 2]); _pb.set(F[i1 * 7], F[i1 * 7 + 1], F[i1 * 7 + 2]); d.root.position.lerpVectors(_pa, _pb, a);
       _qa.set(F[i0 * 7 + 3], F[i0 * 7 + 4], F[i0 * 7 + 5], F[i0 * 7 + 6]); _qb.set(F[i1 * 7 + 3], F[i1 * 7 + 4], F[i1 * 7 + 5], F[i1 * 7 + 6]); d.root.quaternion.slerpQuaternions(_qa, _qb, a);
-      d.root.scale.setScalar(Math.min(1, 0.55 + t * 3));
+      d.root.scale.setScalar(rec.s0 != null ? lerp(rec.s0, 1, ease.inOut(Math.min(1, t / (rec.sT ?? 0.3)))) : Math.min(1, 0.55 + t * 3));
       while (P.ii < rec.impacts.length && rec.impacts[P.ii].t <= t) throwHooks.impact(d, rec.impacts[P.ii++].v);
       if (fi >= nF - 1) { d.mode = 'rest'; d.play = null; d.root.position.copy(d.home); d.root.quaternion.copy(d.homeQ); d.liftT = 0; throwHooks.landed(d); }
     } else if (d.mode === 'rest') {
@@ -140,7 +169,7 @@ export function updateDice(dt: number, rdt: number) {
     if (d.spinPart) d.spinPart.rotation.y += dt * (d.mode === 'rest' ? (d.glow ? 6 : 1.2) : 3);
     d.omat.opacity = damp(d.omat.opacity, d.glow ? 0.5 * Math.min(1, d.glow * 1.6) : 0, 12, rdt); d.omat.color.copy(d.glowCol); d.outline.visible = d.omat.opacity > 0.02;
     d.mat.emissive.setRGB(1, 1, 1);
-    const F = FAM[famKey(d.defId)], base = F.emis || F.glowPip ? 1.7 : 0;
+    const F = FAM[famKey(d.defId)], base = d.suit ? 1.6 : F.emis || F.glowPip ? 1.7 : 0;
     d.mat.emissiveIntensity = base + d.glow * (0.16 + 0.06 * Math.sin(clock.rtime * 6)) * 2;
   }
 }
