@@ -11,18 +11,21 @@ const BIG: Record<string, number> = { boss_ancient_treant: 1.7, boss_root_coloss
 
 export class BActor extends Actor {
   readonly height: number; readonly top: number; readonly width: number;
+  /** block size (m) across and up: voxels are cubes, toy bricks are a stud wide and a plate tall */
+  readonly cx: number; readonly cy: number;
   private slow: number; private hunch: number; private armed: boolean;
   constructor(readonly def: ModelDef) {
     super();
-    const v = def.build();
+    const v = def.build(), lv = v as unknown as { u?: number; p?: number };
+    this.cx = lv.u ?? v.s; this.cy = lv.p ?? v.s;
     let maxY = 0, maxX = 0; for (const c of v.cells.values()) { maxY = Math.max(maxY, c.y + 1); maxX = Math.max(maxX, Math.abs(c.x + 0.5) + 0.5); }
-    this.top = maxY * CELL; this.height = Math.min(this.top, 6); this.width = maxX * 2 * CELL;
+    this.top = maxY * this.cy; this.height = Math.min(this.top, 6); this.width = maxX * 2 * this.cx;
     const r = v.build({ glow: def.glow ?? 1.9, jitter: 0, self: def.self ?? 0.06, edge: 0.13 });
     this.body.add(r.root); this.bones = r.bones; this.finish(r.meshes);
     this.slow = BIG[def.id] ?? 1; this.hunch = HUNCH[def.id] ?? 0;
     this.armed = !!r.bones.weapon && r.bones.weapon.children.length > 0;
   }
-  weapon() { return this.bones.weapon ? this.bones.weapon.localToWorld(V3(0, 0, 8 * CELL)) : this.chest(); }
+  weapon() { return this.bones.weapon ? this.bones.weapon.localToWorld(V3(0, 0, 8 * this.cx)) : this.chest(); }
   head() { return this.local(0, this.top + 0.3, 0); }
   chest() { return this.local(0, this.top * 0.55, 0.3); }
   attack(dist?: number) { return this.play(new Action('attack', (this.def.attack === 'slam' ? 1.3 : this.def.attack === 'shoot' ? 1.2 : this.def.attack === 'dual' ? 0.9 : 1.0) * this.slow, 0.5, dist != null ? { dist } : {})); }

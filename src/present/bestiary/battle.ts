@@ -3,22 +3,22 @@
 // Attack / cast / hurt / roar come from BActor; everything else is posed here.
 import * as THREE from 'three';
 import { BActor } from './bactor';
-import { ROSTER } from './models';
+import { ROSTER, type ModelDef } from './models';
 import { CELL } from './kit';
 import { Action, rot, mov, curve, snap } from '../actors/rig';
 import { V3, R } from '../engine/world';
 import { PADD, TILE } from '../engine/particles';
 import type { Cast } from '../actors/cast';
 
-const TIP: Record<string, [number, number]> = { warrior: [17, -3], boss_lich_forest: [29, 0] };
+const TIP: Record<string, [number, number]> = { warrior: [17, -3], boss_lich_forest: [29, 0], lego_warrior: [9, -3], lego_lich: [19, 0] };
 
 export class BattleActor extends BActor {
   aim = 0; breath = 1; robeFire = 0; walkK = 0; running = false; private runK = 0;
-  constructor(id: string) { super(ROSTER.find(d => d.id === id)!); }
+  constructor(id: string | ModelDef) { super(typeof id === 'string' ? ROSTER.find(d => d.id === id)! : id); }
   weapon() {
     const t = TIP[this.def.id];
-    if (t && this.bones.weapon) return this.bones.weapon.localToWorld(V3(0, t[1] * CELL, t[0] * CELL));
-    return this.bones.handR ? this.bones.handR.localToWorld(V3(0, -2 * CELL, CELL)) : this.chest();
+    if (t && this.bones.weapon) return this.bones.weapon.localToWorld(V3(0, t[1] * this.cy, t[0] * this.cx));
+    return this.bones.handR ? this.bones.handR.localToWorld(V3(0, -2 * this.cy, this.cx)) : this.chest();
   }
   // hero
   spin(dist: number) { return this.play(new Action('spin', 1.05, 0.55, { dist })); }
@@ -52,7 +52,7 @@ export class BattleActor extends BActor {
     if (this.def.id === 'warrior' && this.aim > 0 && !a) { rot(b.armR, -0.5 * this.aim, 0, 0); rot(b.weapon, -0.4 * this.aim, 0, 0); }
     // second phase: soul fire on the robe
     if (this.robeFire > 0) {
-      for (const f of this.flashMats) f.base.setRGB(0.04 * this.robeFire, (0.28 + 0.1 * Math.sin(t * 11)) * this.robeFire, 0.14 * this.robeFire);
+      for (const f of this.flashMats) { const k2 = this.robeFire * ((f.m as THREE.MeshStandardMaterial).isMeshStandardMaterial ? 0.3 : 1); f.base.setRGB(0.04 * k2, (0.28 + 0.1 * Math.sin(t * 11)) * k2, 0.14 * k2); }   // plastic takes a much lighter tint
       if (!this.dead && Math.random() < dt * 30 * this.robeFire) PADD.emit({ p: this.chest().add(V3(R(-0.7, 0.7), R(-1.2, 0.5), R(-0.5, 0.5))), v: V3(R(-0.2, 0.2), R(1, 2.2), R(-0.2, 0.2)), s0: 0.14, s1: 0.02, life: R(0.4, 0.8), c0: new THREE.Color(0xc0ffd8), c1: new THREE.Color(0x2aff8a), bright: 2.6, tile: TILE.glow });
     }
     if (!a) return;
