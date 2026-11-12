@@ -7,9 +7,10 @@
 import * as THREE from 'three';
 
 export const PX = {
-  on: false,
+  /** the user picked the pixel look at 3x as the default (2026-11-13); #std or ?px=0 shows the standard look */
+  on: true,
   /** CSS px per art pixel (1 / 2 / 3) */
-  size: 2,
+  size: 3,
   /** render-time light balance (multipliers on the scene's own lights, restored after the frame) */
   warmK: 1.5, coolK: 1.0, hemiK: 1.2, pointK: 1.0,
   /** bloom ceiling (per-pixel cap on the added glow, which is then stepped into 6 bands) and how much it backs off on busy screens */
@@ -38,8 +39,8 @@ export function stepPixelSize(d: number) { PX.size = Math.max(1, Math.min(3, PX.
 /** URL switch: #px / #px2 / #name&px (hash tokens), ?px / ?px=1|2|3 (query). Returns the hash without the px token. */
 export function readPixelFlag(hash: string, query: (k: string) => string | null): string {
   const toks = hash.split(/[&+,]/).filter(Boolean), rest: string[] = [];
-  let on = false, size = PX.size;
-  for (const t of toks) { const m = /^px([123])?$/.exec(t); if (m) { on = true; if (m[1]) size = +m[1]; } else rest.push(t); }
+  let on = PX.on, size = PX.size;
+  for (const t of toks) { const m = /^px([123])?$/.exec(t); if (m) { on = true; if (m[1]) size = +m[1]; } else if (t === 'std') on = false; else rest.push(t); }
   const q = query('px');
   if (q != null) { on = q !== '0'; if (/^[123]$/.test(q)) size = +q; }
   PX.on = on; PX.size = size; PXU.uPx.value = on ? 1 : 0;
