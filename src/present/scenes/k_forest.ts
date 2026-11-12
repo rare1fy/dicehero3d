@@ -15,12 +15,12 @@ const inPlayC = (X: number, Z: number) => { const x = (X + 0.5) * CELL, z = (Z +
 /** the forest kit's palette: every material in three steps (body, dark seam / lip, light edge) */
 export const KC = {
   stone: 0x6e6c80, stoneD: 0x56546a, stoneL: 0x8a889c, mortar: 0x4a4858, slate: 0x4a4c62, slateD: 0x363848, statue: 0x9c9aae,
-  moss: 0x46663a, mossL: 0x5a7a42,
-  wood: 0x6a4a32, woodD: 0x4a3222, woodL: 0x8a6440, plank: 0x7a5838, plankB: 0x6c4e32, seam: 0x2a1e16, shingle: 0x5a4434, shingleD: 0x3e2e24,
-  bark: 0x3e3434, barkD: 0x2a2224, ring: 0xa07e54, ringD: 0x765a3c,
-  canvas: 0xc4b292, canvasD: 0x9a8a6c, canvasL: 0xdccca6,
-  red: 0x9a3a30, redD: 0x6a2824, cream: 0xe0d2b0, blue: 0x3e5282, green: 0x4a6a3a,
-  iron: 0x34323e, ironL: 0x5c5a6a, brass: 0xc8963a, rope: 0xa08a5e,
+  moss: 0x40553a, mossL: 0x51643f,
+  wood: 0x5a4c42, woodD: 0x3a302c, woodL: 0x6e625a, plank: 0x5e5249, plankB: 0x52473f, seam: 0x1e1a18, shingle: 0x46403e, shingleD: 0x2e2a2a,
+  bark: 0x3a3434, barkD: 0x262224, ring: 0x84705a, ringD: 0x62523f,
+  canvas: 0x8c8472, canvasD: 0x625c4e, canvasL: 0x9c9482,
+  red: 0x6a302c, redD: 0x4a2422, cream: 0xa8a290, blue: 0x3a4458, green: 0x3e4e38,
+  iron: 0x302e36, ironL: 0x4e4a52, brass: 0x8a6a3a, rope: 0x6e6250, rust: 0x74442e, rustD: 0x52321f, bone: 0xb8b0a0,
   earth: 0x4a3e30, earthL: 0x5a4c3a, earthD: 0x382e26, sawdust: 0x9a8058, ash: 0x3a3634, char: 0x221c1c,
   warm: 0xffc070, ember: 0xff7a30, cold: 0x5ad8ff, teal: 0x6affd8, dark: 0x161214,
 };
@@ -78,24 +78,25 @@ export function hipRoof(w: W, x0: number, x1: number, z0: number, z1: number, y:
 }
 /** a spoked wheel standing in a vertical plane: the rim is an octagon of three wide rectangles (no staircase), four spokes in a
  *  plus, an iron hub that sticks out past the rim. (X, Y, Z) = hub centre in cells; axle 'z' = wheel faces ±z. */
-export function wheel(w: W, X: number, Y: number, Z: number, r: number, axle: 'x' | 'z', rim: number, spoke: number, hub: number, t = 2, tyre?: number) {
+export function wheel(w: W, X: number, Y: number, Z: number, r: number, axle: 'x' | 'y' | 'z', rim: number, spoke: number, hub: number, t = 2, tyre?: number, broken = false) {
   const q = Math.round(r * 0.45), m = Math.round(r * 0.78), rects: Array<[number, number]> = [[r, q], [m, m], [q, r]];
   const inside = (a: number, b: number, sh: number) => rects.some(([p, s]) => Math.abs(a) <= p - sh && Math.abs(b) <= s - sh);
   for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
     let c: number | null = null;
     if (inside(a, b, 0) && !inside(a, b, 2)) c = tyre != null && !inside(a, b, 1) ? tyre : rim; else if (inside(a, b, 2) && (a === 0 || b === 0)) c = spoke;
     if (Math.abs(a) <= 1 && Math.abs(b) <= 1) c = hub;
-    if (c == null) continue;
-    for (let k = 0; k < t; k++) { if (axle === 'z') w.set(X + a, Y + b, Z + k, c); else w.set(X + k, Y + b, Z + a, c); }
+    if (c == null || (broken && a > 1 && b > Math.round(r * 0.2))) continue;
+    for (let k = 0; k < t; k++) { if (axle === 'z') w.set(X + a, Y + b, Z + k, c); else if (axle === 'y') w.set(X + a, Y + k, Z + b, c); else w.set(X + k, Y + b, Z + a, c); }
   }
-  if (axle === 'z') w.box(X, Y, Z - 1, X, Y, Z + t, hub); else w.box(X - 1, Y, Z, X + t, Y, Z, hub);
+  if (axle === 'z') w.box(X, Y, Z - 1, X, Y, Z + t, hub); else if (axle === 'y') w.box(X, Y - 1, Z, X, Y + t, Z, hub); else w.box(X - 1, Y, Z, X + t, Y, Z, hub);
 }
 /** a hanging lantern below the hook cell (X, Y, Z): chain link, cap, glowing panes between four corner posts, base. Returns the
  *  light position (metres). */
-export function lantern(w: W, X: number, Y: number, Z: number, frame: number, glowC: number, big = false) {
+export function lantern(w: W, X: number, Y: number, Z: number, frame: number, glowC: number, big = false, lit = true) {
   const s = big ? 2 : 1, h = big ? 4 : 3;
   w.set(X, Y, Z, frame).box(X - s, Y - 1, Z - s, X + s, Y - 1, Z + s, frame).set(X, Y, Z, frame);
-  w.box(X - s, Y - 1 - h, Z - s, X + s, Y - 2, Z + s, glowC, 1);
+  if (lit) w.box(X - s, Y - 1 - h, Z - s, X + s, Y - 2, Z + s, glowC, 1);
+  else w.box(X - s, Y - 1 - h, Z - s, X + s, Y - 2, Z + s, 0x24242a).box(X - s, Y - 1 - h, Z + s, X, Y - 3, Z + s, null);
   for (const [a, b] of [[-s, -s], [s, -s], [-s, s], [s, s]]) w.box(X + a, Y - 1 - h, Z + b, X + a, Y - 2, Z + b, frame);
   w.box(X - s, Y - 2 - h, Z - s, X + s, Y - 2 - h, Z + s, frame);
   return at(X, Y - 1 - (h >> 1), Z);
@@ -108,11 +109,13 @@ function cellsOf(rects: Rect[]): CellSet { const s: CellSet = new Set(); for (co
 function each(s: CellSet, f: (X: number, Z: number) => void) { for (const k of s) f(Math.floor(k / 4096) - 2048, (k % 4096) - 2048); }
 /** a path over a union of axis-aligned rects: kerb stones along its edges (raised one block outside the battle floor, flush inside
  *  it, a joint every few blocks), a darker worn band inside the kerb, and the surface from surf(X, Z) (null = a groove) */
-export function pathway(w: W, rects: Rect[], o: { surf: (X: number, Z: number) => number | null; kerb: number; joint: number; band?: number; raise?: boolean; jointEvery?: number }) {
+export function pathway(w: W, rects: Rect[], o: { surf: (X: number, Z: number) => number | null; kerb: number; joint: number; band?: number; raise?: boolean; jointEvery?: number; broken?: number }) {
   const S = cellsOf(rects), has = (X: number, Z: number) => S.has(ck(X, Z)), je = o.jointEvery ?? 6;
   each(S, (X, Z) => {
     const edge = !has(X + 1, Z) || !has(X - 1, Z) || !has(X, Z + 1) || !has(X, Z - 1);
     if (edge) {
+      const seg = Math.floor((X + Z) / je), gone = o.broken != null && !inPlayC(X, Z) && hash(seg, X > 0 ? 1 : 2, Z > 0 ? 3 : 4) < o.broken;
+      if (gone) { w.set(X, -1, Z, o.band ?? o.joint); return; }
       const j = (X + Z) % je === 0, col = j ? o.joint : o.kerb;
       w.set(X, -1, Z, col);
       if (o.raise !== false && !inPlayC(X, Z) && !j) w.set(X, 0, Z, col);
@@ -244,12 +247,12 @@ export function sack(w: W, x: number, z: number, col: number, tie: number, s = 1
   w.box(X - a, 0, Z - a + 1, X + a, h, Z + a - 1, col).box(X - a + 1, 0, Z - a, X + a - 1, h, Z + a, col).box(X - a + 1, h + 1, Z - a + 2, X + a - 1, h + 2, Z + a - 2, col).box(X - 1, h + 3, Z - 1, X + 1, h + 3, Z + 1, tie).box(X - 1, h + 4, Z - 1, X, h + 5, Z, col);
 }
 /** a wooden post with an arm reaching toward +x or −x (or ±z) and a lantern on its hook. Returns the light position. */
-export function lampPost(w: W, x: number, z: number, h: number, dir: [number, number], wood: number, iron: number, glowC: number) {
+export function lampPost(w: W, x: number, z: number, h: number, dir: [number, number], wood: number, iron: number, glowC: number, lit = true) {
   const X = M(x), Z = M(z), H = M(h), [dx, dz] = dir;
   w.box(X - 2, -2, Z - 2, X + 2, 1, Z + 2, 0x4e4c5e).box(X - 1, 2, Z - 1, X + 1, H, Z + 1, wood).box(X - 2, H + 1, Z - 2, X + 2, H + 1, Z + 2, wood);
   const ex = X + dx * 7, ez = Z + dz * 7;
   w.box(Math.min(X, ex), H - 2, Math.min(Z, ez), Math.max(X, ex), H - 1, Math.max(Z, ez), wood).box(X + dx * 2, H - 5, Z + dz * 2, X + dx * 2, H - 3, Z + dz * 2, wood);
-  return lantern(w, ex, H - 3, ez, iron, glowC);
+  return lantern(w, ex, H - 3, ez, iron, glowC, false, lit);
 }
 /** a signpost: a post with boards pointing along x (arrow ends cut in two steps) and a small cap */
 export function signpost(w: W, x: number, z: number, h: number, wood: number, board: number, edge: number, arms: Array<[number, number]>) {
@@ -262,7 +265,7 @@ export function signpost(w: W, x: number, z: number, h: number, wood: number, bo
   }
 }
 /** a stone ring round a fire pit with crossed split logs, a bed of embers and ash; lit = glowing embers. Returns the flame spot. */
-export function firePit(w: W, x: number, z: number, lit: boolean) {
+export function firePit(w: W, x: number, z: number, lit: boolean | 'dying') {
   const X = M(x), Z = M(z), R = 8;
   for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) {
     const m = Math.max(Math.abs(a), Math.abs(b)), corner = Math.abs(a) > 5 && Math.abs(b) > 5; if (corner) continue;
@@ -271,7 +274,8 @@ export function firePit(w: W, x: number, z: number, lit: boolean) {
   }
   for (const [a, b] of [[-6, -6], [6, -6], [-6, 6], [6, 6]]) w.box(X + a - 1, -1, Z + b - 1, X + a + 1, 1, Z + b + 1, KC.stoneD);
   w.box(X - 6, 0, Z - 1, X + 6, 2, Z + 1, KC.bark).box(X - 1, 3, Z - 6, X + 1, 5, Z + 6, KC.bark).box(X - 6, 1, Z - 1, X - 6, 1, Z + 1, KC.ring).box(X + 6, 1, Z - 1, X + 6, 1, Z + 1, KC.ring);
-  if (lit) w.box(X - 3, 0, Z - 3, X + 3, 1, Z + 3, KC.ember, 1).box(X - 2, 2, Z - 2, X + 2, 4, Z + 2, 0xff9a3a, 1).box(X - 1, 5, Z - 1, X + 1, 7, Z + 1, 0xffd070, 1);
+  if (lit === 'dying') w.box(X - 6, 0, Z - 1, X + 6, 2, Z + 1, KC.char).box(X - 1, 3, Z - 6, X + 1, 5, Z + 6, KC.char).box(X - 2, 0, Z - 2, X + 2, 0, Z + 2, KC.ember, 1).box(X - 1, 1, Z - 1, X + 1, 2, Z + 1, 0xff7a2a, 1).box(X, 3, Z, X, 4, Z, 0xffb050, 1);
+  else if (lit) w.box(X - 3, 0, Z - 3, X + 3, 1, Z + 3, KC.ember, 1).box(X - 2, 2, Z - 2, X + 2, 4, Z + 2, 0xff9a3a, 1).box(X - 1, 5, Z - 1, X + 1, 7, Z + 1, 0xffd070, 1);
   else w.box(X - 3, 0, Z - 3, X + 3, 0, Z + 3, KC.char).box(X - 1, 1, Z - 1, X, 1, Z, 0xa83a20, 1);
   return [x, 9 * CELL, z] as P3;
 }
@@ -280,7 +284,7 @@ export function firePit(w: W, x: number, z: number, lit: boolean) {
 /** the ruined gate at the end of the trail: two piers on stepped plinths, a lintel with a stepped crown and a carved keystone (a
  *  glowing rune), stepped corbels rounding the opening's top corners, a raised threshold, and broken wall wings stepping down to
  *  both sides. (x, z) = centre of the opening. Returns the rune position. */
-export function ruinGate(w: W, x: number, z: number, o: { span: number; h: number; wing: number; rune: number }) {
+export function ruinGate(w: W, x: number, z: number, o: { span: number; h: number; wing: number; rune: number; ruin?: boolean }) {
   const X = M(x), Z = M(z), S = M(o.span) >> 1, H = M(o.h), pw = 5, pd = 5, st = KC;
   const L0 = X - S - 1 - 2 * pw, L1 = X - S - 1, R0 = X + S + 1, R1 = X + S + 1 + 2 * pw;
   // threshold: a two-step stone platform the path runs onto
@@ -311,13 +315,22 @@ export function ruinGate(w: W, x: number, z: number, o: { span: number; h: numbe
     const fx = s + e * (wl + 6);
     w.box(fx - 4, -1, Z + 2, fx + 4, 3, Z + 7, st.stone).box(fx - 3, 4, Z + 3, fx + 3, 4, Z + 6, st.moss);
   }
+  if (o.ruin) {
+    // the right end of the lintel and half the crown have fallen: a notch in two wide steps, the pieces lying in front of the pier
+    w.box(R0 + 4, H + 3, Z - pd - 1, R1 + 2, H + 11, Z + pd + 1, null).box(X + 5, H + 9, Z - pd, R1, H + 11, Z + pd, null);
+    w.box(R0 + 4, H + 3, Z - pd - 1, R1 + 2, H + 3, Z + pd + 1, st.stone).box(R0 + 4, H + 2, Z - pd - 1, R1 + 1, H + 2, Z + pd + 1, st.moss);
+    w.box(R1 + 3, -1, Z + pd + 6, R1 + 14, 4, Z + pd + 11, st.stone).box(R1 + 4, 5, Z + pd + 7, R1 + 12, 5, Z + pd + 10, st.moss).box(R0 - 2, -1, Z + pd + 9, R0 + 5, 2, Z + pd + 13, st.stoneD);
+    // the right pier's rune is cracked out; its capital split, a step dropped
+    const rc = (R0 + R1) >> 1; w.box(rc - 1, H - 12, Z + pd + 1, rc + 1, H - 8, Z + pd + 1, st.stoneD);
+    w.box(R1 - 3, H + 1, Z - pd - 1, R1 + 1, H + 2, Z, null);
+  }
   return at(X, H + 10, Z + pd + 4);
 }
 
 /** the abandoned sawmill shed: stone footings, timber posts with stepped brackets, top plates and tie beams, a stepped shingle gable
  *  (a hole in the front slope showing the rafters), a board back wall and half side walls, and inside the saw bench with a log in a
  *  frame saw, a sawdust heap, a plank stack and tools hung on the wall. (x0..x1, z0..z1) = the post grid. Returns the lantern spot. */
-export function sawShed(w: W, r: Rect) {
+export function sawShed(w: W, r: Rect, o: { ruin?: boolean; lit?: boolean } = {}) {
   const X0 = M(r.x0), X1 = M(r.x1), Z0 = M(r.z0), Z1 = M(r.z1), H = 32, k = KC;
   const xs = [X0, (X0 + X1) >> 1, X1];
   // floor: packed sawdust boards
@@ -332,13 +345,26 @@ export function sawShed(w: W, r: Rect) {
     w.box(px - 1, H + 1, Z0, px + 1, H + 3, Z1, k.wood);
     for (const e of [-1, 1]) w.box(px + e * 2, H - 1, Z1 - 1, px + e * 5, H, Z1 + 1, k.wood).box(px + e * 2, H - 4, Z1 - 1, px + e * 3, H - 2, Z1 + 1, k.wood);
   }
-  // back wall boards, half walls on the sides
+  // back wall boards, half walls on the sides (boards missing where the shed has gone to ruin)
   boardWall(w, X0 + 2, 3, Z0, X1 - 2, H, Z0 + 1, k.plankB, k.plank, k.seam, 4);
   for (const px of [X0, X1]) { boardWall(w, px, 3, Z0 + 2, px + 1, 17, Z1 - 2, k.plankB, k.plank, k.seam, 4); w.box(px - 1, 18, Z0 + 2, px + 2, 18, Z1 - 2, k.wood); }
+  if (o.ruin) {
+    w.box(xs[1] + 9, 12, Z0, xs[1] + 18, H, Z0 + 1, null).box(xs[1] + 12, 6, Z0, xs[1] + 15, 11, Z0 + 1, null);
+    w.box(xs[0] + 3, 20, Z0, xs[0] + 7, H, Z0 + 1, null);
+    w.box(X1, 9, Z1 - 16, X1 + 1, 17, Z1 - 2, null).box(X1, 4, Z1 - 10, X1 + 1, 8, Z1 - 2, null);
+    w.box(X1 + 4, 0, Z1 - 14, X1 + 6, 0, Z1 - 3, k.plank).box(X1 + 7, 0, Z1 - 12, X1 + 9, 1, Z1 - 4, k.plankB);
+  }
   // roof: ridge along x, five tiers, a hole in the front slope over the left bay with three rafters showing
-  const hx0 = xs[0] + 5, hx1 = xs[1] - 7;
-  gable(w, X0 - 5, X1 + 5, Z0 - 6, Z1 + 6, H + 4, { ridge: 'x', tiers: 5, th: 4, d: 6, col: k.shingle, lip: k.shingleD, cap: k.woodD, skip: (i, u, side) => side === 1 && i >= 1 && i <= 2 && u >= hx0 && u <= hx1 });
+  const hx0 = xs[0] + 5, hx1 = xs[1] - 7, gx0 = xs[1] + 6, gx1 = xs[2] - 10;
+  const hole = (i: number, u: number, side: number) => side === 1 && ((i >= 1 && i <= 2 && u >= hx0 && u <= hx1) || (!!o.ruin && i <= 1 && u >= gx0 && u <= gx1) || (!!o.ruin && i === 3 && u >= hx0 + 6 && u <= hx1 + 10));
+  gable(w, X0 - 5, X1 + 5, Z0 - 6, Z1 + 6, H + 4, { ridge: 'x', tiers: 5, th: 4, d: 6, col: k.shingle, lip: k.shingleD, cap: k.woodD, skip: hole });
   for (let u = hx0 + 2; u < hx1; u += 6) w.box(u, H + 4, (Z0 + Z1) >> 1, u + 1, H + 12, Z1 + 4, k.woodD);
+  if (o.ruin) {
+    for (let u = gx0 + 2; u < gx1; u += 6) w.box(u, H + 4, (Z0 + Z1) >> 1, u + 1, H + 8, Z1 + 6, k.woodD);
+    // what fell through: shingle slabs and a rafter lying in front of the shed
+    for (const [a, b, l] of [[hx0 + 2, 8, 9], [gx0 + 4, 10, 7], [xs[1] - 3, 13, 5]]) w.box(a, 0, Z1 + b, a + l, 1, Z1 + b + 3, k.shingle).box(a, 1, Z1 + b, a + l, 1, Z1 + b, k.shingleD);
+    w.box(gx0 - 2, 0, Z1 + 16, gx0 + 20, 1, Z1 + 17, k.woodD);
+  }
   // inside: the saw bench with a log, the frame saw cutting it, sawdust heaped below
   const bz = Z0 + 14, b0 = xs[0] + 8, b1 = xs[1] + 14;
   for (const lx of [b0 + 2, b1 - 2]) for (const lz of [bz - 4, bz + 4]) w.box(lx, 0, lz, lx + 1, 11, lz + 1, k.woodD);
@@ -346,7 +372,7 @@ export function sawShed(w: W, r: Rect) {
   logX(w, b0 - 4, 14, bz, b1 - b0 + 9, 7, 'x', k.bark, k.ring, k.ringD);
   const sx = (b0 + b1) >> 1;
   w.box(sx - 1, 12, bz - 6, sx + 1, 34, bz - 6, k.woodD).box(sx - 1, 12, bz + 6, sx + 1, 34, bz + 6, k.woodD).box(sx - 1, 32, bz - 6, sx + 1, 33, bz + 6, k.wood);
-  for (let y = 14; y <= 31; y++) w.set(sx, y, bz, (y & 1) ? k.ironL : 0x8a8898);
+  for (let y = 14; y <= 31; y++) w.set(sx, y, bz, o.ruin ? ((y >> 2) & 1 ? k.rust : k.rustD) : (y & 1) ? k.ironL : 0x8a8898);
   for (let t = 0; t < 3; t++) { const s = 7 - t * 2; w.box(sx - s - 3, t, bz + 6 - s, sx + s - 3, t, bz + 6 + s, t === 2 ? 0xb09868 : k.sawdust); }
   // planks stacked on two bearers, alternating lengths
   const px0 = xs[1] + 18, px1 = xs[2] - 6, pz = Z0 + 10;
@@ -354,12 +380,13 @@ export function sawShed(w: W, r: Rect) {
   for (let l = 0; l < 6; l++) w.box(px0 + (l & 1 ? 2 : 0), 2 + l, pz - 5, px1 - (l & 1 ? 0 : 2), 2 + l, pz + 7, l & 1 ? k.woodL : k.plank);
   // tools hung on the back wall: a long two-handled saw with a toothed edge, an axe
   const ty = 22, tz = Z0 + 2;
-  w.box(xs[0] + 6, ty, tz, xs[1] - 6, ty + 2, tz, k.ironL);
-  for (let u = xs[0] + 6; u <= xs[1] - 6; u += 2) w.set(u, ty - 1, tz, k.ironL);
+  const blade = o.ruin ? k.rust : k.ironL;
+  w.box(xs[0] + 6, ty, tz, xs[1] - 6, ty + 2, tz, blade);
+  for (let u = xs[0] + 6; u <= xs[1] - 6; u += 2) w.set(u, ty - 1, tz, blade);
   for (const u of [xs[0] + 4, xs[1] - 4]) w.box(u, ty - 2, tz, u + (u < xs[1] - 5 ? 1 : 0), ty + 4, tz, k.woodL);
   w.box(xs[1] + 8, 14, tz, xs[1] + 9, 28, tz, k.woodL).box(xs[1] + 6, 25, tz, xs[1] + 11, 29, tz, k.ironL).box(xs[1] + 10, 24, tz, xs[1] + 12, 30, tz, 0x8a8898);
   // the lantern hangs from the front plate over the middle bay
-  return lantern(w, (xs[0] + xs[1]) >> 1, H, Z1 + 0, k.iron, k.warm, true);
+  return lantern(w, (xs[0] + xs[1]) >> 1, H, Z1 + 0, k.iron, k.warm, true, o.lit ?? true);
 }
 
 /** a canvas A-frame tent, ridge along z, its open gable toward the camera: three steep tiers (each a wide step, taller than it steps
@@ -367,7 +394,7 @@ export function sawShed(w: W, r: Rect) {
  *  traces the stepped outline; at the front the flaps are folded back and tied, filling the gable round a dark doorway. A ridge pole
  *  lies along the top and sticks out both ends on two uprights; guy lines run level from the sides to thin stakes with pegs at their
  *  feet. hw = half width (x), hd = half depth (z), in blocks. */
-export function tent(w: W, x: number, z: number, o: { hw: number; hd: number; tiers?: number; th?: number; c: number; d: number; l: number; pole: number; torn?: boolean }) {
+export function tent(w: W, x: number, z: number, o: { hw: number; hd: number; tiers?: number; th?: number; c: number; d: number; l: number; pole: number; torn?: boolean; patch?: number; collapse?: boolean }) {
   const X = M(x), Z = M(z), n = o.tiers ?? 3, th = o.th ?? 9, hd = o.hd, rope = 0x6e5e42;
   const hws = Array.from({ length: n }, (_, i) => Math.round(o.hw - (i * (o.hw - 2)) / (n - 1)));
   hws.forEach((r, i) => w.box(X - r, i * th, Z - hd, X + r, i * th + th - 1, Z + hd, o.c));
@@ -395,19 +422,32 @@ export function tent(w: W, x: number, z: number, o: { hw: number; hd: number; ti
     w.box(X + e * gx, -2, zz, X + e * gx, gy + 1, zz, o.pole).box(X + e * gx - 1, 0, zz - 1, X + e * gx + 1, 0, zz + 1, 0x3a281c);
   }
   if (o.torn) { const ya = th, r = hws[1]; w.box(X + r - 2, ya + 1, Z - 5, X + r, ya + th - 2, Z + 3, null).box(X + r - 3, ya + 1, Z - 5, X + r - 3, ya + th - 2, Z + 3, KC.dark).box(X + r + 1, ya - 3, Z - 4, X + r + 1, ya - 1, Z + 1, o.l); }
+  // patches sewn on: squares of other cloth on both slopes, a darker stitched edge
+  if (o.patch != null) for (const [e, i, z0, z1] of [[1, 0, Z - 9, Z - 3], [-1, 1, Z + 1, Z + 7], [-1, 0, Z - hd + 3, Z - hd + 8]] as const) {
+    const r = hws[i], ya = i * th; w.box(X + e * r, ya + 2, z0, X + e * r, ya + th - 2, z1, o.patch).box(X + e * r, ya + 2, z0, X + e * r, ya + 2, z1, o.d);
+  }
+  // the back half has come down: the upper tiers gone behind the middle, a low heap of cloth there, the back upright fallen flat
+  if (o.collapse) {
+    for (let i = 1; i < n; i++) w.box(X - hws[i] - 1, i * th - 1, Z - hd - 5, X + hws[i] + 1, top + 1, Z - 3, null);
+    w.box(X - hws[1], th, Z - hd, X + hws[1], th + 2, Z - 3, o.c).box(X - hws[1], th, Z - hd, X + hws[1], th, Z - hd, o.d).box(X - hws[2] - 1, th + 3, Z - hd + 4, X + hws[2] + 3, th + 3, Z - 6, o.c);
+    w.box(X, -2, Z - hd - 4, X, top, Z - hd - 4, null).box(X + hws[0] + 3, 0, Z - hd - 2, X + hws[0] + 3, 0, Z - 4, o.pole);
+  }
   return top;
 }
 
 /** the merchant's covered wagon, bed along x: board sides with a light top rail and iron corner straps, four spoked wheels, a canvas
  *  cover in four wide tiers with darker hoops standing proud every so often, a dark open back with crates inside, a driver's bench,
  *  shafts and a yoke reaching forward (−x). (x, z) = bed centre. Returns the lantern spot (hung on the front hoop). */
-export function wagon(w0: W, x: number, z: number, o: { len: number; wid: number; flip?: boolean }) {
+export function wagon(w0: W, x: number, z: number, o: { len: number; wid: number; flip?: boolean; worn?: boolean }) {
   const k = KC, X = M(x), Z = M(z), hl = M(o.len) >> 1, hz = M(o.wid) >> 1, yb = 11, w = o.flip ? mirrorX(w0, X) : w0;
   const X0 = X - hl, X1 = X + hl, Z0 = Z - hz, Z1 = Z + hz;
   // axles, wheels (front pair smaller), the bed
   for (const [ax, r] of [[X0 + 10, 8], [X1 - 12, 10]] as const) {
     w.box(ax, r - 1, Z0 - 3, ax, r, Z1 + 3, k.iron);
-    wheel(w, ax, r, Z0 - 4, r, 'z', k.woodL, k.wood, k.iron, 2, k.ironL); wheel(w, ax, r, Z1 + 3, r, 'z', k.woodL, k.wood, k.iron, 2, k.ironL);
+    const bad = !!o.worn && r === 10;
+    wheel(w, ax, r, Z0 - 4, r, 'z', k.woodL, k.wood, k.iron, 2, o.worn ? k.rust : k.ironL); wheel(w, ax, r, Z1 + 3, r, 'z', k.woodL, k.wood, k.iron, 2, o.worn ? k.rust : k.ironL, bad);
+    // the broken wheel can't carry the axle: a stack of stones and a block of wood props it up
+    if (bad) w.box(ax - 4, -1, Z1 + 1, ax + 4, 3, Z1 + 6, k.stoneD).box(ax - 3, 4, Z1 + 1, ax + 3, 7, Z1 + 5, k.stone).box(ax - 2, 8, Z1 + 1, ax + 2, r - 2, Z1 + 4, k.woodD);
   }
   w.box(X0, yb - 2, Z0 + 2, X1, yb - 1, Z1 - 2, k.woodD);
   w.box(X0, yb, Z0, X1, yb + 1, Z1, k.wood);
@@ -418,14 +458,22 @@ export function wagon(w0: W, x: number, z: number, o: { len: number; wid: number
   // canvas cover over the back three quarters: four tiers, hoops standing proud
   const c0 = X0 + 12, c1 = X1, base = yb + 8, tiers: Array<[number, number]> = [[hz, 9], [hz - 2, 4], [hz - 5, 3], [hz - 9, 2]];
   let y = base;
+  const cv = o.worn ? 0x8e8a7a : 0xd2c6a6, cvL = o.worn ? 0x9c988a : 0xe2d8bc;
   for (const [hw, h] of tiers) {
-    w.box(c0, y, Z - hw, c1, y + h - 1, Z + hw, 0xd2c6a6);
-    w.box(c0, y + h - 1, Z - hw, c1, y + h - 1, Z - hw, 0xe2d8bc).box(c0, y + h - 1, Z + hw, c1, y + h - 1, Z + hw, 0xe2d8bc);
+    w.box(c0, y, Z - hw, c1, y + h - 1, Z + hw, cv);
+    w.box(c0, y + h - 1, Z - hw, c1, y + h - 1, Z - hw, cvL).box(c0, y + h - 1, Z + hw, c1, y + h - 1, Z + hw, cvL);
     for (let u = c0 + 2; u <= c1; u += 11) w.box(u, y, Z - hw - 1, u + 1, y + h - (hw === tiers[3][0] ? 0 : 1), Z + hw + 1, k.wood);
     y += h;
   }
-  w.box(c0, base, Z - hz - 1, c1, base + 1, Z - hz - 1, k.red).box(c0, base, Z + hz + 1, c1, base + 1, Z + hz + 1, k.red);
+  const band = o.worn ? 0x4e3432 : k.red;
+  w.box(c0, base, Z - hz - 1, c1, base + 1, Z - hz - 1, band).box(c0, base, Z + hz + 1, c1, base + 1, Z + hz + 1, band);
   { const ex = (c0 + c1) >> 1, ey = base + 6; wheel(w, ex, ey, Z + hz + 1, 4, 'z', k.brass, k.brass, k.brass, 1); w.box(ex - 1, ey - 1, Z + hz + 1, ex + 1, ey + 1, Z + hz + 1, k.canvas).box(ex, ey, Z + hz - 1, ex, ey, Z + hz + 2, k.canvas); }
+  if (o.worn) {
+    // patched and torn: two sewn squares of darker cloth, a rent in the top with the dark inside showing, ragged ends hanging at the foot
+    w.box(c0 + 4, base + 2, Z + hz, c0 + 9, base + 7, Z + hz, 0x6a6658).box(c1 - 12, base + 9, Z + hz - 2, c1 - 7, base + 12, Z + hz - 2, 0x5e5a4c);
+    w.box(c0 + 14, base + 13, Z + 1, c0 + 21, base + 18, Z + hz - 4, null).box(c0 + 14, base + 12, Z + 1, c0 + 21, base + 12, Z + hz - 4, KC.dark);
+    for (let u = c0 + 1; u < c1; u += 5) if (hash(u, 7) < 0.6) w.box(u, base - 1 - (u % 3 === 0 ? 1 : 0), Z + hz, u + 1, base - 1, Z + hz, cv);
+  }
   // open back: the canvas is cut back and the inside is dark with goods; the front end closed with a gathered panel
   w.box(X1 - 1, base, Z - hz + 2, X1, base + 12, Z + hz - 2, null).box(X1 - 2, base, Z - hz + 2, X1 - 2, base + 12, Z + hz - 2, KC.dark);
   w.box(X1 - 6, base - 1, Z - 6, X1 - 3, base + 4, Z - 1, k.woodL).box(X1 - 5, base - 1, Z + 1, X1 - 3, base + 6, Z + 5, 0x8a5a3a);
@@ -444,7 +492,7 @@ export function wagon(w0: W, x: number, z: number, o: { len: number; wid: number
 
 /** a market stall: four posts, a counter with a board front, a light top and a dark kick rail, shelves on the back posts, and a
  *  striped awning in two tiers dropping toward the front with a toothed valance. (x, z) = centre; front faces +z. */
-export function stall(w: W, x: number, z: number, o: { wid: number; dep: number; stripe: [number, number] }) {
+export function stall(w: W, x: number, z: number, o: { wid: number; dep: number; stripe: [number, number]; tattered?: boolean }) {
   const k = KC, X = M(x), Z = M(z), hx = M(o.wid) >> 1, hz = M(o.dep) >> 1, H = 30;
   for (const px of [X - hx, X + hx]) for (const pz of [Z - hz, Z + hz]) w.box(px - 1, -2, pz - 1, px + 1, pz === Z + hz ? H - 3 : H, pz + 1, k.woodD);
   // counter
@@ -460,16 +508,23 @@ export function stall(w: W, x: number, z: number, o: { wid: number; dep: number;
   for (let u = X - hx - 3; u <= X + hx + 3; u++) {
     w.box(u, H + 1, Z - hz - 2, u, H + 2, Z, st(u));
     w.box(u, H - 2, Z + 1, u, H - 1, Z + hz + 5, st(u));
-    if (((u - X) & 1) === 0) w.set(u, H - 3, Z + hz + 5, st(u)); else w.set(u, H - 2, Z + hz + 6, 0x2a2228);
+    const gone = !!o.tattered && hash(u, 11) < 0.4, long = !!o.tattered && hash(u, 12) < 0.18;
+    if (((u - X) & 1) === 0) { if (!gone) w.box(u, long ? H - 5 : H - 3, Z + hz + 5, u, H - 3, Z + hz + 5, st(u)); } else w.set(u, H - 2, Z + hz + 6, 0x2a2228);
   }
   w.box(X - hx - 3, H, Z - hz - 2, X + hx + 3, H, Z - hz - 2, k.woodD).box(X - hx - 3, H - 3, Z + hz + 6, X + hx + 3, H - 3, Z + hz + 6, null);
+  if (o.tattered) {
+    // a rent through the front tier (the counter shows through), the back boards gapped, one shelf come down at one end
+    w.box(X + 3, H - 2, Z + hz - 2, X + 8, H - 1, Z + hz + 2, null).box(X - 12, H - 2, Z + hz + 3, X - 9, H - 1, Z + hz + 5, null);
+    w.box(X - hx + 7, 13, Z - hz - 1, X - hx + 10, 24, Z - hz - 1, null).box(X + 4, 17, Z - hz - 1, X + 6, 24, Z - hz - 1, null);
+    w.box(X + 2, 18, Z - hz, X + hx - 2, 18, Z - hz + 3, null).box(X + 2, 16, Z - hz, X + hx - 2, 16, Z - hz + 3, k.wood);
+  }
   return { top: 13, X, Z, hx, hz };
 }
 
 /** the old shrine: a three-step stone platform, a tiled floor, four columns (base, shaft, capital), a back wall with a niche holding a
  *  hooded statue whose hands cup a glowing orb, low side parapets, an entablature ring and a slate hip roof in wide tiers with moss on
  *  its upper treads and a finial. (x, z) = platform centre; the open front faces +z. Returns the orb position. */
-export function shrineTemple(w: W, x: number, z: number, o: { orb: number }) {
+export function shrineTemple(w: W, x: number, z: number, o: { orb: number; ruin?: boolean }) {
   const k = KC, X = M(x), Z = M(z), hx = M(2.5), hz = M(1.9);
   // stepped platform: each step a darker riser and a light nosing
   for (let i = 0; i < 3; i++) { const a = hx - i * 5, b = hz - i * 5, yt = 1 + i * 3; masonry(w, X - a, -1, Z - b, X + a, yt, Z + b, k.stoneD, k.mortar, { ch: 3, cl: 8, cap: k.stoneL }); }
@@ -499,15 +554,27 @@ export function shrineTemple(w: W, x: number, z: number, o: { orb: number }) {
   w.box(X - ex + 2, CH + 1, Z - ez + 2, X + ex - 2, CH + 3, Z + ez - 2, k.stone);
   const ry = hipRoof(w, X - ex - 4, X + ex + 4, Z - ez - 4, Z + ez + 4, CH + 4, 4, 3, 5, k.slate, k.slateD, k.moss);
   w.box(X - 2, ry, Z - 2, X + 2, ry + 1, Z + 2, k.stoneL).box(X - 1, ry + 2, Z - 1, X + 1, ry + 5, Z + 1, k.stone).set(X, ry + 6, Z, k.stoneL);
+  if (o.ruin) {
+    // the front-right corner of the roof has caved in two wide steps; the column under it lost a bite; slates and a capital lie below
+    w.box(X + ex - 7, CH + 7, Z + ez - 7, X + ex + 5, ry + 1, Z + ez + 5, null).box(X + ex - 2, CH + 1, Z + ez - 2, X + ex + 5, CH + 6, Z + ez + 5, null);
+    w.box(X + ex - 7, CH + 6, Z + ez - 7, X + ex - 3, CH + 6, Z + ez - 3, k.slateD).box(X + ex - 2, CH, Z + ez - 6, X + ex - 1, CH, Z + ez - 2, k.stoneL);
+    w.box(X + cx + 1, F + 12, Z + cz + 1, X + cx + 2, F + 18, Z + cz + 2, null);
+    for (const [a, b, l] of [[ex + 6, ez + 2, 6], [ex + 2, ez + 7, 8], [ex + 9, ez + 8, 5]]) w.box(X + a, 0, Z + b, X + a + l, 1, Z + b + 3, k.slate).box(X + a, 1, Z + b, X + a + l, 1, Z + b, k.slateD);
+    w.box(X + ex + 4, 0, Z + ez + 12, X + ex + 9, 3, Z + ez + 16, k.stoneL);
+    // the statue's face worn smooth; moss over the hood and the steps; one step heaved up by a root
+    w.box(X - 1, F + 21, SZ + 2, X + 1, F + 23, SZ + 2, k.statue).box(X - 2, F + 24, SZ - 2, X + 2, F + 24, SZ + 2, k.moss);
+    w.box(X - hx + 6, 1, Z + hz - 2, X - hx + 14, 2, Z + hz, k.stoneD).box(X - hx + 6, 3, Z + hz - 2, X - hx + 14, 3, Z + hz, k.stoneL).box(X - hx + 2, 0, Z + hz + 1, X - hx + 18, 0, Z + hz + 2, k.bark);
+    w.box(X - hx, 2, Z - hz, X - hx + 10, 2, Z - hz + 6, k.moss).box(X + hx - 12, 5, Z + hz - 5, X + hx - 5, 5, Z + hz - 5, k.moss);
+  }
   return at(X, F + 16, SZ + 4);
 }
 
 /** a stone lantern post (shrine approach): stepped base, square shaft, a lamp box glowing through its four windows, a stepped cap */
-export function stoneLamp(w: W, x: number, z: number, glowC: number) {
+export function stoneLamp(w: W, x: number, z: number, glowC: number, lit = true) {
   const k = KC, X = M(x), Z = M(z);
   w.box(X - 4, -1, Z - 4, X + 4, 1, Z + 4, k.stoneD).box(X - 3, 2, Z - 3, X + 3, 3, Z + 3, k.stone).box(X - 2, 4, Z - 2, X + 2, 14, Z + 2, k.stone);
   w.box(X - 3, 15, Z - 3, X + 3, 15, Z + 3, k.stoneL).box(X - 3, 16, Z - 3, X + 3, 21, Z + 3, k.stone);
-  w.box(X - 1, 17, Z - 3, X + 1, 20, Z + 3, glowC, 1).box(X - 3, 17, Z - 1, X + 3, 20, Z + 1, glowC, 1);
+  w.box(X - 1, 17, Z - 3, X + 1, 20, Z + 3, lit ? glowC : 0x1e1c24, lit ? 1 : 0).box(X - 3, 17, Z - 1, X + 3, 20, Z + 1, lit ? glowC : 0x1e1c24, lit ? 1 : 0);
   w.box(X - 4, 22, Z - 4, X + 4, 23, Z + 4, k.stoneL).box(X - 2, 24, Z - 2, X + 2, 25, Z + 2, k.stone).box(X - 2, 25, Z - 2, X + 2, 25, Z + 2, k.moss);
   return [x, 19 * CELL, z] as P3;
 }
@@ -580,3 +647,43 @@ export function grindstone(w: W, x: number, z: number) {
   w.box(X - 7, 10, Z - 5, X - 7, 10, Z + 6, k.iron).box(X - 7, 10, Z + 6, X - 7, 13, Z + 6, k.woodL);
   w.box(X - 10, 0, Z - 5, X, 2, Z + 5, k.wood).box(X - 9, 2, Z - 4, X - 1, 2, Z + 4, 0x3a5a7a);
 }
+
+// ------------------------------------------------------------------ the dead and the abandoned
+/** a crow perched at the leg cell (X, Y, Z), looking along dir: a black body with a slightly lighter back, a raised head, a grey beak,
+ *  a tail held low behind. About 0.6 m nose to tail — chunky enough to read from the battle camera. */
+export function crow(w: W, X: number, Y: number, Z: number, dir: 'x+' | 'x-' | 'z+' | 'z-') {
+  const s = dir[1] === '+' ? 1 : -1, ax = dir[0] === 'x';
+  const put = (a0: number, a1: number, y0: number, y1: number, b0: number, b1: number, c: number) => {
+    const p0 = s * a0, p1 = s * a1;
+    if (ax) w.box(X + Math.min(p0, p1), Y + y0, Z + b0, X + Math.max(p0, p1), Y + y1, Z + b1, c); else w.box(X + b0, Y + y0, Z + Math.min(p0, p1), X + b1, Y + y1, Z + Math.max(p0, p1), c);
+  };
+  put(0, 0, 0, 0, 0, 1, 0x3a3640);
+  put(-2, 1, 1, 3, 0, 1, 0x141218);
+  put(-2, 0, 3, 3, 0, 1, 0x26222c);
+  put(-4, -3, 2, 2, 0, 1, 0x141218);
+  put(1, 2, 3, 5, 0, 1, 0x141218);
+  put(3, 3, 4, 4, 0, 0, 0x56525c);
+}
+/** the highest solid cell under (x, z) plus one — where something set down there would stand (cells) */
+export function topAt(w: W, x: number, z: number, from = 120) { const X = M(x), Z = M(z); for (let y = from; y >= -2; y--) if (w.has(X, y, Z)) return y + 1; return 0; }
+/** a crow on whatever is highest at (x, z): a post top, a ridge, a branch, a gravestone */
+export function perch(w: W, x: number, z: number, dir: 'x+' | 'x-' | 'z+' | 'z-') { crow(w, M(x), topAt(w, x, z), M(z), dir); }
+/** a crate gone to pieces: its lid gone, the top of the front stove in (in two wide steps), dark inside, the lid boards on the ground */
+export function brokenCrate(w: W, x: number, z: number, sz: number, c: number, band: number) {
+  const X = M(x), Z = M(z), H = 2 * sz;
+  w.box(X - sz, 0, Z - sz, X + sz, H, Z + sz, c).box(X - sz + 1, 1, Z - sz + 1, X + sz - 1, H, Z + sz - 1, null).box(X - sz + 1, 0, Z - sz + 1, X + sz - 1, 0, Z + sz - 1, KC.dark);
+  for (const [a, b] of [[-sz, -sz], [sz, -sz], [-sz, sz], [sz, sz]]) w.box(X + a, 0, Z + b, X + a, H, Z + b, band);
+  w.box(X - sz + 1, sz, Z + sz, X + sz - 1, H, Z + sz, null).box(X, sz - 2, Z + sz, X + sz - 1, sz - 1, Z + sz, null);
+  w.box(X + sz + 2, 0, Z - sz, X + sz + 4, 0, Z + sz - 1, c).box(X - sz, 0, Z + sz + 2, X - 1, 0, Z + sz + 4, c);
+}
+/** a barrel lying on its side, rusted hoops, its open end dark, what was in it spilled out as a flat dark stain (the caller adds it) */
+export function barrelSide(w: W, x: number, z: number, along: 'x' | 'z', wood: number, hoop: number) {
+  const X = M(x), Z = M(z), L = 11;
+  logX(w, along === 'x' ? X - (L >> 1) : X, 0, along === 'x' ? Z : Z - (L >> 1), L, 7, along, wood, KC.woodL, KC.dark);
+  for (const u of [2, L - 3]) for (let a = -3; a <= 3; a++) for (let y = 0; y < 7; y++) {
+    if ((Math.abs(a) === 3 || y === 0 || y === 6) && !(Math.abs(a) === 3 && (y === 0 || y === 6))) { if (along === 'x') w.set(X - (L >> 1) + u, y, Z + a, hoop); else w.set(X + a, y, Z - (L >> 1) + u, hoop); }
+  }
+  const e = (along === 'x' ? X : Z) - (L >> 1) + L - 1;
+  if (along === 'x') w.box(e, 1, Z - 2, e, 5, Z + 2, KC.dark); else w.box(X - 2, 1, e, X + 2, 5, e, KC.dark);
+}
+

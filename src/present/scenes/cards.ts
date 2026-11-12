@@ -17,6 +17,7 @@ export const SPR: Record<string, Rect> = {
   grass: [0, 0, 16, 16], tallgrass: [16, 0, 16, 16], fern: [32, 0, 16, 16], flowers: [48, 0, 16, 16], weeds: [64, 0, 16, 16], shroom: [80, 0, 16, 16], bramble: [96, 0, 16, 16], reeds: [112, 0, 16, 16],
   vine: [0, 16, 16, 32], moss: [16, 16, 16, 32], web: [32, 16, 32, 32], litter: [64, 16, 32, 32], mossdecal: [96, 16, 32, 32], crack: [0, 48, 32, 32], bonesdecal: [32, 48, 32, 32], puddle: [64, 48, 32, 32], pebbles: [96, 48, 32, 32],
   leaf: [0, 80, 16, 16], roots: [16, 80, 16, 32], clover: [32, 80, 32, 32], bells: [64, 80, 16, 16], sprig: [80, 80, 16, 16],
+  fungus: [96, 80, 16, 16], crow: [112, 80, 10, 8], deadvine: [96, 96, 16, 32], twigs: [0, 112, 32, 16],
 };
 let atlas: THREE.Texture | null = null;
 function paintAtlas() {
@@ -100,7 +101,7 @@ function paintAtlas() {
     const blob = (ox: number, oy: number, r: number, cIn: string, cOut: string, sx = 1, sd = 1) => { for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) { const d = Math.hypot((x - 15.5) * sx, y - 15.5) + (hash(x >> 2, y >> 2, sd) - 0.5) * 4; if (d < r) px(ox + x, oy + y, d < r * 0.62 ? cIn : cOut); } };
     blob(64, 16, 12, '#3c2e24', '#33271f', 1, 5);
     const leafAt = (x: number, y: number, c: [string, string, string]) => { rect(x + 1, y, 5, 1, c[0]); rect(x, y + 1, 7, 2, c[1]); rect(x + 1, y + 3, 5, 1, c[2]); rect(x + 1, y + 2, 5, 1, c[2]); rect(x + 1, y + 1, 5, 1, c[1]); px(x + 7, y + 2, '#4a3020'); };
-    const AUT: Array<[string, string, string]> = [['#d08a44', '#b0662e', '#8a4a22'], ['#a8783c', '#8a5a2a', '#6a4220'], ['#a85040', '#8a3a2a', '#6a2a20'], ['#9a9a48', '#7a7a34', '#5a5a26'], ['#d8a850', '#c08a3a', '#9a6a2a']];
+    const AUT: Array<[string, string, string]> = [['#b08a5c', '#94704a', '#6e5238'], ['#9a8462', '#7c684c', '#5c4c3a'], ['#9a6e52', '#7c5640', '#5a402e'], ['#8c8a64', '#6e6c4c', '#525038'], ['#b8945e', '#9a7a4c', '#76603c']];
     [[69, 20, 1], [77, 18, 3], [84, 22, 0], [71, 25, 2], [79, 24, 4], [67, 30, 0], [75, 30, 1], [83, 28, 2], [72, 35, 3], [80, 34, 0]].forEach(([x, y, k]) => leafAt(x, y, AUT[k]));
     // moss decal: an irregular patch with a lighter heart (edges in 4-texel blocks)
     blob(96, 16, 13, '#4e7a3a', '#3e6a32', 1, 1);
@@ -135,6 +136,23 @@ function paintAtlas() {
     for (const [x, y] of [[71, 87], [68, 90], [65, 85]] as const) { rect(x, y, 3, 2, BEL); rect(x + 1, y + 2, 1, 1, BEL); }
     // sprig (16×16): a low leafy sprig, two stems with leaf pairs — a soft filler at the foot of walls, rocks and trees
     for (const [x, h] of [[5, 9], [10, 7]] as const) { rect(80 + x, 96 - h, 1, h, '#3e7434'); for (let i = 0; i < h - 2; i += 3) { rect(80 + x - 3, 96 - h + i + 1, 3, 2, '#5a9a48'); rect(80 + x - 3, 96 - h + i + 1, 3, 1, '#7ab85a'); rect(80 + x + 1, 96 - h + i + 2, 3, 2, '#4a8a3e'); rect(80 + x + 1, 96 - h + i + 2, 3, 1, '#6aa850'); } }
+    // fungus (16×16): pale toadstools that grow on the dead — a big one, a brown one, a tiny one; lit cap tops, dark gills
+    rect(103, 89, 2, 7, '#d8ccb8'); rect(101, 86, 6, 1, '#e8dcc8'); rect(100, 87, 8, 1, '#c8b49a'); rect(100, 88, 8, 1, '#8a7a66');
+    rect(98, 92, 1, 4, '#cabca6'); rect(97, 90, 3, 1, '#b08e6c'); rect(96, 91, 5, 1, '#94704e'); px(98, 91, '#94704e'); rect(96, 92, 5, 1, '#5e4a3a'); px(98, 92, '#cabca6');
+    rect(109, 93, 1, 3, '#d8ccb8'); rect(108, 92, 3, 1, '#c8b49a'); px(109, 91, '#e8dcc8');
+    // crow (10×8, side view): a black bird with a sheen along its back, a grey beak and one pale eye — it perches, it does not move
+    const CB = '#14141c', CS = '#2a2a3a';
+    for (const [x, y, w, h, c] of [[118, 80, 2, 1, CB], [117, 81, 4, 1, CB], [114, 82, 7, 1, CS], [113, 83, 8, 1, CB], [112, 84, 2, 1, CB], [115, 84, 6, 1, CB], [112, 85, 1, 1, CB], [117, 85, 3, 1, CB], [117, 86, 1, 2, '#3a3a46'], [119, 86, 1, 2, '#3a3a46'], [121, 81, 1, 1, '#4a4a56']] as const) rect(x, y, w, h, c);
+    px(119, 81, '#a8a8c0');
+    // dead vine (16×32): bare grey-brown runners hanging from a dark band, jogging at right angles, a few curled dry leaves
+    rect(96, 96, 16, 2, '#3a3028');
+    const DV = '#5a4c40', DL = '#6e5c3e', DLT = '#8a7650';
+    for (const [x, y, w, h] of [[99, 98, 1, 12], [99, 109, 3, 1], [101, 109, 1, 10], [100, 118, 2, 1], [100, 118, 1, 6], [106, 98, 1, 17], [106, 114, 3, 1], [108, 114, 1, 9], [110, 98, 1, 7], [110, 104, 2, 1]] as const) rect(x, y, w, h, DV);
+    for (const [x, y] of [[100, 102], [97, 106], [102, 113], [107, 104], [104, 109], [109, 119], [101, 121]] as const) { rect(x, y, 2, 2, DL); rect(x, y, 2, 1, DLT); }
+    // twigs (32×16 decal): fallen branches two texels thick with right-angle forks, lit along one edge, and a few broken pieces
+    const TB = '#4a3e36', TL = '#6a5a4c';
+    for (const [x, y, w, h] of [[2, 115, 19, 2], [8, 112, 1, 3], [15, 117, 1, 3], [15, 119, 4, 1], [18, 122, 12, 2], [24, 119, 1, 3], [28, 120, 1, 2]] as const) { rect(x, y, w, h, TB); if (h === 2) rect(x, y, w, 1, TL); }
+    for (const [x, y] of [[4, 121], [11, 124]] as const) { rect(x, y, 3, 2, '#5a4a3e'); rect(x, y, 3, 1, '#6e5e50'); }
   }, { nearest: true });
   t.colorSpace = THREE.SRGBColorSpace;
   return (atlas = t);
@@ -169,6 +187,7 @@ export const CARD: Record<string, Def> = {
   vine: { spr: 'vine', kind: 'wall', w: 16, h: 32, sway: 0.03 }, moss: { spr: 'moss', kind: 'wall', w: 16, h: 32, sway: 0.05 }, web: { spr: 'web', kind: 'wall', w: 32, h: 32 },
   litter: { spr: 'litter', kind: 'decal', w: 32, h: 32 }, mossdecal: { spr: 'mossdecal', kind: 'decal', w: 32, h: 32 }, crack: { spr: 'crack', kind: 'decal', w: 32, h: 32 }, bones: { spr: 'bonesdecal', kind: 'decal', w: 32, h: 32 }, puddle: { spr: 'puddle', kind: 'decal', w: 32, h: 32, glow: 0.7 }, pebbles: { spr: 'pebbles', kind: 'decal', w: 32, h: 32 }, leaf: { spr: 'leaf', kind: 'cross', w: 16, h: 16, sway: 0.04 },
   roots: { spr: 'roots', kind: 'wall', w: 16, h: 32, sway: 0.015 }, clover: { spr: 'clover', kind: 'decal', w: 32, h: 32 }, bells: { spr: 'bells', kind: 'cross', w: 16, h: 16, sway: 0.07, accent: true }, sprig: { spr: 'sprig', kind: 'cross', w: 16, h: 16, sway: 0.05 },
+  fungus: { spr: 'fungus', kind: 'cross', w: 16, h: 16 }, crow: { spr: 'crow', kind: 'panel', w: 10, h: 8 }, deadvine: { spr: 'deadvine', kind: 'wall', w: 16, h: 32, sway: 0.025 }, twigs: { spr: 'twigs', kind: 'decal', w: 32, h: 16 },
 };
 
 // ------------------------------------------------------------------ foliage skins: cut-out leaf tiles laid over the faces of leaf masses

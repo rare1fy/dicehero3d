@@ -21,17 +21,30 @@ export function shell(w: W, x0: number, y0: number, z0: number, x1: number, y1: 
   }
 }
 
-// ------------------------------------------------------------------ swamp palette
+// ------------------------------------------------------------------ swamp palette (weathered: wood gone grey-brown, iron rusting)
 export const SW = {
-  GRASS: [0x34402a, 0x2e3a26, 0x3c3a28], BANK: 0x2a2a1e, SHELF: 0x4e5034, SHELF_D: 0x3a3c28, MUD: 0x241e18,
-  POST: 0x3a2c22, POST_D: 0x2a2018, DECK: 0x6a4e34, DECK_B: 0x624830, SEAM: 0x3a2a1c, ROPE: 0x9a8a62,
-  WALL_A: 0x5e4630, WALL_B: 0x55402c, LOG: 0x46321f, SILL: 0x3c2a1c, FRAME: 0x7a5a3a, DOOR: 0x3e2a1a, DOOR_D: 0x2e1e12,
-  SH_A: 0x4a5a3c, SH_B: 0x445436, SH_D: 0x323e2a, FASCIA: 0x3a2a1e, ROOFMOSS: 0x56703a,
-  STONE: 0x5a5856, STONE_B: 0x4e4c4a, STONE_L: 0x6c6a66, SOOT: 0x1a1816, IRON: 0x2a2830, WARM: 0xffa850, PANE: 0xc87a34,
-  BARK: 0x3e3a30, BARK_D: 0x2a2620, BARK_M: 0x4a5e32, PAD: 0x3e7432, PAD_D: 0x2e5a26, PETAL: 0xf0c8e0, PETAL_W: 0xf4f0e8, POLLEN: 0xf0d050,
-  ROCK: 0x4e4c48, ROCK_D: 0x3e3c3a, ROCK_M: 0x4e6a34, HULL: 0x5a4632, HULL_D: 0x3e3024, GUNWALE: 0x7a6440,
-  HERB: [0x7a9a5a, 0x8a6aa8, 0xb08a3a], STEM: 0x5a4a2a, BARREL: 0x6a4a32, HOOP: 0x2c2a36, CRATE: 0x7a5a3a, CRATE_B: 0x4a3222,
+  GRASS: [0x343a2c, 0x2e3428, 0x3a3830], BANK: 0x28261e, SHELF: 0x46483a, SHELF_D: 0x36382c, MUD: 0x241e18,
+  POST: 0x302c28, POST_D: 0x221e1c, DECK: 0x5a5248, DECK_B: 0x4e463e, SEAM: 0x2a2420, ROPE: 0x7a7058, ROT: 0x38322c,
+  WALL_A: 0x4e463e, WALL_B: 0x463e38, LOG: 0x3a322c, SILL: 0x302824, FRAME: 0x5e564c, DOOR: 0x3a322a, DOOR_D: 0x2a221c,
+  SH_A: 0x3e4640, SH_B: 0x384038, SH_D: 0x2a302c, FASCIA: 0x302824, ROOFMOSS: 0x4a5a3a,
+  STONE: 0x5a5856, STONE_B: 0x4e4c4a, STONE_L: 0x6c6a66, SOOT: 0x1a1816, IRON: 0x2a2830, RUST: 0x5a3828, WARM: 0xc87a34, PANE: 0x16141a, DARK: 0x100e0c,
+  BARK: 0x3e3a34, BARK_D: 0x2a2622, BARK_M: 0x46523a, PAD: 0x3a6430, PAD_D: 0x2c5026, PETAL: 0xd8d0e0, PETAL_W: 0xe8e4dc, POLLEN: 0xc8b860,
+  ROCK: 0x4e4c48, ROCK_D: 0x3e3c3a, ROCK_M: 0x46583a, HULL: 0x4a4034, HULL_D: 0x322a24, GUNWALE: 0x625846,
+  HERB: [0x6a6448, 0x5e5450, 0x7a6a4a], STEM: 0x4a4030, BARREL: 0x54463a, HOOP: 0x4a3428, CRATE: 0x5e5446, CRATE_B: 0x3e342c,
+  BONE: 0xd8d0bc, CROW: 0x16161c, CROW_L: 0x2c2c38, BEAK: 0x4a4440,
 };
+
+/** a crow (cells): perched with its feet on y, facing f (0 +z, 1 +x, 2 -z, 3 -x) */
+export function crow(w: W, x: number, y: number, z: number, f: number) {
+  const [ux, uz] = [[0, 1], [1, 0], [0, -1], [-1, 0]][f & 3];
+  const P = (u0: number, y0: number, v0: number, u1: number, y1: number, v1: number, c: number) => {
+    const xs = [x + u0 * ux + v0 * uz, x + u1 * ux + v1 * uz], zs = [z + u0 * uz - v0 * ux, z + u1 * uz - v1 * ux];
+    w.box(Math.min(...xs), y0, Math.min(...zs), Math.max(...xs), y1, Math.max(...zs), c);
+  };
+  P(0, y, -1, 0, y, -1, SW.BEAK); P(0, y, 1, 0, y, 1, SW.BEAK);
+  P(-2, y + 1, -1, 1, y + 3, 1, SW.CROW); P(-2, y + 2, -1, 0, y + 2, -1, SW.CROW_L); P(-2, y + 2, 1, 0, y + 2, 1, SW.CROW_L);
+  P(1, y + 3, -1, 2, y + 4, 1, SW.CROW); P(3, y + 3, 0, 3, y + 3, 0, SW.BEAK); P(-4, y + 1, -1, -3, y + 1, 1, SW.CROW);
+}
 
 // ------------------------------------------------------------------ water: one plane with a pixel ripple pattern that drifts
 let rippleTex: THREE.Texture | null = null;
@@ -79,123 +92,160 @@ export function marsh(w: W, land: Rect[], cuts: Rect[], shelves: Rect[], o: { bo
   return { isLand: (xm: number, zm: number) => land2(M(xm - CELL / 2), M(zm - CELL / 2)) };
 }
 
-// ------------------------------------------------------------------ boardwalk: planks across the run, stringers, pilings with headers, rope rail
-export function walk(w: W, r: Rect, o: { rail?: -1 | 0 | 1; gap?: [number, number]; seed?: number; deck?: number } = {}) {
+// ------------------------------------------------------------------ boardwalk, rotting: planks across the run (some missing, some knocked a
+// cell out of line, some black with rot), stringers, pilings with headers, a rope rail that has parted in places; gap = a stretch with
+// no planks at all; sunk = a stretch whose deck has sagged into the water in wide steps, its pilings snapped below the surface
+export function walk(w: W, r: Rect, o: { rail?: -1 | 0 | 1; gap?: [number, number]; sunk?: [number, number]; rot?: number; seed?: number; deck?: number } = {}) {
   const X0 = M(r.x0), X1 = M(r.x1) - 1, Z0 = M(r.z0), Z1 = M(r.z1) - 1, alongX = X1 - X0 >= Z1 - Z0;
-  const len = alongX ? X1 - X0 : Z1 - Z0, wid = alongX ? Z1 - Z0 : X1 - X0, sd = o.seed ?? 1, top = o.deck ?? 2;
+  const len = alongX ? X1 - X0 : Z1 - Z0, wid = alongX ? Z1 - Z0 : X1 - X0, sd = o.seed ?? 1, top = o.deck ?? 2, rot = o.rot ?? 0.12;
   const at = (i: number, j: number) => (alongX ? [X0 + i, Z0 + j] : [X0 + j, Z0 + i]) as [number, number];
   const put = (i: number, j: number, y0: number, y1: number, c: number | null) => { const [x, z] = at(i, j); w.box(x, y0, z, x, y1, z, c); };
   const g0 = o.gap ? Math.round(o.gap[0] / CELL) : -1, g1 = o.gap ? Math.round(o.gap[1] / CELL) : -1;
-  // stringers under both deck edges, broken inside the gap on the inner side
-  for (let i = 0; i <= len; i++) for (const j of [1, 2, wid - 2, wid - 1]) { if (i > g0 + 2 && i < g1 - 2 && j < 3) continue; put(i, j, top - 3, top - 2, SW.POST_D); }
-  // planks: five cells wide, a seam groove between, two tones, a few with a short end
+  const s0 = o.sunk ? Math.round(o.sunk[0] / CELL) : -1, s1 = o.sunk ? Math.round(o.sunk[1] / CELL) : -1;
+  const drop = (i: number) => (i < s0 || i > s1 ? 0 : Math.min(3, 1 + Math.floor(Math.min(i - s0, s1 - i) / 6)));
+  // stringers under both deck edges, broken inside the gap on the inner side, sagging with the sunk stretch
+  for (let i = 0; i <= len; i++) for (const j of [1, 2, wid - 2, wid - 1]) { if (i > g0 + 2 && i < g1 - 2 && j < 3) continue; put(i, j, top - 3 - drop(i), top - 2 - drop(i), SW.POST_D); }
+  // planks: five cells wide, a seam groove between, two tones; some missing, some shifted, some rotten, a few with a short end
   for (let i = 0; i <= len; i++) {
     if (i >= g0 && i <= g1) continue;
-    const p = Math.floor(i / 5), seam = i % 5 === 4, tone = hash(p, sd, 3) < 0.5 ? SW.DECK : SW.DECK_B;
-    const cut0 = hash(p, sd, 4) < 0.25 ? 1 : 0, cut1 = hash(p, sd, 5) < 0.25 ? 1 : 0;
-    for (let j = cut0; j <= wid - cut1; j++) { put(i, j, top - 1, top - 1, seam ? SW.SEAM : tone); if (!seam) put(i, j, top, top, tone); }
+    const p = Math.floor(i / 5), seam = i % 5 === 4, d = drop(i);
+    if (hash(p, sd, 6) < rot && p > 0) continue;
+    const tone = hash(p, sd, 8) < 0.18 ? SW.ROT : hash(p, sd, 3) < 0.5 ? SW.DECK : SW.DECK_B, sh = hash(p, sd, 7) < 0.16 ? (hash(p, sd, 9) < 0.5 ? -1 : 1) : 0;
+    const cut0 = hash(p, sd, 4) < 0.3 ? 1 : 0, cut1 = hash(p, sd, 5) < 0.3 ? 1 : 0;
+    for (let j = cut0 + sh; j <= wid - cut1 + sh; j++) { put(i, j, top - 1 - d, top - 1 - d, seam ? SW.SEAM : tone); if (!seam) put(i, j, top - d, top - d, tone); }
   }
-  // pilings in pairs every 16 cells, a header beam between them; on the rail side every other piling rises into a rail post
+  // pilings in pairs every 16 cells, a header beam between them; on the rail side every other piling rises into a rail post (some snapped)
   const posts: Array<[number, number]> = [];
   for (let i = 1; i <= len - 1; i += 16) {
     if (i > g0 - 2 && i < g1 + 2) continue;
-    for (let k = 0; k <= wid - 2; k++) put(i, k, top - 3, top - 2, SW.POST_D), put(i + 1, k, top - 3, top - 2, SW.POST_D);
+    const d = drop(i), sunkHere = d > 0;
+    for (let k = 0; k <= wid - 2; k++) put(i, k, top - 3 - d, top - 2 - d, SW.POST_D), put(i + 1, k, top - 3 - d, top - 2 - d, SW.POST_D);
     for (const side of [-1, 1] as const) {
-      const j = side < 0 ? -1 : wid, rail = o.rail === side && (Math.round(i / 16) % 2 === 0 || i + 16 > len - 1);
-      for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) put(i + a, j + (side < 0 ? -b : b), -6, rail ? top + 10 : top + 1, SW.POST);
-      if (rail) { for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) put(i + a, j + (side < 0 ? -b : b), top + 11, top + 11, SW.DECK); posts.push([i, j]); }
+      const j = side < 0 ? -1 : wid, rail = !sunkHere && o.rail === side && (Math.round(i / 16) % 2 === 0 || i + 16 > len - 1), snapped = rail && hash(i, sd, 11) < 0.3;
+      const h = sunkHere ? -2 : rail ? (snapped ? top + 4 : top + 10) : top + 1;
+      for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) put(i + a, j + (side < 0 ? -b : b), -6, h, SW.POST);
+      if (rail && !snapped) { for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) put(i + a, j + (side < 0 ? -b : b), top + 11, top + 11, SW.DECK_B); posts.push([i, j]); }
     }
   }
-  // rope between rail posts
-  for (let k = 0; k + 1 < posts.length; k++) { const [i0, j] = posts[k], [i1] = posts[k + 1]; if (i1 - i0 > 40) continue; for (let i = i0 + 2; i < i1; i++) put(i, j, top + 8, top + 8, SW.ROPE); }
+  // rope between rail posts, parted on some spans (the loose end hangs down a few cells)
+  for (let k = 0; k + 1 < posts.length; k++) {
+    const [i0, j] = posts[k], [i1] = posts[k + 1]; if (i1 - i0 > 40) continue;
+    if (hash(i0, sd, 12) < 0.4) { for (let i = i0 + 2; i < i0 + 6; i++) put(i, j, top + 8, top + 8, SW.ROPE); put(i0 + 6, j, top + 4, top + 8, SW.ROPE); continue; }
+    for (let i = i0 + 2; i < i1; i++) put(i, j, top + 8, top + 8, SW.ROPE);
+  }
   // a loose plank floating beside the gap
   if (o.gap) { const im = (g0 + g1) >> 1; for (let i = im - 5; i <= im + 3; i++) for (let j = wid + 2; j <= wid + 4; j++) put(i, j, -1, -1, SW.DECK_B); }
 }
 
-// ------------------------------------------------------------------ the stilt hut (高脚小屋)
-/** returns the lantern centres (metres) */
+// ------------------------------------------------------------------ the stilt hut (高脚小屋), long abandoned
+/** returns the one lantern still (barely) alight, in metres */
 export function stiltHut(w: W, cx: number, cz: number): Array<[number, number, number]> {
   const X = M(cx), Z = M(cz), BW = 25, PW = 33, Zf = Z + 21, Zb = Z - 25, PY = 11, RY = PY + 29;
   const wb = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number | null, g = 0) => w.box(x0, y0, z0, x1, y1, z1, c, g);
-  // stilts, tie beams
-  for (const dx of [-PW + 2, -11, 11, PW - 2]) for (const z of [Zf - 2, Zb + 2, Z - 6]) wb(X + dx - 1, -6, z - 1, X + dx + 1, PY - 2, z + 1, SW.POST);
-  wb(X - PW + 2, 3, Zf - 3, X + PW - 2, 4, Zf - 2, SW.POST_D);
+  // stilts and tie beams; the front-right stilt has rotted through above the water, its beam snapped
+  for (const dx of [-PW + 2, -11, 11, PW - 2]) for (const z of [Zf - 2, Zb + 2, Z - 6]) {
+    if (dx === 11 && z === Zf - 2) { wb(X + dx - 1, -6, z - 1, X + dx + 1, 1, z + 1, SW.POST); wb(X + dx - 1, 2, z - 1, X + dx, 2, z + 1, SW.POST); wb(X + dx - 1, PY - 5, z - 1, X + dx + 1, PY - 2, z + 1, SW.POST); continue; }
+    wb(X + dx - 1, -6, z - 1, X + dx + 1, PY - 2, z + 1, SW.POST);
+  }
+  wb(X - PW + 2, 3, Zf - 3, X + 4, 4, Zf - 2, SW.POST_D); wb(X + 18, 3, Zf - 3, X + PW - 2, 4, Zf - 2, SW.POST_D);
   for (const dx of [-PW + 2, PW - 2]) wb(X + dx, 3, Zb + 2, X + dx, 4, Zf - 2, SW.POST_D);
-  // deck: rim joist, planks along x with seams
+  // deck: rim joist, planks along x with seams; a few planks gone at the front edge
   wb(X - PW, PY - 3, Zb, X + PW, PY - 2, Zb + 1, SW.SILL); wb(X - PW, PY - 3, Zf - 1, X + PW, PY - 2, Zf, SW.SILL);
   wb(X - PW, PY - 3, Zb, X - PW + 1, PY - 2, Zf, SW.SILL); wb(X + PW - 1, PY - 3, Zb, X + PW, PY - 2, Zf, SW.SILL);
   for (let z = Zb; z <= Zf; z++) { const seam = (Zf - z) % 6 === 5; wb(X - PW, PY - 1, z, X + PW, PY - 1, z, seam ? SW.SEAM : SW.DECK); if (!seam) wb(X - PW, PY, z, X + PW, PY, z, Math.floor((Zf - z) / 6) % 2 ? SW.DECK_B : SW.DECK); }
-  // railing: front (with the stair opening) and both sides
+  wb(X - 31, PY - 1, Zf - 4, X - 25, PY, Zf, null); wb(X - 31, PY - 1, Zf - 4, X - 28, PY - 1, Zf - 4, SW.ROT);
+  // railing: front (stair opening) and both sides; the front-right run has fallen into the water, one post snapped
   const SX0 = X - 15, SX1 = X - 1, RT = PY + 11;
   const railPost = (x: number, z: number, h = RT) => wb(x, PY + 1, z, x + 1, h, z + 1, SW.POST);
-  for (let x = X - PW; x <= X + PW - 1; x += 11) if (x + 1 < SX0 - 1 || x > SX1 + 1) railPost(x, Zf - 1);
+  for (let x = X - PW; x <= X + PW - 1; x += 11) if ((x + 1 < SX0 - 1 || x > SX1 + 1) && x < X + 8) railPost(x, Zf - 1, x === X - PW + 11 ? PY + 5 : RT);
+  railPost(X + PW - 1, Zf - 1);
   for (const x of [X - PW, X + PW - 1]) for (let z = Zf - 1; z >= Zb + 8; z -= 11) railPost(x, z);
-  for (const x of [SX0 - 2, SX1 + 1]) { wb(x, PY + 1, Zf - 1, x + 1, RT + 2, Zf, SW.POST); wb(x, RT + 3, Zf - 1, x + 1, RT + 3, Zf, SW.DECK); }
-  wb(X - PW, RT + 1, Zf - 1, SX0 - 3, RT + 1, Zf, SW.DECK); wb(SX1 + 3, RT + 1, Zf - 1, X + PW, RT + 1, Zf, SW.DECK);
-  wb(X - PW, PY + 6, Zf, SX0 - 3, PY + 6, Zf, SW.DECK_B); wb(SX1 + 3, PY + 6, Zf, X + PW, PY + 6, Zf, SW.DECK_B);
+  for (const x of [SX0 - 2, SX1 + 1]) { wb(x, PY + 1, Zf - 1, x + 1, RT + 2, Zf, SW.POST); wb(x, RT + 3, Zf - 1, x + 1, RT + 3, Zf, SW.DECK_B); }
+  wb(X - PW, RT + 1, Zf - 1, X - PW + 10, RT + 1, Zf, SW.DECK); wb(SX1 + 3, RT + 1, Zf - 1, X + 9, RT + 1, Zf, SW.DECK);
+  wb(X - PW, PY + 6, Zf, SX0 - 3, PY + 6, Zf, SW.DECK_B); wb(SX1 + 3, PY + 6, Zf, X + 9, PY + 6, Zf, SW.DECK_B);
   for (const x of [X - PW, X + PW]) { wb(x, RT + 1, Zb + 8, x, RT + 1, Zf, SW.DECK); wb(x, PY + 6, Zb + 8, x, PY + 6, Zf, SW.DECK_B); }
-  // stairs down to the boardwalk: open treads between stepped stringers
+  wb(X + 10, -1, Zf + 4, X + 30, -1, Zf + 5, SW.DECK); wb(X + 14, -1, Zf + 3, X + 15, -1, Zf + 7, SW.POST); wb(X + 25, -1, Zf + 3, X + 26, -1, Zf + 7, SW.POST);
+  // stairs down to the boardwalk: open treads between stepped stringers; the middle tread is gone
   for (let i = 0; i < 3; i++) {
     const z0 = Zf + 1 + i * 4, z1 = z0 + 3, y = PY - 3 - i * 3;
-    wb(SX0, y - 1, z0, SX1, y, z1, i % 2 ? SW.DECK_B : SW.DECK);
+    if (i !== 1) wb(SX0, y - 1, z0, SX1, y, z1, i % 2 ? SW.DECK_B : SW.DECK);
     for (const x of [SX0 - 1, SX1 + 1]) wb(x, y - 2, z0, x, y + 1, z1, SW.POST_D);
   }
+  wb(SX1 + 3, -1, Zf + 5, SX1 + 8, -1, Zf + 8, SW.DECK_B);
   for (const x of [SX0 - 1, SX1 + 1]) wb(x, -6, Zf + 11, x, 1, Zf + 12, SW.POST);
-  // walls: horizontal board courses, corner logs, sill and top plate
+  // walls: horizontal board courses, corner logs, sill and top plate; moss creeping up from the sill; boards missing left of the door
   const bx0 = X - BW, bx1 = X + BW, bz0 = Z - 22, bz1 = Z + 8, top = RY - 1;
   for (let x = bx0; x <= bx1; x++) for (let y = PY + 1; y <= top; y++) for (let z = bz0; z <= bz1; z++) {
     if (Math.min(x - bx0, bx1 - x, z - bz0, bz1 - z) > 1) continue;
-    w.set(x, y, z, Math.floor((y - PY - 1) / 3) % 2 ? SW.WALL_B : SW.WALL_A);
+    w.set(x, y, z, y <= PY + 3 + ((x >> 3) & 1) * 2 ? SW.ROOFMOSS : Math.floor((y - PY - 1) / 3) % 2 ? SW.WALL_B : SW.WALL_A);
   }
   for (const x of [bx0 - 1, bx1 - 1]) for (const z of [bz0 - 1, bz1 - 1]) wb(x, PY + 1, z, x + 2, top + 1, z + 2, SW.LOG);
   wb(bx0 - 1, PY + 1, bz0 - 1, bx1 + 1, PY + 2, bz1 + 1, SW.SILL); wb(bx0 - 1, top - 1, bz0 - 1, bx1 + 1, top, bz1 + 1, SW.SILL);
-  // door (left of centre, above the stairs): stepped frame, recessed boards, battens, ring
+  wb(X - 22, PY + 7, bz1 - 1, X - 17, PY + 12, bz1, null); wb(X - 21, PY + 13, bz1 - 1, X - 18, PY + 15, bz1, null);
+  // the dark inside, seen through the doorway, the missing boards and the hole in the roof
+  wb(bx0 + 2, PY + 1, bz0 + 2, bx1 - 2, PY + 1, bz1 - 2, SW.DARK);
+  // doorway: the frame still stands, the door itself lies flat on the porch where it fell
   const dx0 = X - 13, dx1 = X - 3, dTop = PY + 21;
   wb(dx0 - 2, PY + 1, bz1 - 1, dx1 + 2, dTop + 3, bz1 + 1, SW.FRAME); wb(dx0 - 3, dTop + 2, bz1 - 1, dx1 + 3, dTop + 3, bz1 + 1, SW.FRAME);
-  wb(dx0, PY + 1, bz1 - 1, dx1, dTop, bz1 + 1, null); wb(dx0, PY + 1, bz1 - 1, dx1, dTop, bz1 - 1, SW.DOOR);
-  for (const x of [dx0 + 3, dx0 + 7]) wb(x, PY + 1, bz1 - 1, x, dTop, bz1 - 1, SW.DOOR_D);
-  for (const y of [PY + 5, PY + 17]) wb(dx0 + 1, y, bz1, dx1 - 1, y, bz1, SW.FRAME);
-  w.set(dx1 - 2, PY + 11, bz1, SW.IRON);
-  // window (right): frame, warm pane, cross mullion, sill
+  wb(dx0, PY + 1, bz1 - 1, dx1, dTop, bz1 + 1, null); wb(dx0 + 1, dTop + 3, bz1 + 1, dx0 + 4, dTop + 3, bz1 + 1, null);
+  wb(X - 19, PY + 1, bz1 + 3, X + 1, PY + 1, bz1 + 11, SW.DOOR); for (const z of [bz1 + 6, bz1 + 9]) wb(X - 19, PY + 1, z, X + 1, PY + 1, z, SW.DOOR_D);
+  for (const x of [X - 15, X - 3]) wb(x, PY + 2, bz1 + 4, x, PY + 2, bz1 + 10, SW.FRAME);
+  // window: black, its cross mullion half gone, two boards nailed across it (one knocked a cell out of line)
   const wx0 = X + 7, wx1 = X + 17, wy0 = PY + 9, wy1 = PY + 18;
   wb(wx0 - 1, wy0 - 1, bz1, wx1 + 1, wy1 + 1, bz1 + 1, SW.FRAME); wb(wx0, wy0, bz1 - 1, wx1, wy1, bz1 + 1, null);
-  wb(wx0, wy0, bz1 - 1, wx1, wy1, bz1 - 1, SW.PANE, 1);
-  wb(X + 12, wy0, bz1, X + 12, wy1, bz1, SW.DOOR); wb(wx0, wy0 + 5, bz1, wx1, wy0 + 5, bz1, SW.DOOR);
+  wb(wx0, wy0, bz1 - 1, wx1, wy1, bz1 - 1, SW.PANE);
+  wb(X + 12, wy0 + 5, bz1, X + 12, wy1, bz1, SW.DOOR);
+  wb(wx0 - 3, wy0 + 2, bz1 + 1, wx1 + 2, wy0 + 3, bz1 + 1, SW.DECK_B); wb(wx0 - 1, wy0 + 7, bz1 + 1, wx1 + 4, wy0 + 8, bz1 + 1, SW.DECK);
   wb(wx0 - 2, wy0 - 2, bz1, wx1 + 2, wy0 - 2, bz1 + 2, SW.SILL);
-  // roof: ridge along x, four wide tiers; each tier's front and back rows are a darker shingle course, the gable ends a barge board
+  // roof: ridge along x, four wide tiers with darker shingle courses and barge boards; a hole has fallen through its right half
+  // (stepped, wider low down), rafters showing in it; the ridge cap is broken over the hole
   const rx0 = bx0 - 5, rx1 = bx1 + 5, rz0 = bz0 - 6, rz1 = bz1 + 6;
   for (let k = 0; k < 4; k++) {
     const y0 = RY + k * 4, z0 = rz0 + k * 6, z1 = rz1 - k * 6, base = k % 2 ? SW.SH_B : SW.SH_A;
     wb(rx0, y0, z0, rx1, y0 + 3, z1, base);
     wb(rx0, y0, z1, rx1, y0 + 3, z1, SW.SH_D); wb(rx0, y0, z0, rx1, y0 + 3, z0, SW.SH_D);
     wb(rx0, y0, z0, rx0 + 1, y0 + 3, z1, SW.FASCIA); wb(rx1 - 1, y0, z0, rx1, y0 + 3, z1, SW.FASCIA);
-    if (k === 1) wb(rx0 + 2, y0 + 3, z1 - 4, X - 4, y0 + 3, z1 - 1, SW.ROOFMOSS);   // a moss patch on one course
+    if (k === 1) wb(rx0 + 2, y0 + 3, z1 - 4, X - 4, y0 + 3, z1 - 1, SW.ROOFMOSS);
+    if (k === 0) wb(X - 20, y0 + 3, z1 - 3, X - 8, y0 + 3, z1 - 1, SW.ROOFMOSS);
   }
-  wb(rx0 - 2, RY + 16, rz0 + 19, rx1 + 2, RY + 17, rz1 - 19, SW.FASCIA);
-  // stone chimney on the left gable
+  wb(rx0 - 2, RY + 16, rz0 + 19, X + 4, RY + 17, rz1 - 19, SW.FASCIA); wb(X + 20, RY + 16, rz0 + 19, rx1 + 2, RY + 17, rz1 - 19, SW.FASCIA);
+  const hole: Array<[number, number]> = [[X + 3, X + 23], [X + 6, X + 21], [X + 8, X + 18], [X + 9, X + 16]];
+  hole.forEach(([a, b], k) => wb(a, RY + k * 4, Z - 4, b, RY + k * 4 + 3, rz1 - k * 6, null));
+  for (const xr of [X + 9, X + 15, X + 21]) hole.forEach(([a, b], k) => { if (xr >= a && xr <= b) wb(xr, RY + k * 4, Z - 4, xr, RY + k * 4, rz1 - k * 6 - 1, SW.LOG); });
+  wb(X + 3, top - 1, bz1 - 1, X + 23, top, bz1 + 1, SW.SILL);
+  // fallen shingles: on the porch, on the dark floor inside, one slab in the water by the stilts
+  wb(X + 4, PY + 1, bz1 + 3, X + 11, PY + 2, bz1 + 7, SW.SH_A); wb(X + 12, PY + 1, bz1 + 10, X + 16, PY + 1, bz1 + 12, SW.SH_D);
+  wb(X + 8, PY + 2, bz0 + 8, X + 16, PY + 3, bz0 + 14, SW.SH_B); wb(X + 34, -1, Z - 2, X + 41, -1, Z + 4, SW.SH_A);
+  // stone chimney on the left gable, its top broken off in two steps
   const cx0 = bx0 - 9, cx1 = bx0 - 2, cz0 = Z - 12, cz1 = Z - 5;
   wb(cx0 - 1, PY + 1, cz0 - 1, cx1 + 1, PY + 8, cz1 + 1, SW.STONE_B);
-  for (let y = PY + 9; y <= RY + 19; y++) wb(cx0, y, cz0, cx1, y, cz1, Math.floor(y / 3) % 2 ? SW.STONE : SW.STONE_B);
-  wb(cx0 - 1, RY + 20, cz0 - 1, cx1 + 1, RY + 21, cz1 + 1, SW.STONE_L); wb(cx0 + 2, RY + 21, cz0 + 2, cx1 - 2, RY + 21, cz1 - 2, SW.SOOT);
-  // drying herbs on a pole under the front eave, over the window
+  for (let y = PY + 9; y <= RY + 19; y++) wb(cx0, y, cz0, y > RY + 14 ? cx0 + 3 : cx1, y, cz1, Math.floor(y / 3) % 2 ? SW.STONE : SW.STONE_B);
+  wb(cx0 + 1, RY + 14, cz0 + 2, cx1 - 1, RY + 14, cz1 - 2, SW.SOOT);
+  wb(cx1 + 2, RY + 12, Z - 15, cx1 + 5, RY + 13, Z - 12, SW.STONE); wb(X - 30, PY + 1, Zb + 10, X - 27, PY + 3, Zb + 13, SW.STONE_B);
+  // the drying pole under the eave: three dead bundles still hang, two have dropped onto the porch
   wb(X - 1, RY - 2, bz1 + 3, X + 21, RY - 2, bz1 + 3, SW.POST_D);
-  for (let i = 0; i < 5; i++) { const x = X + 1 + i * 5; w.set(x, RY - 3, bz1 + 3, SW.STEM); wb(x - 1, RY - 8, bz1 + 3, x + 1, RY - 4, bz1 + 4, SW.HERB[i % 3]); w.set(x, RY - 9, bz1 + 3, SW.STEM); }
-  // porch goods: a barrel, two crates, a basket
-  const barrel = (x: number, z: number) => { wb(x - 3, PY + 1, z - 3, x + 3, PY + 11, z + 3, SW.BARREL); for (const y of [PY + 3, PY + 9]) wb(x - 3, y, z - 3, x + 3, y, z + 3, SW.HOOP); wb(x - 2, PY + 12, z - 2, x + 2, PY + 12, z + 2, SW.CRATE); };
+  for (let i = 0; i < 5; i++) {
+    const x = X + 1 + i * 5;
+    if (i === 1 || i === 3) { wb(x - 2, PY + 1, bz1 + 9 - i, x + 2, PY + 1, bz1 + 10 - i, SW.HERB[i % 3]); continue; }
+    w.set(x, RY - 3, bz1 + 3, SW.STEM); wb(x - 1, RY - 8, bz1 + 3, x + 1, RY - 4, bz1 + 4, SW.HERB[i % 3]); w.set(x, RY - 9, bz1 + 3, SW.STEM);
+  }
+  // porch goods: a barrel with its lid gone, a crate knocked off the other and lying on its side, a basket
   const crate = (x: number, z: number, s: number, y0: number) => { wb(x - s, y0, z - s, x + s, y0 + 2 * s, z + s, SW.CRATE); for (const [a, b] of [[-s, -s], [s, -s], [-s, s], [s, s]]) wb(x + a, y0, z + b, x + a, y0 + 2 * s, z + b, SW.CRATE_B); wb(x - s, y0 + s, z + s, x + s, y0 + s, z + s, SW.CRATE_B); };
-  barrel(X + 27, Zf - 6); crate(X + 19, Zf - 5, 4, PY + 1); crate(X + 19, Zf - 5, 3, PY + 10);
-  wb(X - 28, PY + 1, Zf - 7, X - 23, PY + 4, Zf - 3, SW.STEM); wb(X - 27, PY + 5, Zf - 6, X - 24, PY + 5, Zf - 4, SW.HERB[0]);
-  // two lanterns hanging from brackets on the front corner logs
+  { const x = X + 27, z = Zf - 6; wb(x - 3, PY + 1, z - 3, x + 3, PY + 11, z + 3, SW.BARREL); for (const y of [PY + 3, PY + 9]) wb(x - 3, y, z - 3, x + 3, y, z + 3, SW.HOOP); wb(x - 2, PY + 11, z - 2, x + 2, PY + 11, z + 2, SW.DARK); }
+  crate(X + 19, Zf - 5, 4, PY + 1);
+  // lanterns: the left one dead and hanging askew on a longer chain, the right one still guttering
   const out: Array<[number, number, number]> = [];
   for (const lx of [bx0, bx1]) {
-    const lz = bz1 + 5;
-    wb(lx, RY - 3, bz1 + 2, lx, RY - 3, lz, SW.IRON); w.set(lx, RY - 4, lz, SW.IRON);
-    wb(lx - 1, RY - 5, lz - 1, lx + 1, RY - 5, lz + 1, SW.IRON); wb(lx - 2, RY - 6, lz - 2, lx + 2, RY - 6, lz + 2, SW.IRON);
-    for (const [a, b] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) wb(lx + a, RY - 10, lz + b, lx + a, RY - 7, lz + b, SW.IRON);
-    wb(lx - 1, RY - 10, lz - 1, lx + 1, RY - 7, lz + 1, SW.WARM, 1);
-    wb(lx - 2, RY - 11, lz - 2, lx + 2, RY - 11, lz + 2, SW.IRON); w.set(lx, RY - 12, lz, SW.IRON);
-    out.push([(lx + 0.5) * CELL, (RY - 8) * CELL, (lz + 0.5) * CELL]);
+    const lz = bz1 + 5, dead = lx === bx0, dy = dead ? 3 : 0, ox = dead ? 1 : 0;
+    wb(lx, RY - 3, bz1 + 2, lx, RY - 3, lz, SW.IRON); wb(lx, RY - 4 - dy, lz, lx, RY - 4, lz, SW.IRON);
+    wb(lx - 1 + ox, RY - 5 - dy, lz - 1, lx + 1 + ox, RY - 5 - dy, lz + 1, SW.RUST); wb(lx - 2 + ox, RY - 6 - dy, lz - 2, lx + 2 + ox, RY - 6 - dy, lz + 2, SW.IRON);
+    for (const [a, b] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) wb(lx + a + ox, RY - 10 - dy, lz + b, lx + a + ox, RY - 7 - dy, lz + b, SW.IRON);
+    if (dead) wb(lx, RY - 10 - dy, lz - 1, lx + 2, RY - 9 - dy, lz + 1, SW.SOOT); else wb(lx, RY - 10, lz, lx, RY - 9, lz, SW.WARM, 1);
+    wb(lx - 2 + ox, RY - 11 - dy, lz - 2, lx + 2 + ox, RY - 11 - dy, lz + 2, SW.IRON);
+    if (!dead) out.push([(lx + 0.5) * CELL, (RY - 9) * CELL, (lz + 0.5) * CELL]);
   }
+  // crows: on the ridge and on the broken chimney
+  crow(w, X - 12, RY + 18, Z - 7, 1); crow(w, cx0 + 5, RY + 15, cz0 + 3, 0);
   return out;
 }
 
@@ -291,12 +341,13 @@ export function tufts(c: Ctx, kind: string, n: number, s: [number, number], mask
   }
 }
 
-// ================================================================== the ancient grove (古树圣林)
+// ================================================================== the ancient grove (古树圣林), dying
 export const GV = {
-  BARK: 0x4e3e30, BARK_L: 0x5c4936, BARK_D: 0x3e3026, GROOVE: 0x3a2c22, HOLLOW: 0x160f0a, MOSS: 0x4a7034, MOSS_L: 0x5a8a3e,
-  LEAF: 0x386a30, LEAF_M: 0x467e36, LEAF_T: 0x5a9640, LEAF_D: 0x2a5226, SEED: 0xa0ec50, SEED_C: 0xe8ffa8, VEIN: 0x8aff5a,
-  STONE: 0x6a6c72, STONE_D: 0x4e5056, STONE_L: 0x82848c, CUT: 0x44464c, RUNE: 0xa8ff6a, EARTH: 0x3a3226, SLAB: [0x5e605a, 0x56584e],
-  GRASS: [0x30442a, 0x2a3c24, 0x384a2c], STEM: 0xd8d0b8, CAP: 0x7ad8c0,
+  BARK: 0x4a4038, BARK_L: 0x584c42, BARK_D: 0x3a3029, GROOVE: 0x3a2c22, HOLLOW: 0x140e0a, MOSS: 0x44603a, MOSS_L: 0x506c42,
+  DEAD: 0x6a645c, DEAD_D: 0x524c46, ROT: 0x1c1612, FUNGUS: 0x8a7e66, FUNGUS_L: 0xaca084,
+  LEAF: 0x2e4a36, LEAF_M: 0x3a5842, LEAF_T: 0x4a6a4c, LEAF_D: 0x22382a, SEED: 0x86cc66, SEED_C: 0xd0f0b0, VEIN: 0x6ab860,
+  STONE: 0x666870, STONE_D: 0x4a4c54, STONE_L: 0x7a7c86, CUT: 0x404248, RUNE: 0x9af0a0, EARTH: 0x36302a, SLAB: [0x5a5c58, 0x52544e],
+  GRASS: [0x2e3a2c, 0x283226, 0x363a2c], STEM: 0xcfc8b4, CAP: 0x7ac8c0,
 };
 export type Pad = { x0: number; y0: number; z0: number; x1: number; y1: number; z1: number };
 
@@ -309,12 +360,10 @@ function leafMass(w: W, cx: number, cy: number, cz: number, hx: number, hy: numb
   box(body.x0, body.y0, body.z0, body.x1, body.y1, body.z1, GV.LEAF); pads.push(body);
   w.box(cx - hx + 5, cy + hy + 1, cz - hz + 5, cx + hx - 5, cy + hy + 4, cz + hz - 5, GV.LEAF_M);
   if (hx > 14 && hz > 14) w.box(cx - hx + 11, cy + hy + 5, cz - hz + 11, cx + hx - 11, cy + hy + 7, cz + hz - 11, GV.LEAF_T);
-  // side bulges (one on x, one on z), each a wide box that juts out four cells
   const bx = hash(sd, 1) < 0.5 ? -1 : 1, bz = hash(sd, 2) < 0.6 ? 1 : -1, bh = Math.round(hy * 0.6);
   const b1: Pad = { x0: bx < 0 ? cx - hx - 4 : cx + hx - 2, y0: cy + 2, z0: cz - Math.round(hz * 0.5), x1: bx < 0 ? cx - hx + 2 : cx + hx + 4, y1: cy + 2 + bh, z1: cz + Math.round(hz * 0.3) };
   const b2: Pad = { x0: cx - Math.round(hx * 0.6), y0: cy + 1, z0: bz > 0 ? cz + hz - 2 : cz - hz - 4, x1: cx + Math.round(hx * 0.2), y1: cy + 1 + bh, z1: bz > 0 ? cz + hz + 4 : cz - hz + 2 };
   for (const b of [b1, b2]) { w.box(b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, GV.LEAF); w.box(b.x0, b.y1 + 1, b.z0, b.x1, b.y1 + 1, b.z1, GV.LEAF_M); pads.push(b); }
-  // hanging lobes under the body
   for (let k = 0; k < 2; k++) {
     const lx = cx + Math.round((hash(sd, k, 3) - 0.5) * hx), lz = cz + Math.round((hash(sd, k, 4) - 0.2) * hz * 0.8), sx = Math.round(hx * 0.35), sz = Math.round(hz * 0.35), d = 4 + k * 2;
     const lo: Pad = { x0: lx - sx, y0: cy - d, z0: lz - sz, x1: lx + sx, y1: cy - 1, z1: lz + sz };
@@ -322,40 +371,60 @@ function leafMass(w: W, cx: number, cy: number, cz: number, hx: number, hy: numb
   }
 }
 
-/** bark faces in vertical plates of a few widths and three close tones (no regular grooves: those read as a crate) */
-function barkPlates(w: W, X: number, Z: number, a: number, b: number, y0: number, y1: number, sd: number) {
-  const tone = [GV.BARK, GV.BARK_L, GV.BARK, GV.BARK_D];
-  const run = (n: number, f: (i: number, c: number) => void) => { let i = 0, k = 0; while (i <= n) { const wdt = 4 + Math.floor(hash(sd, k, 9) * 6), c = tone[Math.floor(hash(sd, k, 8) * 4)]; for (let j = 0; j < wdt && i <= n; j++, i++) f(i, c); k++; } };
-  run(2 * a, (i, c) => { w.box(X - a + i, y0, Z + b, X - a + i, y1, Z + b, c); w.box(X - a + i, y0, Z - b, X - a + i, y1, Z - b, c); });
-  run(2 * b, (i, c) => { w.box(X - a, y0, Z - b + i, X - a, y1, Z - b + i, c); w.box(X + a, y0, Z - b + i, X + a, y1, Z - b + i, c); });
+/** where a leaf mass used to be: a bare grey limb across it with twigs going up then across (square turns only); returns hang spots */
+function bareLimbs(w: W, cx: number, cy: number, cz: number, hx: number, hy: number, sd: number) {
+  const y = cy + (hy >> 1), hangs: Array<[number, number, number]> = [];
+  w.box(cx - hx, y - 1, cz - 1, cx + hx, y + 1, cz + 1, GV.DEAD);
+  for (let k = 0; k < 4; k++) {
+    const tx = cx - hx + 3 + Math.round(((2 * hx - 6) * k) / 3), up = 6 + Math.round(hash(sd, k, 5) * (hy + 6)), s = hash(sd, k, 6) < 0.5 ? -1 : 1, tw = 3 + Math.round(hash(sd, k, 7) * 5);
+    if (k % 2) { w.box(tx, y + 2, cz, tx, y + 1 + up, cz, GV.DEAD_D); w.box(Math.min(tx, tx + s * tw), y + 1 + up, cz, Math.max(tx, tx + s * tw), y + 1 + up, cz, GV.DEAD_D); }
+    else { w.box(tx, y, Math.min(cz, cz + s * tw * 2), tx, y, Math.max(cz, cz + s * tw * 2), GV.DEAD_D); w.box(tx, y, cz + s * tw * 2, tx, y + (up >> 1), cz + s * tw * 2, GV.DEAD_D); }
+    hangs.push([(tx + 0.5) * CELL, (y - 1) * CELL, (cz + 0.5) * CELL]);
+  }
+  return hangs;
 }
 
-/** the ancient tree: a vast trunk of bark plates with protruding flutes and mossy ledges, buttress fins, a hollow with a glowing seed,
- *  sap veins, low boughs whose leaf masses hang into the clearing's back corners, a crown of stacked leaf masses. */
+/** bark faces in vertical plates of a few widths and close tones; right of deadFrom the bark is bleached grey dead wood */
+function barkPlates(w: W, X: number, Z: number, a: number, b: number, y0: number, y1: number, sd: number, deadFrom = 1e9) {
+  const tone = [GV.BARK, GV.BARK_L, GV.BARK, GV.BARK_D], dead = [GV.DEAD, GV.DEAD_D, GV.DEAD, GV.BARK_L];
+  const run = (n: number, f: (i: number, k: number) => void) => { let i = 0, k = 0; while (i <= n) { const wdt = 4 + Math.floor(hash(sd, k, 9) * 6); for (let j = 0; j < wdt && i <= n; j++, i++) f(i, k); k++; } };
+  const col = (x: number, k: number) => (x > deadFrom ? dead : tone)[Math.floor(hash(sd, k, 8) * 4)];
+  run(2 * a, (i, k) => { const x = X - a + i; w.box(x, y0, Z + b, x, y1, Z + b, col(x, k)); w.box(x, y0, Z - b, x, y1, Z - b, col(x, k)); });
+  run(2 * b, (i, k) => { w.box(X - a, y0, Z - b + i, X - a, y1, Z - b + i, col(X - a, k)); w.box(X + a, y0, Z - b + i, X + a, y1, Z - b + i, col(X + a, k)); });
+}
+
+/** the ancient tree, half dead: a vast trunk of bark plates with flutes and mossy ledges, its right half bleached grey and its crown on
+ *  that side reduced to bare limbs; a rotten split down the left of the trunk with bracket fungi stepping out of the bark; buttress
+ *  fins; the hollow with its seed still glowing, sickly; the left boughs still carry leaf masses that hang into the frame's corner. */
 export function ancientTree(w: W, x: number, z: number, o: { hollowX?: number; crown?: W } = {}) {
-  const X = M(x), Z = M(z), pads: Pad[] = [], cw = o.crown ?? w;
+  const X = M(x), Z = M(z), pads: Pad[] = [], hangs: Array<[number, number, number]> = [], cw = o.crown ?? w, DF = X + 6;
   const tiers: Array<[number, number, number, number]> = [[42, 31, -3, 14], [31, 24, 15, 46], [27, 20, 47, 92], [23, 17, 93, 134]];
-  tiers.forEach(([a, b, y0, y1], i) => { shell(w, X - a, y0, Z - b, X + a, y1, Z + b, GV.BARK, 2, GV.BARK_D); barkPlates(w, X, Z, a, b, y0, y1, i + 3); });
+  tiers.forEach(([a, b, y0, y1], i) => { shell(w, X - a, y0, Z - b, X + a, y1, Z + b, GV.BARK, 2, GV.BARK_D); barkPlates(w, X, Z, a, b, y0, y1, i + 3, DF); });
   for (let i = 0; i < tiers.length - 1; i++) {
     const [a, b, , y1] = tiers[i], [a2, b2] = tiers[i + 1];
-    for (let x2 = X - a; x2 <= X + a; x2++) for (let z2 = Z - b; z2 <= Z + b; z2++) if (Math.abs(x2 - X) > a2 || Math.abs(z2 - Z) > b2) w.set(x2, y1, z2, (Math.abs(x2 - X) > a2 + 3 || Math.abs(z2 - Z) > b2 + 3) ? GV.MOSS : GV.MOSS_L);
+    for (let x2 = X - a; x2 <= X + a; x2++) for (let z2 = Z - b; z2 <= Z + b; z2++) if (Math.abs(x2 - X) > a2 || Math.abs(z2 - Z) > b2) w.set(x2, y1, z2, x2 > DF + 8 ? GV.DEAD_D : (Math.abs(x2 - X) > a2 + 3 || Math.abs(z2 - Z) > b2 + 3) ? GV.MOSS : GV.MOSS_L);
   }
-  // flutes: vertical ridges standing proud of the trunk, rising out of the fins and stepping back near their tops
   const flute = (x0: number, x1: number, zf: number, dz: number, y0: number, y1: number) => {
-    const za = Math.min(zf, zf + dz * 3), zb = Math.max(zf, zf + dz * 3);
-    w.box(x0, y0, za, x1, y1 - 6, zb, GV.BARK_L).box(x0, y1 - 5, Math.min(zf, zf + dz), x1, y1, Math.max(zf, zf + dz), GV.BARK_L);
-    w.box(x0, y1 - 6, za, x1, y1 - 6, zb, GV.MOSS);
+    const za = Math.min(zf, zf + dz * 3), zb = Math.max(zf, zf + dz * 3), c = x0 > DF ? GV.DEAD : GV.BARK_L;
+    w.box(x0, y0, za, x1, y1 - 6, zb, c).box(x0, y1 - 5, Math.min(zf, zf + dz), x1, y1, Math.max(zf, zf + dz), c);
+    w.box(x0, y1 - 6, za, x1, y1 - 6, zb, x0 > DF ? GV.DEAD_D : GV.MOSS);
   };
   flute(X - 27, X - 21, Z + 25, 1, 15, 70); flute(X - 6, X - 1, Z + 25, 1, 15, 52); flute(X + 32, X + 35, Z + 18, 1, 15, 40);
   flute(X - 18, X - 13, Z + 21, 1, 47, 104); flute(X + 9, X + 14, Z + 21, 1, 47, 86);
-  for (const s of [-1, 1]) { const xa = X + s * 32; w.box(Math.min(xa, xa + s * 3), 15, Z - 4, Math.max(xa, xa + s * 3), 58, Z + 6, GV.BARK_L); w.box(Math.min(xa, xa + s * 3), 59, Z - 4, Math.max(xa, xa + s * 3), 59, Z + 6, GV.MOSS); }
-  // buttress fins: thick boards that step down in wide tiers as they leave the trunk
+  for (const s of [-1, 1]) { const xa = X + s * 32, c = s > 0 ? GV.DEAD : GV.BARK_L; w.box(Math.min(xa, xa + s * 3), 15, Z - 4, Math.max(xa, xa + s * 3), 58, Z + 6, c); w.box(Math.min(xa, xa + s * 3), 59, Z - 4, Math.max(xa, xa + s * 3), 59, Z + 6, s > 0 ? GV.DEAD_D : GV.MOSS); }
+  // the rotten split: a dark slot two cells deep, its width stepping at the tier line
+  w.box(X - 15, 22, Z + 23, X - 11, 46, Z + 24, GV.ROT); w.box(X - 14, 30, Z + 24, X - 12, 44, Z + 24, null);
+  w.box(X - 11, 47, Z + 19, X - 8, 82, Z + 20, GV.ROT); w.box(X - 10, 50, Z + 20, X - 9, 78, Z + 20, null);
+  // bracket fungi: shelves in pale tiers stepping out of the bark beside the split and on the left flute
+  for (const [fx0, fx1, fy, fz] of [[X - 21, X - 16, 36, Z + 25], [X - 19, X - 15, 42, Z + 25], [X - 7, X - 2, 62, Z + 21], [X - 6, X - 3, 70, Z + 21]] as const) { w.box(fx0, fy, fz, fx1, fy, fz + 3, GV.FUNGUS); w.box(fx0 + 1, fy + 1, fz, fx1 - 1, fy + 1, fz + 2, GV.FUNGUS_L); }
+  for (const fy of [26, 34, 48]) { w.box(X - 39, fy, Z - 2, X - 36, fy, Z + 4, GV.FUNGUS); w.box(X - 38, fy + 1, Z - 1, X - 36, fy + 1, Z + 3, GV.FUNGUS_L); }
+  // buttress fins: thick boards that step down in wide tiers as they leave the trunk (grey on the dead side)
   const fin = (x0: number, z0: number, dx: number, dz: number, t: number, steps: Array<[number, number]>) => {
     let k = 0;
     for (const [len, h] of steps) for (let i = 0; i < len; i++, k++) {
-      const cx = x0 + dx * k, cz = z0 + dz * k;
-      w.box(cx - (dz ? t : 0), -3, cz - (dx ? t : 0), cx + (dz ? t : 0), h - 1, cz + (dx ? t : 0), GV.BARK);
-      w.box(cx - (dz ? t : 0), h, cz - (dx ? t : 0), cx + (dz ? t : 0), h, cz + (dx ? t : 0), GV.MOSS);
+      const cx = x0 + dx * k, cz = z0 + dz * k, dead = cx > DF + 20;
+      w.box(cx - (dz ? t : 0), -3, cz - (dx ? t : 0), cx + (dz ? t : 0), h - 1, cz + (dx ? t : 0), dead ? GV.DEAD_D : GV.BARK);
+      w.box(cx - (dz ? t : 0), h, cz - (dx ? t : 0), cx + (dz ? t : 0), h, cz + (dx ? t : 0), dead ? GV.DEAD : GV.MOSS);
     }
   };
   fin(X - 43, Z + 12, -1, 0, 3, [[16, 30], [18, 18], [20, 8]]);
@@ -364,74 +433,94 @@ export function ancientTree(w: W, x: number, z: number, o: { hollowX?: number; c
   fin(X + 34, Z + 32, 0, 1, 3, [[10, 22], [12, 12], [10, 5]]);
   fin(X - 43, Z - 14, -1, 0, 3, [[12, 22], [14, 10]]);
   fin(X + 43, Z - 16, 1, 0, 3, [[10, 20], [12, 9]]);
-  rootArch(w, X - 97, X - 137, Z + 12, 24, 4); rootArch(w, X + 91, X + 126, Z + 6, 20, 4);
-  // the hollow: a stepped arch in the lower trunk, dark inside, a lighter lip, the seed glowing on a cradle of roots
+  rootArch(w, X - 97, X - 137, Z + 12, 24, 4); rootArch(w, X + 91, X + 126, Z + 6, 20, 4, true);
+  // the hollow: a stepped arch in the lower trunk, dark inside, a lighter lip, the seed on a cradle of roots, its light gone sickly
   const hx = X + M(o.hollowX ?? 1.4), hb = Z + 24, y0 = 17, y1 = 44;
   w.box(hx - 12, 15, hb - 12, hx + 12, y1 + 2, hb - 1, GV.HOLLOW);
   const open = (x2: number, y: number) => { const d = Math.abs(x2 - hx); return y >= y0 && y <= y1 && d <= 8 && !(y > y1 - 3 && d > 4) && !(y > y1 - 7 && d > 6); };
   for (let x2 = hx - 10; x2 <= hx + 10; x2++) for (let y = y0 - 1; y <= y1 + 2; y++) {
     if (open(x2, y)) w.box(x2, y, hb - 9, x2, y, hb + 1, null);
-    else if (open(x2 - 1, y) || open(x2 + 1, y) || open(x2, y - 1) || open(x2, y + 1) || open(x2 - 2, y) || open(x2 + 2, y) || open(x2, y - 2)) w.set(x2, y, hb + 1, GV.BARK_L);
+    else if (open(x2 - 1, y) || open(x2 + 1, y) || open(x2, y - 1) || open(x2, y + 1) || open(x2 - 2, y) || open(x2 + 2, y) || open(x2, y - 2)) w.set(x2, y, hb + 1, x2 > DF ? GV.DEAD : GV.BARK_L);
   }
   w.box(hx - 7, y0, hb - 9, hx + 7, y0 + 2, hb - 3, GV.BARK_D).box(hx - 5, y0 + 3, hb - 8, hx - 3, y0 + 5, hb - 4, GV.BARK_D).box(hx + 3, y0 + 3, hb - 8, hx + 5, y0 + 5, hb - 4, GV.BARK_D);
   w.box(hx - 3, y0 + 3, hb - 8, hx + 3, y0 + 12, hb - 3, GV.SEED, 1).box(hx - 2, y0 + 13, hb - 7, hx + 2, y0 + 15, hb - 4, GV.SEED, 1).box(hx - 1, y0 + 16, hb - 6, hx, y0 + 17, hb - 5, GV.SEED_C, 1);
   w.box(hx, y0 + 4, hb - 3, hx, y0 + 11, hb - 3, GV.SEED_C, 1);
-  // sap veins: thin glowing lines from the hollow, square turns only
-  w.box(hx - 11, y0 + 2, hb + 1, hx - 11, y1 - 4, hb + 1, GV.VEIN, 1); w.box(hx + 11, y0 + 6, hb + 1, hx + 11, y1 - 2, hb + 1, GV.VEIN, 1);
-  // boughs: square limbs out to the sides just above the top of the battle frame; leaf masses hang off them into its corners
-  const limb = (x0: number, x1: number, y: number, zc: number, t: number) => w.box(Math.min(x0, x1), y - t, zc - t, Math.max(x0, x1), y + t, zc + t, GV.BARK);
-  limb(X - 25, X - 150, 70, Z + 20, 4); limb(X + 25, X + 150, 66, Z + 16, 4);
-  const climb = (x0: number, x1: number, y: number, zc: number, t: number) => cw.box(Math.min(x0, x1), y - t, zc - t, Math.max(x0, x1), y + t, zc + t, GV.BARK);
-  climb(X - 21, X - 74, 114, Z, 5); cw.box(X - 80, 114, Z - 5, X - 70, 140, Z + 5, GV.BARK);
-  climb(X + 21, X + 70, 106, Z - 4, 5); cw.box(X + 66, 106, Z - 9, X + 76, 134, Z + 1, GV.BARK);
+  w.box(hx - 3, y0 + 9, hb - 3, hx - 2, y0 + 12, hb - 3, GV.ROT);
+  // one sap vein left, broken partway up
+  w.box(hx - 11, y0 + 2, hb + 1, hx - 11, y0 + 12, hb + 1, GV.VEIN, 1); w.box(hx - 11, y0 + 16, hb + 1, hx - 11, y1 - 6, hb + 1, GV.VEIN, 1);
+  // boughs: the left one alive, carrying leaf masses into the frame's corner; the right one dead, bare and grey
+  w.box(X - 150, 66, Z + 16, X - 25, 74, Z + 24, GV.BARK); w.box(X + 25, 62, Z + 12, X + 150, 70, Z + 20, GV.DEAD);
+  const climb = (x0: number, x1: number, y: number, zc: number, t: number, c: number) => cw.box(Math.min(x0, x1), y - t, zc - t, Math.max(x0, x1), y + t, zc + t, c);
+  climb(X - 21, X - 74, 114, Z, 5, GV.BARK); cw.box(X - 80, 114, Z - 5, X - 70, 140, Z + 5, GV.BARK);
+  climb(X + 21, X + 70, 106, Z - 4, 5, GV.DEAD); cw.box(X + 66, 106, Z - 9, X + 76, 134, Z + 1, GV.DEAD);
   cw.box(X - 6, 110, Z + 15, X + 6, 120, Z + 46, GV.BARK);
-  const L = (cx: number, cy: number, cz: number, hx2: number, hy: number, hz: number, sd: number) => leafMass(cy >= 90 ? cw : w, X + cx, cy, Z + cz, hx2, hy, hz, sd, pads);
+  const L = (cx: number, cy: number, cz: number, hx2: number, hy: number, hz: number, sd: number) => {
+    const ww = cy >= 90 ? cw : w;
+    if (cx > 20) hangs.push(...bareLimbs(ww, X + cx, cy, Z + cz, hx2, hy, sd)); else leafMass(ww, X + cx, cy, Z + cz, hx2, hy, hz, sd, pads);
+  };
   L(-82, 52, 24, 22, 16, 22, 1); L(-128, 46, 20, 26, 18, 26, 2); L(-164, 38, 4, 20, 16, 22, 3);
   L(86, 48, 22, 22, 16, 22, 4); L(130, 42, 16, 26, 18, 26, 5); L(166, 34, 2, 20, 16, 22, 6);
-  L(0, 128, 0, 72, 28, 54, 7); L(-78, 110, 10, 40, 24, 36, 8); L(78, 104, -6, 38, 24, 34, 9); L(0, 104, 46, 34, 20, 22, 10);
-  L(-30, 160, -6, 46, 22, 38, 11); L(38, 156, 12, 40, 22, 30, 12); L(0, 184, 0, 34, 18, 28, 13);
-  return { seed: [(hx + 0.5) * CELL, (y0 + 9) * CELL, (hb - 4) * CELL] as [number, number, number], pads };
+  L(-6, 128, 0, 62, 28, 54, 7); L(-78, 110, 10, 40, 24, 36, 8); L(78, 104, -6, 38, 24, 34, 9); L(-8, 104, 46, 30, 20, 22, 10);
+  L(-30, 160, -6, 46, 22, 38, 11); L(38, 156, 12, 40, 22, 30, 12); L(-6, 184, 0, 30, 18, 28, 13);
+  return { seed: [(hx + 0.5) * CELL, (y0 + 9) * CELL, (hb - 4) * CELL] as [number, number, number], pads, hangs, perch: [[X + 150, 71, Z + 16], [X + 108, 71, Z + 16]] as Array<[number, number, number]> };
 }
 
 /** a root that leaves the ground at x0, arches at height h (cells) and dives back in at x1 (cells), along x at depth zc */
-export function rootArch(w: W, x0: number, x1: number, zc: number, h: number, t: number) {
-  const a = Math.min(x0, x1), b = Math.max(x0, x1);
-  w.box(a - t, -3, zc - t, a + t, h, zc + t, GV.BARK).box(b - t, -3, zc - t, b + t, h, zc + t, GV.BARK);
-  w.box(a - t, h - 2 * t + 1, zc - t, b + t, h, zc + t, GV.BARK);
-  w.box(a + t + 1, h - 3 * t, zc - t, a + 2 * t + 2, h - 2 * t, zc + t, GV.BARK).box(b - 2 * t - 2, h - 3 * t, zc - t, b - t - 1, h - 2 * t, zc + t, GV.BARK);
-  w.box(a - t, h + 1, zc - t + 1, b + t, h + 1, zc + t - 1, GV.MOSS);
+export function rootArch(w: W, x0: number, x1: number, zc: number, h: number, t: number, dead = false) {
+  const a = Math.min(x0, x1), b = Math.max(x0, x1), c = dead ? GV.DEAD_D : GV.BARK;
+  w.box(a - t, -3, zc - t, a + t, h, zc + t, c).box(b - t, -3, zc - t, b + t, h, zc + t, c);
+  w.box(a - t, h - 2 * t + 1, zc - t, b + t, h, zc + t, c);
+  w.box(a + t + 1, h - 3 * t, zc - t, a + 2 * t + 2, h - 2 * t, zc + t, c).box(b - 2 * t - 2, h - 3 * t, zc - t, b - t - 1, h - 2 * t, zc + t, c);
+  w.box(a - t, h + 1, zc - t + 1, b + t, h + 1, zc + t - 1, dead ? GV.DEAD : GV.MOSS);
   w.box(a - t - 3, -3, zc - t - 2, a + t + 3, 1, zc + t + 2, GV.BARK_D).box(b - t - 3, -3, zc - t - 2, b + t + 3, 1, zc + t + 2, GV.BARK_D);
 }
 
-
 const GLYPHS = [['X..', 'XX.', 'X.X', 'X..'], ['.X.', 'XXX', '.X.', '.X.'], ['XXX', 'X.X', 'X.X', 'X.X'], ['X.X', 'XXX', 'X.X', 'X.X'], ['XX.', 'X.X', 'XX.', 'X.X'], ['.X.', 'X.X', '.X.', 'X.X']];
 /** a standing stone facing (fx, fz): two-tier plinth, slab with shoulders and a mossy crown, two carved bands bracketing a column of
- *  glowing runes. a = half width (cells), b = half depth, h = height (metres). Returns the face centre for a light. */
-export function standingStone(w: W, x: number, z: number, fx: number, fz: number, h: number, o: { a?: number; b?: number; runes?: number; seed?: number; lintel?: boolean } = {}) {
-  const X = M(x), Z = M(z), a = o.a ?? 6, b = o.b ?? 4, H = M(h), sd = o.seed ?? 1;
-  // local (u along the face width, v toward the face) → world
+ *  runes. a = half width (cells), b = half depth, h = height (metres). broken = height (cells) where it snapped (a stepped break, no
+ *  crown); lean = the part above mid-height knocked one cell sideways; dark = which runes have gone out (bit k = rune k). */
+export function standingStone(w: W, x: number, z: number, fx: number, fz: number, h: number, o: { a?: number; b?: number; runes?: number; seed?: number; lintel?: boolean; broken?: number; lean?: number; dark?: number } = {}) {
+  const X = M(x), Z = M(z), a = o.a ?? 6, b = o.b ?? 4, H = M(h), sd = o.seed ?? 1, cut = o.broken ?? 9999, ys = Math.round(H * 0.5);
   const put = (u0: number, y0: number, v0: number, u1: number, y1: number, v1: number, c: number | null, g = 0) => {
-    const xs = fz ? [X + u0 * fz, X + u1 * fz] : [X + v0 * fx, X + v1 * fx], zs = fz ? [Z + v0 * fz, Z + v1 * fz] : [Z - u0 * fx, Z - u1 * fx];
-    w.box(Math.min(...xs), y0, Math.min(...zs), Math.max(...xs), y1, Math.max(...zs), c, g);
+    for (let y = y0; y <= Math.min(y1, cut); y++) {
+      const du = o.lean && y >= ys ? o.lean : 0, U0 = u0 + du, U1 = u1 + du;
+      const xs = fz ? [X + U0 * fz, X + U1 * fz] : [X + v0 * fx, X + v1 * fx], zs = fz ? [Z + v0 * fz, Z + v1 * fz] : [Z - U0 * fx, Z - U1 * fx];
+      w.box(Math.min(...xs), y, Math.min(...zs), Math.max(...xs), y, Math.max(...zs), c, g);
+    }
   };
   put(-a - 4, -3, -b - 4, a + 4, 1, b + 4, GV.STONE_D); put(-a - 2, 2, -b - 2, a + 2, 3, b + 2, GV.STONE_D);
   put(-a, 4, -b, a, H - 6, b, GV.STONE);
-  if (!o.lintel) { put(-a + 2, H - 5, -b, a - 2, H - 2, b, GV.STONE); put(-a + 4, H - 1, -b + 1, a - 4, H, b - 1, GV.MOSS); put(-a + 2, H - 5, b, a - 2, H - 5, b, GV.STONE_L); }
+  if (o.broken != null) put(-a, cut + 1, -b, -1, cut + 3, b, GV.STONE);
+  else if (!o.lintel) { put(-a + 2, H - 5, -b, a - 2, H - 2, b, GV.STONE); put(-a + 4, H - 1, -b + 1, a - 4, H, b - 1, GV.MOSS); put(-a + 2, H - 5, b, a - 2, H - 5, b, GV.STONE_L); }
   else put(-a, H - 5, -b, a, H, b, GV.STONE);
   const bLo = 8, bHi = H - 9;
   put(-a, bLo, b, a, bLo, b, GV.CUT); put(-a, bHi, b, a, bHi, b, GV.CUT);
   const n = o.runes ?? Math.max(1, Math.floor((bHi - bLo - 3) / 6)), span = bHi - bLo - 1, step = span / n;
   for (let k = 0; k < n; k++) {
-    const g = GLYPHS[(sd * 3 + k * 5) % GLYPHS.length], top = Math.round(bHi - 1 - step * k - (step - 4) / 2);
-    g.forEach((row, r) => [...row].forEach((ch, cI) => { if (ch === 'X') put(cI - 1, top - r, b, cI - 1, top - r, b, GV.RUNE, 1); }));
+    const g = GLYPHS[(sd * 3 + k * 5) % GLYPHS.length], top = Math.round(bHi - 1 - step * k - (step - 4) / 2), off = ((o.dark ?? 0) >> k) & 1;
+    g.forEach((row, r) => [...row].forEach((ch, cI) => { if (ch === 'X') put(cI - 1, top - r, b, cI - 1, top - r, b, off ? GV.CUT : GV.RUNE, off ? 0 : 1); }));
   }
   return [(X + 0.5 + fx * (b + 1)) * CELL, (bLo + bHi) * 0.5 * CELL, (Z + 0.5 + fz * (b + 1)) * CELL] as [number, number, number];
 }
 
-/** two uprights and a lintel (trilithon), facing +z; returns the lintel rune position */
-export function trilithon(w: W, x: number, z: number, h: number, seed: number) {
+/** a standing stone lying where it fell: a slab along x or z with its mossy top up, its plinth left empty; len in cells */
+export function fallenStone(w: W, x: number, z: number, alongX: boolean, len: number, a = 6, b = 4) {
+  const X = M(x), Z = M(z), L2 = len >> 1;
+  const bx = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number) => alongX ? w.box(X + x0, y0, Z + z0, X + x1, y1, Z + z1, c) : w.box(X + z0, y0, Z + x0, X + z1, y1, Z + x1, c);
+  bx(-L2, -1, -a, L2, 2 * b - 2, a, GV.STONE); bx(-L2 + 2, 2 * b - 1, -a + 2, L2 - 4, 2 * b - 1, a - 3, GV.MOSS);
+  bx(L2 + 1, -1, -a + 2, L2 + 4, 2 * b - 4, a - 2, GV.STONE); bx(-L2 + 4, 2 * b - 2, -a, -L2 + 4, 2 * b - 2, a, GV.CUT);
+}
+
+/** two uprights and a lintel (trilithon), facing +z; fallen: the lintel lies broken on the ground in front and the right upright has
+ *  snapped. Returns the lintel rune position (null when fallen). */
+export function trilithon(w: W, x: number, z: number, h: number, seed: number, fallen = false) {
   const X = M(x), Z = M(z), H = M(h), gap = 9, a = 6, b = 5;
-  for (const s of [-1, 1]) standingStone(w, (X + s * (gap + a)) * CELL, z, 0, 1, h, { a, b, seed: seed + s + 2, lintel: true, runes: 2 });
+  for (const s of [-1, 1]) standingStone(w, (X + s * (gap + a)) * CELL, z, 0, 1, h, { a, b, seed: seed + s + 2, lintel: true, runes: 2, broken: fallen && s > 0 ? Math.round(H * 0.55) : undefined, dark: fallen ? (s > 0 ? 3 : 1) : 0 });
+  if (fallen) {
+    w.box(X - gap - 2 * a - 3, -1, Z + b + 4, X - 2, 4, Z + b + 10, GV.STONE).box(X - gap - 2 * a - 1, 5, Z + b + 5, X - 6, 5, Z + b + 9, GV.MOSS);
+    w.box(X + 1, -1, Z + b + 6, X + gap + 2 * a + 2, 4, Z + b + 12, GV.STONE).box(X + 3, 5, Z + b + 7, X + 12, 5, Z + b + 11, GV.MOSS);
+    return null;
+  }
   w.box(X - gap - 2 * a - 3, H + 1, Z - b - 1, X + gap + 2 * a + 3, H + 6, Z + b + 1, GV.STONE).box(X - gap - 2 * a - 1, H + 7, Z - b + 1, X + gap + 2 * a + 1, H + 7, Z + b - 1, GV.MOSS);
   w.box(X - gap - 2 * a - 3, H + 1, Z + b + 1, X + gap + 2 * a + 3, H + 1, Z + b + 1, GV.CUT);
   GLYPHS[seed % GLYPHS.length].forEach((row, r) => [...row].forEach((ch, cI) => { if (ch === 'X') w.set(X + cI - 1, H + 5 - r, Z + b + 1, GV.RUNE, 1); }));
@@ -450,9 +539,15 @@ export function mound(w: W, x: number, z: number, sx: number, sz: number, shroom
   }
 }
 
-/** a leafy bush in two tiers; returns the top centre for flower cards */
-export function bush(w: W, x: number, z: number, sx: number, sz: number, h: number) {
+/** a bush in two tiers (dead: grey-brown and thinned to a frame of bare stems); returns the top centre for cards */
+export function bush(w: W, x: number, z: number, sx: number, sz: number, h: number, dead = false) {
   const X = M(x), Z = M(z);
+  if (dead) {
+    w.box(X - sx + 1, -1, Z - sz + 1, X + sx - 1, Math.round(h * 0.4), Z + sz - 1, 0x3a3630);
+    for (const [dx, dz, hh] of [[-sx + 2, 0, h], [sx - 2, -1, h - 2], [0, sz - 2, h + 1], [-1, -sz + 2, h - 3]]) w.box(X + dx, 0, Z + dz, X + dx, hh, Z + dz, GV.DEAD_D);
+    w.box(X - sx + 2, h - 2, Z, X - 2, h - 2, Z, GV.DEAD_D);
+    return [x, (Math.round(h * 0.4) + 1) * CELL, z] as [number, number, number];
+  }
   w.box(X - sx, -1, Z - sz, X + sx, h - 3, Z + sz, GV.LEAF_D).box(X - sx + 2, h - 2, Z - sz + 2, X + sx - 2, h, Z + sz - 2, GV.LEAF);
   return [x, (h + 1) * CELL, z] as [number, number, number];
 }
@@ -465,23 +560,28 @@ export function canopyFringe(c: Ctx, pads: Pad[], seed: number) {
     for (let x = p.x0; x <= p.x1; x += 4) { rim.push([x, p.z1, 0, 1]); rim.push([x, p.z0, 0, -1]); }
     for (let z = p.z0; z <= p.z1; z += 4) { rim.push([p.x1, z, 1, 0]); rim.push([p.x0, z, -1, 0]); }
     rim.forEach(([x, z, dx, dz], i) => {
-      if (hash(i, k, seed) < 0.35) return;
+      if (hash(i, k, seed) < 0.45) return;
       const s = 0.6 + hash(i, k, seed + 1) * 0.5, px = (x + 0.5 + dx * 0.5) * CELL, pz = (z + 0.5 + dz * 0.5) * CELL;
-      c.cards.add('leaf', px, pz, { y: p.y0 * CELL - H * s * 0.45, s, tint: hash(i, k, 3) < 0.5 ? 0x5a9a4a : 0x4a8a40 });
-      if (hash(i, k, seed + 2) < 0.4) c.cards.add('leaf', px, pz, { y: (p.y1 + 1) * CELL - H * s * 0.35, s: s * 0.8, tint: 0x6aaa52 });
+      c.cards.add('leaf', px, pz, { y: p.y0 * CELL - H * s * 0.45, s, tint: hash(i, k, 3) < 0.5 ? 0x5a7a5a : 0x6a7a58 });
+      if (hash(i, k, seed + 2) < 0.3) c.cards.add('leaf', px, pz, { y: (p.y1 + 1) * CELL - H * s * 0.35, s: s * 0.8, tint: 0x7a8a62 });
     });
   });
 }
 
-/** a younger tree of the grove: flared foot, two trunk tiers, two or three leaf masses; returns the pads for the leaf fringe */
-export function groveTree(w: W, x: number, z: number, h: number, sd: number) {
-  const X = M(x), Z = M(z), H = M(h), pads: Pad[] = [];
-  w.box(X - 6, -3, Z - 6, X + 5, 3, Z + 5, GV.BARK).box(X - 6, 4, Z - 6, X + 5, 4, Z + 5, GV.MOSS);
-  w.box(X - 4, 5, Z - 4, X + 3, Math.round(H * 0.45), Z + 3, GV.BARK).box(X - 3, Math.round(H * 0.45) + 1, Z - 3, X + 2, Math.round(H * 0.8), Z + 2, GV.BARK);
-  w.box(X - 1, 5, Z + 4, X, Math.round(H * 0.4), Z + 4, GV.BARK_L).box(X - 4, 5, Z - 1, X - 4, Math.round(H * 0.35), Z, GV.BARK_L);
+/** a younger tree of the grove: flared foot, two trunk tiers, two or three leaf masses; dead ones keep only bare grey limbs.
+ *  Returns the pads (for the leaf fringe) and hang spots (for dead moss). */
+export function groveTree(w: W, x: number, z: number, h: number, sd: number, dead = false) {
+  const X = M(x), Z = M(z), H = M(h), pads: Pad[] = [], bark = dead ? GV.DEAD_D : GV.BARK;
+  w.box(X - 6, -3, Z - 6, X + 5, 3, Z + 5, bark).box(X - 6, 4, Z - 6, X + 5, 4, Z + 5, dead ? GV.DEAD : GV.MOSS);
+  w.box(X - 4, 5, Z - 4, X + 3, Math.round(H * 0.45), Z + 3, bark).box(X - 3, Math.round(H * 0.45) + 1, Z - 3, X + 2, Math.round(H * 0.8), Z + 2, bark);
+  w.box(X - 1, 5, Z + 4, X, Math.round(H * 0.4), Z + 4, dead ? GV.DEAD : GV.BARK_L).box(X - 4, 5, Z - 1, X - 4, Math.round(H * 0.35), Z, dead ? GV.DEAD : GV.BARK_L);
   const y0 = Math.round(H * 0.5), s = hash(sd, 7) < 0.5 ? -1 : 1;
+  if (dead) {
+    const hangs = [...bareLimbs(w, X, y0, Z, 16, 14, sd), ...bareLimbs(w, X + s * 10, y0 + 18, Z - 2, 10, 10, sd + 1)];
+    return { pads, hangs, top: [X + s * 20, y0 + 25, Z - 2] as [number, number, number] };
+  }
   leafMass(w, X, y0, Z, 20, 16, 18, sd, pads);
   leafMass(w, X + s * 14, y0 + 20, Z - 4, 14, 12, 14, sd + 1, pads);
   if (hash(sd, 8) < 0.6) leafMass(w, X - s * 16, y0 - 6, Z + 6, 12, 10, 12, sd + 2, pads);
-  return pads;
+  return { pads, hangs: [] as Array<[number, number, number]>, top: null };
 }

@@ -120,56 +120,97 @@ export function pine(w: W, x: number, z: number, h: number, trunkC: number, leaf
 }
 
 /**
- * A twisted, haunted dead tree: a stepped root flare, a trunk that climbs in two straight runs joined by a sideways knee, a dark
- * hollow facing the camera, and four limbs bent at right angles (out, up, across, then a twig that rises or hooks down like a
- * claw), with side twigs off the first runs. Moss hangs from some limbs.
+ * A twisted, haunted dead tree (the Duskwood kind): a stepped root flare, a bare trunk that climbs in three straight runs joined by
+ * two sideways knees (right-angle kinks, never a slope), a dark hollow facing the camera, and four or five limbs bent at right
+ * angles — out, up, across, then a twig that rises or hooks down like a claw — with side twigs and one limb snapped off short.
+ * Dead vines (or moss) hang from some limbs; a crow sometimes sits on one.
  */
-export function deadTree(w: W, x: number, z: number, h: number, bark: number, dark: number, o: { seed?: number; leaves?: number; leavesTop?: number; moss?: boolean | number } = {}) {
+export function deadTree(w: W, x: number, z: number, h: number, bark: number, dark: number, o: { seed?: number; leaves?: number; leavesTop?: number; moss?: boolean | number; hang?: 'deadvine' | 'moss'; crow?: number } = {}) {
   const X = M(x), Z = M(z), T = M(h), s = o.seed ?? 1, tr = h >= 5.5 ? 3 : 2, p = plot(w);
   flare(w, X, Z, tr, bark, dark, s, 3, h >= 5.5 ? 5 : 4);
-  const D = dirs(s + 7), [kx, kz] = D[0], k1 = Math.round(T * 0.3), ur = Math.max(2, tr - 1), k2 = Math.round(T * 0.62);
+  const D = dirs(s + 7), [kx, kz] = D[0], k1 = Math.round(T * 0.26), ur = Math.max(2, tr - 1), k2 = Math.round(T * 0.48), k3 = Math.round(T * 0.7);
   // the lower trunk is blocks (it carries the hollow), the rest is prisms
   w.box(X - tr, 0, Z - tr, X + tr, k1 + tr + 1, Z + tr, bark);
-  if (tr >= 3) { const hy = Math.round(T * 0.1) + 2; w.box(X - 2, hy - 1, Z + tr - 2, X + 2, hy + 6, Z + tr - 1, 0x120c10).box(X - 1, hy, Z + tr - 1, X + 1, hy + 4, Z + tr, null).box(X - 2, hy + 6, Z + tr, X + 2, hy + 6, Z + tr, dark); }
-  const ux = X + kx * (tr - ur + 1), uz = Z + kz * (tr - ur + 1);
-  trunk(w, ux, uz, ur, k1, k2, bark, dark);
-  // the knee: a ledge where the upper trunk steps off the lower one
-  limb(w, X, Z, ux, uz, k1 + tr + 2, 1, ur, dark);
-  const mossK = o.moss === false ? 0 : typeof o.moss === 'number' ? o.moss : 0.6, mossTint = 0x9aa890;
-  // the leader keeps climbing and forks at the top
-  const lr = Math.max(1, ur - 1);
-  limb(w, ux, uz, ux, uz, k2, T - k2 - 4, lr, bark);
-  for (const [fx, fz, fl] of [[D[1][0], D[1][1], 7], [D[3][0], D[3][1], 5]] as const) {
+  if (tr >= 3) { const hy = Math.round(T * 0.08) + 2; w.box(X - 2, hy - 1, Z + tr - 2, X + 2, hy + 6, Z + tr - 1, 0x120c10).box(X - 1, hy, Z + tr - 1, X + 1, hy + 4, Z + tr, null).box(X - 2, hy + 6, Z + tr, X + 2, hy + 6, Z + tr, dark); }
+  // two knees: the middle run steps off one way, the top run steps off the other
+  const mx0 = X + kx * (tr - ur + 1), mz0 = Z + kz * (tr - ur + 1);
+  trunk(w, mx0, mz0, ur, k1, k2, bark, dark);
+  limb(w, X, Z, mx0, mz0, k1 + tr + 2, 1, ur, dark);
+  const [qx, qz] = D[1], vr = Math.max(1, ur - 1), ux = mx0 + qx * (ur - vr + 2), uz = mz0 + qz * (ur - vr + 2);
+  trunk(w, ux, uz, vr, k2 - 2, k3, bark, dark);
+  limb(w, mx0, mz0, ux, uz, k2 - 3, 1, vr, dark);
+  const hk = o.hang ?? 'deadvine', hangK = o.moss === false ? 0 : typeof o.moss === 'number' ? o.moss : 0.55;
+  // the leader keeps climbing, narrowing, and forks at the top into two claws
+  const lr = Math.max(0, vr - 1);
+  limb(w, ux, uz, ux, uz, k3, T - k3 - 5, lr, bark);
+  for (const [fx, fz, fl, up] of [[D[2][0], D[2][1], 7, 1], [D[0][0], D[0][1], 5, -1]] as const) {
     const ex = ux + fx * fl, ez = uz + fz * fl;
-    limb(w, ux, uz, ex, ez, T - 6, 1, 0, bark); limb(w, ex, ez, ex, ez, T - 5, 7, 0, dark);
+    limb(w, ux, uz, ex, ez, T - 7, 1, 0, bark);
+    if (up > 0) limb(w, ex, ez, ex, ez, T - 6, 8, 0, dark); else { limb(w, ex, ez, ex, ez, T - 5, 4, 0, dark); limb(w, ex, ez, ex + fx * 3, ez + fz * 3, T - 1, 0, 0, dark); limb(w, ex + fx * 3, ez + fz * 3, ex + fx * 3, ez + fz * 3, T - 3, 2, 0, dark); }
   }
-  // limbs: out, up, across, then a twig that rises or hooks down
-  const tips: Array<[number, number, number]> = [];
-  for (let i = 0; i < 4; i++) {
-    const [dx, dz] = D[i], yb = Math.round(T * (0.36 + i * 0.08)), L1 = Math.round(T * (0.13 + hash(s, i, 7) * 0.1)) + ur, V1 = Math.round(T * (0.08 + hash(s, i, 8) * 0.1));
-    const lw = tr >= 3 ? 1 : 0, ex = ux + dx * L1, ez = uz + dz * L1;
-    limb(w, ux, uz, ex, ez, yb, 1 + lw, lw, bark);
+  // limbs: out, up, across, then a twig that rises or hooks down; the third one is snapped off short
+  const tips: Array<[number, number, number]> = [], perches: Array<[number, number, number, number, number]> = [];
+  const nL = h >= 5.5 ? 5 : 4;
+  for (let i = 0; i < nL; i++) {
+    const [dx, dz] = D[i % 4], low = i < 2, ox = low ? mx0 : ux, oz = low ? mz0 : uz, r0 = low ? ur : vr;
+    const yb = Math.round(T * (0.34 + i * 0.075)), L1 = Math.round(T * (0.14 + hash(s, i, 7) * 0.12)) + r0, V1 = Math.round(T * (0.07 + hash(s, i, 8) * 0.1));
+    const lw = tr >= 3 && low ? 1 : 0, ex = ox + dx * L1, ez = oz + dz * L1;
+    if (i === 2) {   // a snapped limb: a thick stub with a ragged end of two lengths
+      const sx = ox + dx * Math.round(L1 * 0.45), sz = oz + dz * Math.round(L1 * 0.45);
+      limb(w, ox, oz, sx, sz, yb, 2, 1, bark); limb(w, sx, sz, sx + dx * 2, sz + dz * 2, yb + 1, 1, 0, dark);
+      continue;
+    }
+    limb(w, ox, oz, ex, ez, yb, 1 + lw, lw, bark);
     limb(w, ex, ez, ex, ez, yb, V1, lw, bark);
-    const [px, pz] = hash(s, i, 9) < 0.5 ? [-dz, dx] : [dz, -dx], L2 = 5 + Math.floor(hash(s, i, 10) * 6), yt = yb + V1, bx = ex + px * L2, bz = ez + pz * L2, fx = bx + dx * 3, fz = bz + dz * 3;
+    const [px, pz] = hash(s, i, 9) < 0.5 ? [-dz, dx] : [dz, -dx], L2 = 6 + Math.floor(hash(s, i, 10) * 7), yt = yb + V1, bx = ex + px * L2, bz = ez + pz * L2, fx = bx + dx * 4, fz = bz + dz * 4;
     limb(w, ex, ez, bx, bz, yt - 1, 1, 0, bark);
     limb(w, bx, bz, fx, fz, yt, 0, 0, dark);
-    if (hash(s, i, 11) < 0.55) limb(w, fx, fz, fx, fz, yt + 1, 4 + Math.floor(hash(s, i, 12) * 4), 0, dark);
-    else limb(w, fx, fz, fx, fz, yt - 4, 3, 0, dark);
+    if (hash(s, i, 11) < 0.5) limb(w, fx, fz, fx, fz, yt + 1, 4 + Math.floor(hash(s, i, 12) * 5), 0, dark);
+    else { limb(w, fx, fz, fx, fz, yt - 5, 4, 0, dark); limb(w, fx, fz, fx + dx * 2, fz + dz * 2, yt - 5, 0, 0, dark); }
     // side twigs off the first run: one rising, one reaching out and up
-    const mx = ux + dx * Math.round(L1 * 0.55), mz = uz + dz * Math.round(L1 * 0.55), qx = mx - px * 4, qz = mz - pz * 4;
-    limb(w, mx, mz, mx, mz, yb + 2 + lw, 4 + Math.floor(hash(s, i, 13) * 4), 0, dark);
-    if (hash(s, i, 16) < 0.6) { limb(w, mx, mz, qx, qz, yb + 1, 0, 0, dark); limb(w, qx, qz, qx, qz, yb + 2, 3, 0, dark); }
+    const mx = ox + dx * Math.round(L1 * 0.55), mz = oz + dz * Math.round(L1 * 0.55), q2x = mx - px * 5, q2z = mz - pz * 5;
+    limb(w, mx, mz, mx, mz, yb + 2 + lw, 4 + Math.floor(hash(s, i, 13) * 5), 0, dark);
+    if (hash(s, i, 16) < 0.7) { limb(w, mx, mz, q2x, q2z, yb + 1, 0, 0, dark); limb(w, q2x, q2z, q2x, q2z, yb + 2, 4, 0, dark); }
     tips.push([fx, yt, fz]);
-    if (hash(s, i, 14) < mossK) p.hangs.push({ kind: 'moss', x: (ux + dx * L1 * 0.75 + 0.5) * CELL, y: yb * CELL, z: (uz + dz * L1 * 0.75 + 0.5) * CELL, ry: dx ? 0 : Math.PI / 2, s: 0.34 + hash(s, i, 15) * 0.24, tint: mossTint });
+    perches.push([(ex + bx) / 2, yt, (ez + bz) / 2, dx, dz]);
+    if (hash(s, i, 14) < hangK) p.hangs.push({ kind: hk, x: (ox + dx * L1 * 0.75 + 0.5) * CELL, y: yb * CELL, z: (oz + dz * L1 * 0.75 + 0.5) * CELL, ry: dx ? 0 : Math.PI / 2, s: (hk === 'moss' ? 0.34 : 0.3) + hash(s, i, 15) * 0.24, tint: hk === 'moss' ? 0x9aa890 : 0xc8c0b8 });
   }
+  // a crow on the across-run of one limb
+  if (perches.length && hash(s, 61) < (o.crow ?? 0.3)) { const [cx, cy, cz] = perches[Math.floor(hash(s, 62) * perches.length)]; crowAt(p, (cx + 0.5) * CELL, (cy + 1) * CELL, (cz + 0.5) * CELL, s); }
   if (o.leaves != null) for (const [tx, ty, tz] of tips) {
     plus(w, tx, tz, 4, 4, 3, ty, ty + 4, o.leaves, { top: o.leavesTop ?? tone(o.leaves, 1.2), band: 1, skin: 'leaf', drip: true });
   }
 }
+/** a crow card standing on (x, y, z) (metres), facing left or right of the camera, a little turned */
+function crowAt(p: Plot, x: number, y: number, z: number, s: number, sc = 0.95) {
+  p.hangs.push({ kind: 'crow', x, y: y + 4 * CELL * sc, z, ry: (hash(s, 63) < 0.5 ? 0 : Math.PI) + (hash(s, 64) - 0.5) * 0.6, s: sc });
+}
+/** perch a crow somewhere (metres; y = what it stands on). Scenes may use it on gravestones, roof ridges, fences. */
+export function crow(w: W, x: number, y: number, z: number, seed = 1) { crowAt(plot(w), x, y, z, seed); }
+
+/**
+ * A snag: a dead trunk broken off at some height — a stepped flare, a trunk with a ragged top of three columns of different
+ * heights (a jagged break in wide steps), a stub limb or two, and often a crow on the break.
+ */
+export function snag(w: W, x: number, z: number, h: number, bark: number, dark: number, o: { seed?: number; crow?: number } = {}) {
+  const X = M(x), Z = M(z), T = M(h), s = o.seed ?? 1, tr = h >= 3 ? 3 : 2, p = plot(w);
+  flare(w, X, Z, tr, bark, dark, s, 3, 4);
+  trunk(w, X, Z, tr, 2, T - 6, bark, dark);
+  // the break: three columns of the trunk carried on to different heights, the heart dark
+  const D = dirs(s + 3), [ax, az] = D[0], [bx, bz] = D[1];
+  mass(w, X - tr, T - 5, Z - tr, X + tr, T - 4, Z + tr, dark, { top: tone(dark, 0.7) });
+  limb(w, X + ax * (tr - 1), Z + az * (tr - 1), X + ax * (tr - 1), Z + az * (tr - 1), T - 5, 9, 1, bark);
+  limb(w, X + bx * (tr - 1), Z + bz * (tr - 1), X + bx * (tr - 1), Z + bz * (tr - 1), T - 5, 4, 1, bark);
+  limb(w, X - ax * (tr - 1), Z - az * (tr - 1), X - ax * (tr - 1), Z - az * (tr - 1), T - 5, 2, 1, bark);
+  // a stub limb
+  const [cx, cz] = D[2], yb = Math.round(T * 0.55);
+  limb(w, X, Z, X + cx * (tr + 5), Z + cz * (tr + 5), yb, 2, 1, bark); limb(w, X + cx * (tr + 5), Z + cz * (tr + 5), X + cx * (tr + 5), Z + cz * (tr + 5), yb + 2, 4, 0, dark);
+  if (hash(s, 71) < (o.crow ?? 0.45)) crowAt(p, (X + ax * (tr - 1) + 0.5) * CELL, (T + 5) * CELL, (Z + az * (tr - 1) + 0.5) * CELL, s);
+}
 
 /** the haunted dead trees of the woods: grey, moonlit bark (the scene's own dead trees pass their own colours) */
-export const DEAD = { bark: 0x4e464a, dark: 0x332c30 };
-export const OAK = { bark: 0x3c3230, dark: 0x262022, leaf: 0x22392c, leafTop: 0x35583a };
+export const DEAD = { bark: 0x4c484e, dark: 0x302c32 };
+export const OAK = { bark: 0x3a3432, dark: 0x262224, leaf: 0x2c3830, leafTop: 0x46544a };
 /**
  * An old broadleaf oak: a massive trunk on a three-tier root flare with long roots, thick limbs bent at right angles, and a crown of
  * five to seven leaf clumps of different sizes on three levels — one on top, a ring around it, small ones low on the limbs — each a
@@ -217,7 +258,7 @@ export function oak(w: W, x: number, z: number, h: number, o: { seed?: number; b
     for (const [dx, dz] of DIR4) {
       if (hash(s, i, dx * 5 + dz + 31) > vk * 0.5) continue;
       const u = Math.round((hash(s, i, dx * 7 + dz + 33) - 0.5) * 1.6 * k), hx = dx ? ccx + dx * (ax + 1) : ccx + u, hz = dz ? ccz + dz * (az + 1) : ccz + u;
-      p.hangs.push({ kind: hash(s, i, dx + dz * 3 + 35) < 0.65 ? 'vine' : 'moss', x: (hx + 0.5) * CELL, y: (y0 + 1) * CELL, z: (hz + 0.5) * CELL, ry: dz > 0 ? 0 : dz < 0 ? Math.PI : dx > 0 ? Math.PI / 2 : -Math.PI / 2, s: 0.4 + hash(s, i, dx + 37) * 0.35, tint: 0xc8d8b8 });
+      p.hangs.push({ kind: 'moss', x: (hx + 0.5) * CELL, y: (y0 + 1) * CELL, z: (hz + 0.5) * CELL, ry: dz > 0 ? 0 : dz < 0 ? Math.PI : dx > 0 ? Math.PI / 2 : -Math.PI / 2, s: 0.4 + hash(s, i, dx + 37) * 0.35, tint: 0xb8c0b0 });
     }
   });
 }
@@ -336,15 +377,15 @@ export function buildFlora(c: Ctx) {
   c.add(mesh);
 }
 /** leaf skin tints relative to their mass colours (the texture is painted pale; the leaves sit a little above their dark core) */
-export const SKIN_K = { top: 1.6, side: 1.15, drip: 1.2 };
+export const SKIN_K = { top: 1.45, side: 1.1, drip: 1.15 };
 
 // ------------------------------------------------------------------ the wall of woods around a stage
-/** the woods' own foliage: blue-green spruce, deep pine, olive and moss oaks, and a rare sickly one (the haunted note) */
+/** the woods' own foliage, drained by the endless night: blue-grey spruce, slate pine, olive-grey oaks, and a rare rust-brown one */
 export const LEAVES = {
-  pine: [[0x26503f, 0x3e7a5a], [0x22483e, 0x3a6c58], [0x2c5038, 0x48784c]] as Array<[number, number]>,
-  oak: [[0x2c4a2e, 0x46723f], [0x263f30, 0x3c644a], [0x2e4a2a, 0x4c7438], [0x46462a, 0x6a6a3c]] as Array<[number, number]>,
+  pine: [[0x283c40, 0x40585e], [0x26363e, 0x3a5058], [0x2e3c38, 0x485852]] as Array<[number, number]>,
+  oak: [[0x363e32, 0x545e4a], [0x2c3834, 0x46564e], [0x3a3c30, 0x5a5c46], [0x463e2e, 0x6a5c42]] as Array<[number, number]>,
 };
-type Kind = 'pine' | 'oak' | 'dead' | 'bush' | 'lean' | 'corner';
+type Kind = 'pine' | 'oak' | 'dead' | 'snag' | 'bush' | 'lean' | 'corner';
 interface Spot { x: number; z: number; h: number; kind: Kind; inner: boolean; reach?: [number, number] }
 
 /**
@@ -390,9 +431,10 @@ function ringSpots(seed: number): Spot[] {
   let prev: Kind = 'bush';
   for (let i = 0; i < out.length; i++) {
     const sp = out[i]; if (sp.kind !== 'pine') { prev = sp.kind; continue; }
+    // Duskwood: the dead outnumber the living
     const r = hash(i, seed, 7), far = sp.z < -14.5 || Math.abs(sp.x) > 11.5;
-    let k: Kind = far ? (r < 0.8 ? 'pine' : 'oak') : r < 0.44 ? 'pine' : r < 0.74 ? 'oak' : 'dead';
-    if (k === prev && k !== 'pine') k = 'pine'; else if (k === prev) k = r < 0.6 ? 'oak' : 'dead';
+    let k: Kind = far ? (r < 0.55 ? 'pine' : r < 0.88 ? 'dead' : 'oak') : r < 0.48 ? 'dead' : r < 0.74 ? 'pine' : r < 0.86 ? 'oak' : 'snag';
+    if (k === prev && k !== 'dead') k = 'dead'; else if (k === prev) k = r < 0.5 ? 'pine' : 'snag';
     sp.kind = k; prev = k;
   }
   return out;
@@ -415,7 +457,7 @@ function plantRing(w: W, seed: number, dense: number, o: RingOpt) {
     if (sp.x > PLAY.x0 - 1 && sp.x < PLAY.x1 + 1 && sp.z > PLAY.z0 - 1 && sp.z < PLAY.z1 + 1.4) continue;
     const X = M(sp.x), Z = M(sp.z);
     if (inArea(sp.x, sp.z) && !w.has(X, -1, Z)) continue;                 // water or a hole
-    const foot = sp.kind === 'bush' ? M(sp.h + 0.1) : 9, crownR = sp.kind === 'bush' ? 0 : M(sp.kind === 'pine' ? sp.h * 0.18 : sp.kind === 'dead' ? sp.h * 0.22 : sp.h * 0.3);
+    const foot = sp.kind === 'bush' ? M(sp.h + 0.1) : 9, crownR = sp.kind === 'bush' || sp.kind === 'snag' ? 0 : M(sp.kind === 'pine' ? sp.h * 0.18 : sp.kind === 'dead' ? sp.h * 0.26 : sp.h * 0.3);
     if (blocked(X - foot, 1, Z - foot, X + foot, M(sp.kind === 'bush' ? 0.9 : 2.6), Z + foot)) continue;
     if (crownR) {
       const cx = X + M(sp.reach?.[0] ?? 0), cz = Z + M(sp.reach?.[1] ?? 0), lo = sp.kind === 'corner' || sp.kind === 'lean' ? M(1.8) : M(sp.h * 0.25);
@@ -446,7 +488,8 @@ function plantRing(w: W, seed: number, dense: number, o: RingOpt) {
   function plantOne(sp: Spot, s: number, back: boolean) {
     if (sp.kind === 'pine') { const [l, t] = pick2(LEAVES.pine, s, false); pine(w, sp.x, sp.z, sp.h, BARK_D, l, t, { seed: s, slim: 0.92 + hash(s, 3) * 0.2, base: back ? 0.12 + hash(s, 4) * 0.06 : 0.18 }); }
     else if (sp.kind === 'oak') { const [l, t] = pick2(LEAVES.oak, s, true); oak(w, sp.x, sp.z, sp.h * 0.92, { seed: s, leaf: l, leafTop: t, low: back ? 0.3 : 0.4, width: 0.95 + hash(s, 4) * 0.2 }); }
-    else if (sp.kind === 'dead') deadTree(w, sp.x, sp.z, sp.h * 0.8, DEAD.bark, DEAD.dark, { seed: s });
+    else if (sp.kind === 'dead') deadTree(w, sp.x, sp.z, sp.h * 0.82, DEAD.bark, DEAD.dark, { seed: s, crow: 0.22 });
+    else if (sp.kind === 'snag') snag(w, sp.x, sp.z, 2.4 + hash(s, 8) * 2.2, DEAD.bark, DEAD.dark, { seed: s });
     else if (sp.kind === 'lean' || sp.kind === 'corner') { const [l, t] = pick2(LEAVES.oak, s, false); oak(w, sp.x, sp.z, sp.h, { seed: s, leaf: tone(l, 0.85), leafTop: tone(t, 0.85), low: sp.kind === 'corner' ? 0.42 : 0.36, reach: sp.reach, width: 1.1, vines: 0.9 }); }
     else { const [l, t] = pick2(LEAVES.oak, s, false); bush(w, sp.x, sp.z, sp.h, { seed: s, leaf: l, leafTop: t }); }
   }

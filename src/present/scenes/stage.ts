@@ -52,8 +52,10 @@ function globals() {
   const key = new THREE.DirectionalLight(0xffd2a8, 0.9); key.position.set(5, 8, 10); scene.add(key);
   const skyMat = buildSky(), sky = scene.children.find(o => (o as THREE.Mesh).material === skyMat) as THREE.Mesh;
   const nt = noiseTex(), mist: THREE.Mesh[] = [];
+  // the ground mist thins out over the battle floor and thickens toward the edges (fog frames the stage without hazing the fight)
+  const clearCentre = canvasTex(64, 64, g => { const gr = g.createRadialGradient(32, 32 + 64 * (2 / 44), 0, 32, 32 + 64 * (2 / 44), 32); gr.addColorStop(0, '#404040'); gr.addColorStop(0.24, '#404040'); gr.addColorStop(0.55, '#ffffff'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
   for (let i = 0; i < 3; i++) {
-    const m = new THREE.MeshBasicMaterial({ map: nt.clone(), color: 0x5a5c8c, transparent: true, opacity: 0.08, depthWrite: false, fog: true });
+    const m = new THREE.MeshBasicMaterial({ map: nt.clone(), alphaMap: clearCentre, color: 0x5a5c8c, transparent: true, opacity: 0.08, depthWrite: false, fog: true });
     (m.map as THREE.Texture).wrapS = (m.map as THREE.Texture).wrapT = THREE.RepeatWrapping; (m.map as THREE.Texture).repeat.set(2 + i, 2 + i); (m.map as THREE.Texture).needsUpdate = true;
     const p = new THREE.Mesh(new THREE.PlaneGeometry(44, 44), m); p.rotation.x = -Math.PI / 2; p.position.set(0, 0.2 + i * 0.25, -2); p.renderOrder = 3; scene.add(p); mist.push(p);
   }

@@ -11,7 +11,7 @@ import { Cards, ambientTick, shaft, type Ambient } from './cards';
 import { onUpdate, camera } from '../engine/world';
 import { M, hash, AREA, PLAY, patches } from './props';
 import { CELL } from '../bestiary/kit';
-import { plot, plantRings, buildFlora, inFlora, tone, SKIN_K, LEAVES, DEAD, pine, deadTree, oak, bush, woodsRing } from './flora';
+import { plot, plantRings, buildFlora, inFlora, tone, SKIN_K, LEAVES, DEAD, pine, deadTree, snag, oak, bush, woodsRing } from './flora';
 import { showStage, type SceneDef } from './stage';
 import { NIGHT, BARK, BARK_D, PINE, PINE_T } from './common';
 
@@ -180,55 +180,58 @@ export function dress(c: Ctx, preset: Preset, o: DressOpt = {}) {
   if (o.leaves?.length) skinScene(c, new Set(o.leaves.filter(k => !floraCols(c.w).has(k))));
   for (const [x, z, yaw, tilt, sw] of o.shafts ?? []) c.shaft(x, z, { yaw, tilt, w: sw });
 
-  const G = [0xffffff, 0xe8f0d8, 0xd0dcc0, 0xf0f4e0], COLD = [0xb8c8d8, 0xa8b8c8, 0xc8d4dc], DRY = [0xe8d8a8, 0xd8c890, 0xc8b880];
-  /** flower colours: each colony takes one */
-  const BLOOM = { woods: [0xb89aff, 0xf4f0ff, 0xffd86a, 0x8ab4ff, 0xff8a7a], grave: [0xd8ccff, 0xf4f4ff, 0xb890ff], swamp: [0xf0f0d0, 0xd0b4ff, 0xffe08a] };
+  // Duskwood growth: grass gone to straw and grey-green, a few pale blooms at most, leaf litter, fallen twigs and toadstools at the
+  // feet of the dead trees; the living green is a cold, drained green
+  const G = [0xe0d494, 0xc8c8a0, 0xd8cc9c, 0xb4bca8], COLD = [0xb8c0c8, 0xa8b0b8, 0xc4c8c8], DRY = [0xe8d8a8, 0xd8c890, 0xc8b880], FERN = [0xc8d0b8, 0xb4bca8, 0xbcc4c0];
+  /** flower colours: each colony takes one — pale only, the night has drained the rest */
+  const BLOOM = { woods: [0xe8e8f4, 0xc8c0e0, 0xd8d8c8], grave: [0xe0dcf0, 0xf0f0f4, 0xc4bcd8], swamp: [0xe0e0cc, 0xc8c0d8] };
+  const FUNGI = [0xffffff, 0xe0d8d0, 0xc8c0c8];
   switch (preset) {
     case 'woods': case 'grove': {
-      const g = preset === 'grove' ? 1.3 : 1;
-      plant('grass', 520 * g, [0.55, 0.95], W.grass, { tints: G, cluster: 7, spread: 0.7 });
-      plant('tallgrass', 110 * g, [0.7, 1.1], W.tall, { tints: G, cluster: 5, spread: 0.55 });
-      plant('fern', 80 * g, [0.75, 1.15], W.fern, { tints: G, cluster: 4, spread: 0.6 });
-      plant('flowers', 70 * g, [0.55, 0.85], W.flower, { tints: BLOOM.woods, colony: true, cluster: 6, spread: 0.45 });
-      plant('sprig', 60, [0.6, 0.95], W.feet, { tints: G, cluster: 4, spread: 0.4 });
-      plant('weeds', 40, [0.7, 1.05], W.weed, { tints: DRY, cluster: 4 });
-      plant('bramble', 26, [0.9, 1.3], W.back, { cluster: 3 });
-      if (preset === 'grove') plant('bells', 34, [0.6, 0.9], W.feet, { tints: [0x9ab8ff, 0xd8c8ff, 0xf0f0ff], colony: true, cluster: 5, spread: 0.45 });
-      decal('clover', 14, [0.7, 1.1], W.open); decal('litter', 10, [0.5, 0.8], W.feet); decal('mossdecal', 8, [0.6, 1.0], W.feet); decal('pebbles', 10, [0.5, 0.8], W.any, { tints: [0x9a9a9a], inside: true });
-      c.ambient({ kind: 'fireflies', color: preset === 'grove' ? 0xd8ff7a : 0xe8ff9a, rate: preset === 'grove' ? 9 : 4 });
-      c.ambient({ kind: 'leaves', color: 0x9a6a3a, rate: 1.2 }); c.ambient({ kind: 'dust', color: 0xc8c8e8, rate: 2 });
+      const g = preset === 'grove' ? 1.2 : 1;
+      plant('grass', 380 * g, [0.55, 0.9], W.grass, { tints: G, cluster: 7, spread: 0.7 });
+      plant('tallgrass', 130 * g, [0.7, 1.1], W.tall, { tints: DRY, cluster: 5, spread: 0.55 });
+      plant('weeds', 70, [0.7, 1.05], W.weed, { tints: DRY, cluster: 4 });
+      plant('fern', 45 * g, [0.7, 1.05], W.fern, { tints: FERN, cluster: 3, spread: 0.55 });
+      plant('fungus', 46, [0.5, 0.85], W.feet, { tints: FUNGI, cluster: 4, spread: 0.35 });
+      plant('flowers', 10, [0.5, 0.75], W.feet, { tints: BLOOM.woods, colony: true, cluster: 4, spread: 0.3 });
+      plant('bramble', 30, [0.9, 1.3], W.back, { cluster: 3, tints: [0xa89a9a] });
+      decal('litter', 24, [0.55, 0.9], (p) => Math.max(p.near, 0.25)); decal('twigs', 16, [0.6, 1.0], W.feet);
+      c.ambient({ kind: 'fireflies', color: preset === 'grove' ? 0xc8f0d0 : 0xd8e8ff, rate: preset === 'grove' ? 3 : 1.2 });
+      c.ambient({ kind: 'leaves', color: 0x7a6a4e, rate: 1.8 }); c.ambient({ kind: 'dust', color: 0xb8c0e0, rate: 2.5 });
       break;
     }
     case 'grave': {
-      plant('grass', 420, [0.5, 0.85], W.grass, { tints: COLD, cluster: 7, spread: 0.7 });
-      plant('weeds', 90, [0.7, 1.1], W.feet, { tints: [0xc8c0b0, 0xa8a090], cluster: 4 });
-      plant('tallgrass', 50, [0.7, 1.0], W.tall, { tints: COLD, cluster: 4 });
-      plant('flowers', 30, [0.55, 0.8], W.feet, { tints: BLOOM.grave, colony: true, cluster: 4, spread: 0.35 });
-      plant('bramble', 30, [0.9, 1.3], W.back, { cluster: 3 });
-      decal('mossdecal', 6, [0.6, 1.0], W.feet, { tints: [0xc8d8c8] }); decal('bones', 3, [0.6, 0.8], W.weed); decal('crack', 5, [0.4, 0.6], W.feet);
-      c.ambient({ kind: 'fireflies', color: 0x7affc0, rate: 4 }); c.ambient({ kind: 'leaves', color: 0x7a5a3a, rate: 0.8 }); c.ambient({ kind: 'dust', color: 0xb8c8e8, rate: 2 });
+      plant('grass', 340, [0.5, 0.85], W.grass, { tints: COLD, cluster: 7, spread: 0.7 });
+      plant('weeds', 110, [0.7, 1.1], W.feet, { tints: [0xc8c0b0, 0xa8a090], cluster: 4 });
+      plant('tallgrass', 60, [0.7, 1.0], W.tall, { tints: DRY, cluster: 4 });
+      plant('fungus', 24, [0.45, 0.75], W.feet, { tints: FUNGI, cluster: 3, spread: 0.3 });
+      plant('flowers', 12, [0.5, 0.75], W.feet, { tints: BLOOM.grave, colony: true, cluster: 3, spread: 0.3 });
+      plant('bramble', 30, [0.9, 1.3], W.back, { cluster: 3, tints: [0xa89a9a] });
+      decal('bones', 4, [0.6, 0.8], W.weed); decal('litter', 14, [0.5, 0.85], W.feet); decal('twigs', 8, [0.6, 0.9], W.feet);
+      c.ambient({ kind: 'fireflies', color: 0x9affd0, rate: 2 }); c.ambient({ kind: 'leaves', color: 0x6a5a44, rate: 1.0 }); c.ambient({ kind: 'dust', color: 0xb8c8e8, rate: 2 });
       break;
     }
     case 'swamp': {
       reeds(80);
-      plant('tallgrass', 160, [0.7, 1.2], W.tall, { tints: [0xd8e0a8, 0xc8d098, 0xe8e8b8], cluster: 6 });
-      plant('weeds', 60, [0.8, 1.2], W.weed, { tints: [0xb8c088, 0xa8a878], cluster: 4 });
-      plant('grass', 220, [0.5, 0.8], W.grass, { tints: [0xd8e0a8, 0xc8d098], cluster: 6 });
-      plant('flowers', 24, [0.5, 0.75], W.feet, { tints: BLOOM.swamp, colony: true, cluster: 4, spread: 0.35 });
-      decal('puddle', 6, [0.5, 0.9], W.feet, { tints: [0xa8d0a0] }); decal('mossdecal', 8, [0.6, 1.0], W.open, { tints: [0xd8e0a8] });
-      hang(['moss'], 1.4, [0xb8c8a0], 1.6);
-      c.ambient({ kind: 'spores', color: 0x9aff7a, rate: 5 }); c.ambient({ kind: 'fireflies', color: 0x7affa0, rate: 3 });
+      plant('tallgrass', 160, [0.7, 1.2], W.tall, { tints: [0xc8c8a0, 0xb8bc98, 0xd0ccb0], cluster: 6 });
+      plant('weeds', 70, [0.8, 1.2], W.weed, { tints: [0xb0b088, 0xa0a07c], cluster: 4 });
+      plant('grass', 200, [0.5, 0.8], W.grass, { tints: [0xc8c8a0, 0xb8bca0], cluster: 6 });
+      plant('fungus', 24, [0.45, 0.75], W.feet, { tints: [0xd8e0c8, 0xc8c8b8], cluster: 3, spread: 0.3 });
+      decal('puddle', 6, [0.5, 0.9], W.feet, { tints: [0x98b8a8] }); decal('mossdecal', 8, [0.6, 1.0], W.open, { tints: [0xc0c8a8] }); decal('twigs', 6, [0.6, 0.9], W.feet);
+      hang(['moss'], 1.4, [0xb0b8a0], 1.6);
+      c.ambient({ kind: 'spores', color: 0x9aff9a, rate: 4 }); c.ambient({ kind: 'fireflies', color: 0x8affb0, rate: 2 });
       break;
     }
     case 'house': {
-      // weeds through the boards along the walls, growth outside the ruin, webs, dust in the window light
-      plant('weeds', 60, [0.6, 1.0], W.feet, { tints: DRY, cluster: 3, spread: 0.35 });
-      plant('grass', 200, [0.55, 0.9], (p, x, z) => (Math.abs(x) > 8.9 || z < -11.5 || z > 6.6 ? W.grass(p, x, z) : 0), { tints: G, cluster: 6, spread: 0.7 });
-      plant('tallgrass', 50, [0.7, 1.0], (p, x, z) => (Math.abs(x) > 8.9 || z > 6.6 ? Math.max(p.near, 0.4) : 0), { tints: G, cluster: 4 });
-      plant('sprig', 40, [0.55, 0.85], (p, x, z) => (Math.abs(x) > 8.9 || z < -11.5 || z > 6.6 ? p.near : 0), { tints: G, cluster: 4, spread: 0.4 });
-      hang(['vine', 'vine', 'moss'], 1.1, undefined, 1.8);
-      decal('crack', 5, [0.4, 0.65], W.feet); decal('litter', 5, [0.4, 0.6], W.feet, { tints: [0xd8c8a8] });
-      c.ambient({ kind: 'dust', color: 0xffe8c0, rate: 7, y: [0.3, 3.2] }); c.ambient({ kind: 'leaves', color: 0x8a6a3a, rate: 0.6 });
+      // weeds through the boards along the walls, growth outside the ruin, ivy and dead vines, leaves blown into the corners
+      plant('weeds', 70, [0.6, 1.0], W.feet, { tints: DRY, cluster: 3, spread: 0.35 });
+      plant('grass', 180, [0.55, 0.9], (p, x, z) => (Math.abs(x) > 8.9 || z < -11.5 || z > 6.6 ? W.grass(p, x, z) : 0), { tints: G, cluster: 6, spread: 0.7 });
+      plant('tallgrass', 50, [0.7, 1.0], (p, x, z) => (Math.abs(x) > 8.9 || z > 6.6 ? Math.max(p.near, 0.4) : 0), { tints: DRY, cluster: 4 });
+      plant('fungus', 16, [0.4, 0.65], W.feet, { tints: FUNGI, cluster: 3, spread: 0.25 });
+      hang(['vine', 'deadvine', 'moss'], 1.1, [0xc0c8b0, 0xd8d0c8, 0xb8c0a8], 1.8);
+      decal('crack', 5, [0.4, 0.65], W.feet); decal('litter', 10, [0.4, 0.65], W.feet); decal('twigs', 4, [0.5, 0.7], W.feet);
+      c.ambient({ kind: 'dust', color: 0xd8d8f0, rate: 7, y: [0.3, 3.2] }); c.ambient({ kind: 'leaves', color: 0x7a6a4e, rate: 0.8 });
       break;
     }
     case 'dungeon': {
@@ -306,7 +309,7 @@ const LAB: Record<string, SceneDef> = {
     build(c) {
       patches(c.w, AREA, [0x2e3a26, 0x34402a, 0x3a3428]);
       pine(c.w, -8, -3, 9, BARK_D, LEAVES.pine[0][0], LEAVES.pine[0][1], { seed: 3 }); pine(c.w, -3.6, -3, 6.5, BARK_D, PINE, PINE_T, { seed: 8 });
-      deadTree(c.w, 1, -3, 7, DEAD.bark, DEAD.dark, { seed: 4 }); oak(c.w, 6.4, -3, 8.5, { seed: 5, leaf: LEAVES.oak[0][0], leafTop: LEAVES.oak[0][1] });
+      deadTree(c.w, 1, -3, 7, DEAD.bark, DEAD.dark, { seed: 4, crow: 1 }); snag(c.w, 9.4, -2, 3.6, DEAD.bark, DEAD.dark, { seed: 2, crow: 1 }); oak(c.w, 6.4, -3, 8.5, { seed: 5, leaf: LEAVES.oak[0][0], leafTop: LEAVES.oak[0][1] });
       bush(c.w, -6, 4, 0.8, { seed: 1 }); bush(c.w, -3.4, 4.2, 0.55, { seed: 2, leaf: LEAVES.oak[2][0], leafTop: LEAVES.oak[2][1] }); bush(c.w, -1.2, 4, 0.45, { seed: 3, leaf: LEAVES.oak[1][0], leafTop: LEAVES.oak[1][1] });
       oak(c.w, 4.4, 5, 5.4, { seed: 11, low: 0.36, reach: [-1.3, 0], width: 1.1, leaf: 0x263f30, leafTop: 0x3c644a });
       dress(c, 'woods', { seed: 1 });
@@ -333,7 +336,7 @@ const LAB: Record<string, SceneDef> = {
   },
 };
 /** card kinds added later, shown in the card lab too */
-const LAB_EXTRA = { stand: ['bells', 'sprig'], wall: ['roots'], decal: ['clover'] };
+const LAB_EXTRA = { stand: ['bells', 'sprig', 'fungus'], wall: ['roots', 'deadvine'], decal: ['clover', 'twigs'] };
 /** the lab's ambience without a preset's scatter */
 function dressWorldless(c: Ctx) { c.ambient({ kind: 'fireflies', color: 0xe8ff9a, rate: 2 }); }
 if (typeof window !== 'undefined') {
