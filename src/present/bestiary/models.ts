@@ -83,12 +83,11 @@ function mage(): V {
   // face: bushy white brows over glowing arcane eyes, a long nose
   eyes(v, A, { y: 4, w: 2, h: 1, gap: 2, style: 'glow', glow: ARC });
   v.part('head').symBox(1, A.headY0 + 5, A.faceZ, 3, A.headY0 + 5, A.faceZ + 1, WHITE).box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 4, A.faceZ + 1, SKD);
-  // the hood: up over the head, a point falling back, silver hem framing the face
-  v.part('hat').box(-5, A.headY0 + 2, -5, 4, A.headY1 + 2, -4, ROBE_D).box(-5, A.headY0 + 2, -4, -5, A.headY1 + 2, A.faceZ, ROBE_D).box(4, A.headY0 + 2, -4, 4, A.headY1 + 2, A.faceZ, ROBE_D)
-    .box(-5, A.headY1 + 1, -4, 4, A.headY1 + 2, A.faceZ, ROBE_D).box(-2, A.headY1 + 3, -5, 1, A.headY1 + 4, -2, ROBE_D).box(-1, A.headY1 + 3, -7, 0, A.headY1 + 3, -6, ROBE_D)
-    .box(-5, A.headY1 + 2, A.faceZ, 4, A.headY1 + 2, A.faceZ, SIL).box(-5, A.headY0 + 2, A.faceZ, -5, A.headY1 + 2, A.faceZ, SIL).box(4, A.headY0 + 2, A.faceZ, 4, A.headY1 + 2, A.faceZ, SIL);
-  // white hair from under the hood
-  v.part('head').box(-4, A.headY0 - 3, A.faceZ - 1, -4, A.headY0 + 3, A.faceZ, WHITE).box(3, A.headY0 - 3, A.faceZ - 1, 3, A.headY0 + 3, A.faceZ, WHITE);
+  // long white hair: a full crown parted in the middle, falling past the shoulders and down the back; a thin silver circlet
+  v.part('hat').box(-5, A.headY1 - 1, -5, 4, A.headY1 + 1, A.faceZ - 1, WHITE).box(-4, A.headY1 + 1, -4, 3, A.headY1 + 1, A.faceZ - 2, 0xe0e4ec).box(-1, A.headY1 + 1, -4, 0, A.headY1 + 1, A.faceZ - 1, 0xc8ccd8)
+    .box(-5, A.headY1 - 2, -5, 4, A.headY1 - 2, A.faceZ, SIL).box(-1, A.headY1 - 3, A.faceZ, 0, A.headY1 - 2, A.faceZ, ARC, 1);
+  v.part('head').box(-5, A.headY0 - 9, -5, 4, A.headY1, -4, WHITE).box(-5, A.headY0 - 6, -4, -5, A.headY1, A.faceZ - 2, WHITE).box(4, A.headY0 - 6, -4, 4, A.headY1, A.faceZ - 2, WHITE)
+    .box(-6, A.headY0 - 6, -2, -6, A.headY0 + 2, A.faceZ - 3, 0xe0e4ec).box(5, A.headY0 - 6, -2, 5, A.headY0 + 2, A.faceZ - 3, 0xe0e4ec).box(-4, A.headY0 - 11, -5, 3, A.headY0 - 10, -5, 0xe0e4ec);
   // a long white beard down to the belt, in two tiers
   v.part('jaw').box(-3, A.headY0 - 1, A.faceZ, 2, A.headY0 + 2, A.faceZ + 1, WHITE).box(-3, A.headY0 - 6, A.faceZ, 2, A.headY0 - 2, A.faceZ + 1, WHITE)
     .box(-2, A.headY0 - 11, A.faceZ, 1, A.headY0 - 7, A.faceZ + 1, WHITE).box(-1, A.headY0 - 12, A.faceZ, 0, A.headY0 - 12, A.faceZ, 0xc8ccd8).box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 2, A.faceZ + 1, 0x8a6a5a);
@@ -116,10 +115,10 @@ function rogue(): V {
   v.part('shL').box(5, A.shoulderY - 1, -2, 8, A.shoulderY, 1, GI_L).box(5, A.shoulderY, -2, 8, A.shoulderY, 1, GREEN_D);
   // head: mask over the lower face, glowing elven eyes, long ears swept back, a hood-wrap with long tails, silver top-knot
   eyes(v, A, { y: 4, w: 2, h: 1, gap: 2, style: 'glow', glow: EYE, brow: SKD });
-  v.part('head').box(-4, A.headY0, A.faceZ, 3, A.headY0 + 3, A.faceZ, GI).box(-4, A.headY0 + 6, A.faceZ, 3, A.headY1, A.faceZ, GI).box(-5, A.headY0 + 6, -5, 4, A.headY1, A.faceZ - 1, GI)
-    .box(-4, A.headY0 + 6, A.faceZ, 3, A.headY0 + 6, A.faceZ, GREEN)
-    .box(-7, A.headY0 + 4, -2, -5, A.headY0 + 5, 0, SK).box(-9, A.headY0 + 6, -4, -8, A.headY0 + 6, -2, SK).box(4, A.headY0 + 4, -2, 6, A.headY0 + 5, 0, SK).box(7, A.headY0 + 6, -4, 8, A.headY0 + 6, -2, SK);
-  v.part('hat').box(-1, A.headY1 + 1, -3, 0, A.headY1 + 3, -2, SILV).box(-1, A.headY1 + 4, -2, 0, A.headY1 + 4, -2, SILV);
+  v.part('head').box(-5, A.headY0 - 1, -5, 4, A.headY1 + 1, A.faceZ - 1, GI).box(-4, A.headY1 + 2, -4, 3, A.headY1 + 2, A.faceZ - 2, GI).box(-2, A.headY1 + 3, -5, 1, A.headY1 + 3, -3, GI_L)
+    .box(-5, A.headY0 - 1, A.faceZ, 4, A.headY0 + 3, A.faceZ, GI).box(-5, A.headY0 + 6, A.faceZ, 4, A.headY1 + 1, A.faceZ, GI).box(-5, A.headY0 + 4, A.faceZ, -5, A.headY0 + 5, A.faceZ, GI).box(4, A.headY0 + 4, A.faceZ, 4, A.headY0 + 5, A.faceZ, GI)
+    .box(-5, A.headY0 + 6, A.faceZ, 4, A.headY0 + 6, A.faceZ, GREEN).box(-5, A.headY0 - 1, -5, 4, A.headY0 - 1, A.faceZ, GREEN_D)
+    .box(-8, A.headY0 + 4, -2, -6, A.headY0 + 5, 0, SK).box(-10, A.headY0 + 6, -4, -9, A.headY0 + 6, -2, SK).box(5, A.headY0 + 4, -2, 7, A.headY0 + 5, 0, SK).box(8, A.headY0 + 6, -4, 9, A.headY0 + 6, -2, SK);
   v.part('cape').box(-1, A.torsoY1 - 4, -4, 0, A.torsoY1 + 4, -4, GREEN).box(1, A.torsoY1 - 2, -5, 2, A.torsoY1 + 4, -5, GREEN_D).box(-1, A.torsoY1 - 9, -5, 0, A.torsoY1 - 5, -5, GREEN);
   // twin short blades, reverse grip, a green-wrapped hilt
   sword(v, A, { len: 8, blade: 0xe6f0f6, guard: 0x16161c, grip: GREEN_D });
@@ -430,20 +429,41 @@ function covenMatriarch(): V {
 }
 
 function treeKing(): V {
-  const v = newChar(), BK = 0x5e4430, BD = 0x3a2a1c, MOSS = P.MOSS, LEAF = 0x2e6a2a, LEAF_L = 0x5a9a3a, GOLDL = 0xe8b830;
-  const A = biped(v, { skin: BK, legs: BD, hips: BK, torso: BK, belt: null, legH: 16, legW: 8, legD: 10, legGap: 2, hipH: 5, torsoH: 20, torsoW: 26, chestW: 30, torsoD: 20, headW: 16, headH: 14, headD: 14, headZ: 3, armW: 8, upper: 11, fore: 11, hand: 8, round: 3 });
-  v.paint(c => c.c === BK && (((c.x + 64) % 8) === 0) ? BD : null);
-  for (const [x, y] of [[-8, 5], [6, 12], [-1, 16]]) v.part(y > 10 ? 'chest' : 'spine').box(x, A.torsoY0 + y, A.torsoD / 2 - 1, x + 1, A.torsoY0 + y + 1, A.torsoD / 2 - 1, GOLDL, 1);
-  v.part('head').symBox(2, A.headY0 + 7, A.faceZ, 5, A.headY0 + 9, A.faceZ, P.DARK).symBox(2, A.headY0 + 7, A.faceZ, 4, A.headY0 + 8, A.faceZ, 0x7aff6a, 1)
-    .symBox(1, A.headY0 + 10, A.faceZ, 7, A.headY0 + 11, A.faceZ + 2, BD).box(-1, A.headY0 + 5, A.faceZ + 1, 0, A.headY0 + 8, A.faceZ + 2, BK).box(-4, A.headY0 + 2, A.faceZ, 3, A.headY0 + 3, A.faceZ, P.DARK);
-  // a broad moss beard in three hanging blocks
-  v.part('jaw').box(-7, A.headY0 - 5, A.faceZ - 1, -3, A.headY0 + 1, A.faceZ, MOSS).box(-2, A.headY0 - 7, A.faceZ - 1, 1, A.headY0 + 1, A.faceZ, P.MOSS_D).box(2, A.headY0 - 5, A.faceZ - 1, 6, A.headY0 + 1, A.faceZ, MOSS);
-  // the canopy crown: straight boughs carrying big leaf blocks, a few golden leaves
-  v.part('hat').box(-7, A.headY1 + 1, -1, -5, A.headY1 + 9, 1, BD).box(4, A.headY1 + 1, -2, 6, A.headY1 + 11, 0, BD).box(-1, A.headY1 + 1, 1, 0, A.headY1 + 13, 2, BD);
-  bush(v, -18, A.headY1 + 8, -6, 14, 7, 12, LEAF, LEAF_L); bush(v, 3, A.headY1 + 10, -7, 15, 7, 12, LEAF, LEAF_L); bush(v, -7, A.headY1 + 14, -5, 14, 6, 11, LEAF, LEAF_L);
-  v.box(-12, A.headY1 + 14, 5, -11, A.headY1 + 14, 5, GOLDL).box(9, A.headY1 + 16, 4, 10, A.headY1 + 16, 4, GOLDL).box(-1, A.headY1 + 19, 3, 0, A.headY1 + 19, 3, GOLDL);
-  for (const [s2, x0] of [['handL', 15], ['handR', -23]] as Array<[string, number]>) { v.part(s2); for (let i = 0; i < 3; i++) v.box(x0 + i * 3 + 1, A.handY - 5 + (i === 1 ? 0 : 2), -1, x0 + i * 3 + 2, A.handY - 1, 0, BD); }
-  v.paint(c => (!v.get(c.x, c.y + 1, c.z) && c.c === BK && c.y < A.headY0 && (c.part === 'shL' || c.part === 'shR' || c.part === 'chest' || c.part === 'armL' || c.part === 'armR')) ? MOSS : null);
+  // 远古树王 — an ancient tree rotted from within: black-violet dead wood split by glowing corruption, a crown of withered maroon
+  // leaves and dead boughs hung with grey moss, a cavernous maw of long splinter fangs lit from inside, burning sockets, thorned arms,
+  // skulls of the lost tangled in its roots
+  const v = newChar(), BK = 0x3a3036, BD = 0x231d22, BL = 0x52464a, ROT = 0xb04aff, EYE = 0xd8ff3a, MAW = 0x9aff4a, LEAF = 0x4a2234, LEAF_T = 0x6a2e40, MOSS = 0x6e7466;
+  const A = biped(v, { skin: BK, legs: BD, hips: BK, torso: BK, belt: null, legH: 16, legW: 8, legD: 10, legGap: 2, hipH: 5, torsoH: 20, torsoW: 26, chestW: 30, torsoD: 20, headW: 16, headH: 14, headD: 14, headZ: 2, armW: 7, upper: 12, fore: 12, hand: 7, round: 2 });
+  // splits of glowing rot climbing the trunk, a few pale dead-wood strips
+  v.paint(c => c.c === BK && (((c.x + 64) % 9) === 0) ? BD : null);
+  for (const [x, y0, y1] of [[-8, 2, 14], [-3, 8, 19], [5, 0, 12], [9, 6, 17]] as const) v.part(y0 > 9 ? 'chest' : 'spine').box(x, A.torsoY0 + y0, A.torsoD / 2 - 1, x, A.torsoY0 + Math.min(y1, y0 > 9 ? 19 : 9), A.torsoD / 2 - 1, ROT, 1);
+  v.part('chest').box(-6, A.torsoY0 + 11, A.torsoD / 2 - 1, -6, A.torsoY1, A.torsoD / 2 - 1, ROT, 1).box(-12, A.torsoY0 + 13, 8, -12, A.torsoY1, 9, BL);
+  // face: a heavy cracked brow, deep sockets burning toxic yellow, a cavernous maw with long splinter fangs, glowing within
+  v.part('head').symBox(2, A.headY0 + 8, A.faceZ, 6, A.headY0 + 10, A.faceZ, P.DARK).symBox(3, A.headY0 + 9, A.faceZ, 4, A.headY0 + 9, A.faceZ, EYE, 1)
+    .symBox(1, A.headY0 + 11, A.faceZ + 1, 7, A.headY0 + 12, A.faceZ + 2, BD).box(-1, A.headY0 + 10, A.faceZ + 1, 0, A.headY0 + 11, A.faceZ + 2, BD)
+    .box(-6, A.headY0 + 1, A.faceZ, 5, A.headY0 + 6, A.faceZ, P.DARK).box(-4, A.headY0 + 2, A.faceZ - 1, 3, A.headY0 + 5, A.faceZ - 1, MAW, 1);
+  for (const x of [-6, -3, 1, 4]) v.part('head').box(x, A.headY0 + 4, A.faceZ, x + 1, A.headY0 + 6, A.faceZ, BL);
+  for (const x of [-5, -1, 3]) v.part('head').box(x, A.headY0 + 1, A.faceZ, x, A.headY0 + 3, A.faceZ, BL);
+  // lower jaw hanging open with fangs and a beard of dead moss
+  v.part('jaw').box(-6, A.headY0 - 3, A.faceZ - 4, 5, A.headY0, A.faceZ, BK).box(-5, A.headY0, A.faceZ, -5, A.headY0 + 2, A.faceZ, BL).box(4, A.headY0, A.faceZ, 4, A.headY0 + 2, A.faceZ, BL).box(0, A.headY0, A.faceZ, 0, A.headY0 + 1, A.faceZ, BL)
+    .box(-7, A.headY0 - 9, A.faceZ - 1, -4, A.headY0 - 4, A.faceZ, MOSS).box(-1, A.headY0 - 11, A.faceZ - 1, 0, A.headY0 - 4, A.faceZ, MOSS).box(3, A.headY0 - 8, A.faceZ - 1, 6, A.headY0 - 4, A.faceZ, MOSS);
+  // the crown: dead boughs (straight runs), withered maroon leaf blocks, grey moss hanging, a few glowing rot-fungus caps
+  v.part('hat').box(-8, A.headY1 + 1, -1, -6, A.headY1 + 10, 1, BD).box(-12, A.headY1 + 10, -1, -6, A.headY1 + 11, 1, BD).box(5, A.headY1 + 1, -2, 7, A.headY1 + 12, 0, BD).box(7, A.headY1 + 12, -2, 12, A.headY1 + 13, 0, BD)
+    .box(-1, A.headY1 + 1, 2, 0, A.headY1 + 15, 3, BD).box(-4, A.headY1 + 15, 2, 0, A.headY1 + 16, 3, BD);
+  bush(v, -20, A.headY1 + 9, -5, 12, 6, 10, LEAF, LEAF_T); bush(v, 8, A.headY1 + 11, -6, 13, 6, 10, LEAF, LEAF_T); bush(v, -7, A.headY1 + 15, -4, 11, 5, 9, LEAF, LEAF_T);
+  v.box(-18, A.headY1 + 3, 4, -18, A.headY1 + 9, 4, MOSS).box(13, A.headY1 + 5, 3, 13, A.headY1 + 11, 3, MOSS).box(-3, A.headY1 + 9, 6, -3, A.headY1 + 15, 6, MOSS);
+  v.box(-14, A.headY1 + 15, 5, -13, A.headY1 + 16, 6, ROT, 1).box(15, A.headY1 + 17, 4, 16, A.headY1 + 18, 5, ROT, 1);
+  // thorned branch arms ending in long claw-twigs
+  for (const [arm, fore, hand, sx] of [['armL', 'foreL', 'handL', 1], ['armR', 'foreR', 'handR', -1]] as Array<[string, string, string, number]>) {
+    const x0 = sx > 0 ? A.chestW / 2 : -A.chestW / 2 - 7, xo = sx > 0 ? x0 + 7 : x0 - 1;
+    v.part(arm).box(xo, A.shoulderY - 6, 0, xo, A.shoulderY - 5, 1, BD).box(xo, A.shoulderY - 10, -2, xo, A.shoulderY - 9, -1, BD);
+    v.part(fore).box(xo, A.handY + 9, 1, xo, A.handY + 10, 2, BD);
+    v.part(hand); for (let i = 0; i < 4; i++) v.box(x0 + i * 2, A.handY - 7 + (i === 1 || i === 2 ? 0 : 2), -1 + (i & 1) * 2, x0 + i * 2, A.handY - 1, -1 + (i & 1) * 2, BD);
+  }
+  // shoulders of rotten wood, and the skulls of the lost in its roots
+  v.part('shL').box(15, A.shoulderY, -6, 21, A.shoulderY + 3, 4, BD).box(17, A.shoulderY + 4, -2, 18, A.shoulderY + 7, -1, BD);
+  v.part('shR').box(-22, A.shoulderY, -6, -16, A.shoulderY + 3, 4, BD).box(-19, A.shoulderY + 4, -3, -18, A.shoulderY + 8, -2, BD);
+  for (const [f, x] of [['footL', 4], ['footR', -9]] as Array<[string, number]>) v.part(f).box(x, 2, 5, x + 3, 4, 7, P.BONE).box(x + 1, 3, 7, x + 1, 3, 7, P.DARK).box(x + 2, 3, 7, x + 2, 3, 7, P.DARK);
   return v;
 }
 
