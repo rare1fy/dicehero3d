@@ -118,6 +118,123 @@
   },
   "assets": {},
   "screens": {
+    "plates": {
+      "attach": "viewport",
+      "visible": true,
+      "z": 5,
+      "children": [
+        {
+          "id": "enemy_plate",
+          "type": "world",
+          "name": "敌人信息牌",
+          "pivot": [
+            0.5,
+            1
+          ],
+          "x": 0,
+          "y": -2,
+          "clamp": 4,
+          "preview": [
+            50,
+            30
+          ],
+          "layout": {
+            "dir": "column",
+            "gap": 1,
+            "align": "center"
+          },
+          "children": [
+            {
+              "id": "ep_name",
+              "type": "text",
+              "text": "{name}",
+              "fontSize": 24,
+              "color": "cream",
+              "outline": "ink",
+              "mock": {
+                "name": "枯骨巫妖"
+              },
+              "frame": "plate",
+              "pad": [
+                2,
+                0
+              ]
+            },
+            {
+              "id": "ep_hp",
+              "type": "bar",
+              "frame": "plate",
+              "w": 56,
+              "h": 12,
+              "value": 216,
+              "max": 216,
+              "ticks": 0,
+              "fontSize": 12,
+              "showValue": true,
+              "label": "{value}/{max}"
+            },
+            {
+              "id": "ep_info",
+              "type": "text",
+              "text": "{info}",
+              "fontSize": 12,
+              "color": "parch",
+              "outline": "ink",
+              "mock": {
+                "info": "施法"
+              }
+            }
+          ]
+        },
+        {
+          "id": "hero_plate",
+          "type": "world",
+          "name": "英雄信息牌",
+          "pivot": [
+            0.5,
+            0
+          ],
+          "x": 0,
+          "y": 2,
+          "clamp": 4,
+          "preview": [
+            50,
+            80
+          ],
+          "layout": {
+            "dir": "column",
+            "gap": 1,
+            "align": "center"
+          },
+          "children": [
+            {
+              "id": "hp_bar",
+              "type": "bar",
+              "frame": "plate",
+              "w": 60,
+              "h": 12,
+              "value": 120,
+              "max": 120,
+              "ticks": 0,
+              "fontSize": 12,
+              "showValue": true,
+              "label": "{value}/{max}"
+            },
+            {
+              "id": "hp_extra",
+              "type": "text",
+              "text": "{extra}",
+              "fontSize": 12,
+              "color": "parch",
+              "outline": "ink",
+              "mock": {
+                "extra": "护甲 4"
+              }
+            }
+          ]
+        }
+      ]
+    },
     "hud": {
       "attach": "column",
       "visible": true,
@@ -125,33 +242,90 @@
       "safe": true,
       "children": [
         {
-          "id": "top_title",
+          "id": "top_bar",
+          "type": "group",
+          "ax": "stretch",
+          "x": 4,
+          "r": 4,
+          "y": 4,
+          "h": "hug",
+          "layout": {
+            "dir": "row",
+            "gap": 2,
+            "align": "center",
+            "justify": "between"
+          },
+          "children": [
+            {
+              "id": "turn_chip",
+              "type": "text",
+              "text": "第 {turn} 回合",
+              "fontSize": 24,
+              "color": "cream",
+              "outline": "ink",
+              "mock": {
+                "turn": 1
+              },
+              "frame": "plate",
+              "pad": [
+                2,
+                0
+              ]
+            },
+            {
+              "id": "pile_chip",
+              "type": "text",
+              "text": "骰袋 {bag}  弃骰 {disc}",
+              "fontSize": 12,
+              "color": "cream",
+              "outline": "ink",
+              "mock": {
+                "bag": 7,
+                "disc": 0
+              },
+              "frame": "plate",
+              "pad": [
+                2,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "id": "preview",
           "type": "text",
-          "text": "六面史诗 3D",
+          "text": "{text}",
           "fontSize": 24,
           "color": "cream",
           "outline": "ink",
+          "mock": {
+            "text": "对称打击  预计 42"
+          },
+          "ax": "center",
+          "ay": "bottom",
+          "y": 44,
+          "align": "center",
           "frame": "plate",
           "pad": [
-            2,
-            0
+            3,
+            1
           ],
-          "ax": "center",
-          "y": 4
+          "visible": false
         },
         {
-          "id": "look_chip",
+          "id": "hint",
           "type": "text",
-          "text": "外观 {look}",
-          "mock": {
-            "look": "A"
-          },
+          "text": "{text}",
           "fontSize": 12,
           "color": "parch",
           "outline": "ink",
-          "ax": "right",
-          "x": 4,
-          "y": 24
+          "mock": {
+            "text": "点骰子选中 · 按住滑过多选"
+          },
+          "ax": "center",
+          "ay": "bottom",
+          "y": 38,
+          "align": "center"
         },
         {
           "id": "actions",
@@ -159,7 +333,7 @@
           "name": "操作按钮",
           "ax": "center",
           "ay": "bottom",
-          "y": 6,
+          "y": 4,
           "layout": {
             "dir": "row",
             "gap": 4,
@@ -172,6 +346,10 @@
               "frame": "wood",
               "framePressed": "pressed",
               "label": "重投",
+              "sub": "{cost}",
+              "mock": {
+                "cost": "免费"
+              },
               "w": 56,
               "h": 32
             },
@@ -197,6 +375,29 @@
         }
       ]
     },
+    "banner": {
+      "attach": "column",
+      "visible": true,
+      "z": 25,
+      "children": [
+        {
+          "id": "banner",
+          "type": "text",
+          "text": "{text}",
+          "fontSize": 48,
+          "color": "gold",
+          "outline": "ink",
+          "mock": {
+            "text": "第二阶段"
+          },
+          "ax": "center",
+          "ay": "center",
+          "y": -60,
+          "align": "center",
+          "visible": false
+        }
+      ]
+    },
     "toast": {
       "attach": "column",
       "visible": true,
@@ -216,7 +417,7 @@
           ],
           "ax": "center",
           "ay": "center",
-          "y": -40,
+          "y": -20,
           "visible": false
         }
       ]
