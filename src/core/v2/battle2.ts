@@ -40,6 +40,10 @@ export interface Battle2State {
   // mage
   chantRing: number; overcharge: number; starTurnsLeft: number; resonanceNext: number; chantsThisCycle: number; chantedThisTurn: boolean;
   chantHits: number; echo: number; flipsLeft: number; prismSuit: Suit | null; pierceHitsThisCycle: number;
+  /** v2.2 反噬: a chant cycle is running (opens on the first chant after a play, closes when a play resolves) */
+  cycleActive: boolean;
+  /** v2.2 R3-4: after a play, the leftover dice the mage keeps (uids, at most keepInfo().cap); null = default (highest points) */
+  keepSel: number[] | null;
   // rogue
   /** v2.1 飞刀标记: shape the next strike must complete, and the bounced die it must include */
   knifeMark: { shape: KnifeShape; dieUid: number } | null;
@@ -75,6 +79,8 @@ export interface BattleStats {
   mixPlays: number; fullRingPlays: number; fullRingDice: number;
   /** row plays that handed in ≥4 counted dice (SPEC §7「4 颗质变触发」) */
   big4: number;
+  /** big4 by row id */
+  big4Rows: Record<string, number>;
   /** income caps hit this fight */
   capHits: { overflow: boolean; relic: boolean; summon: boolean };
 }
@@ -90,7 +96,6 @@ export interface Intent2 { kind: 'atk' | 'def' | 'skl' | 'mov' | 'frz' | 'curse'
 export interface RowOption { ref: RowRef; rowId: string; name: string; ok: boolean; tier?: TierName; count?: number; reason?: 'cond' | 'strike' | 'chant' | 'none'; bestTier?: TierName | null }
 export interface Preview { total: number; hits: Array<{ uid: number; dmg: number }>; armor: number; barrier: number; heal: number; selfDmg: number; tier: TierName | null; ultimate: boolean; gainDice: number; kills: number[] }
 
-const BLOOD_PCT = [2, 4, 8, 16, 32];
 const BACKLASH_CAP = 30;
 const NEG: StatusV2[] = ['poison', 'burn', 'vulnerable', 'weak'];
 const DOT_DESC: Record<string, StatusV2> = { '灼烧': 'burn', '剧毒': 'poison', '火球': 'burn', '诅咒爆发': 'poison' };
@@ -102,6 +107,8 @@ interface PlayCtx {
   dice: Die[]; X: number; count: number; coef: number; bonusPct: number; flat: number;
   ultimate: boolean; target: Enemy | null; strikeIdx: number; combo: boolean;
   dealt: number; kills: number; firstDmg: boolean; halve: boolean;
+  /** v2.2 日行 2+: burns laid by this play are held until the mage's next play resolves */
+  holdBurn: boolean;
 }
 
 // ─────────────────────────────────────────────────────────── battle
@@ -130,7 +137,7 @@ export class Battle2 {
       dice: [], turnDice: 0,
       freeRerollsLeft: 0, rerollsThisTurn: 0, bloodRerolls: 0, freeBloodLeft: 0,
       strikesUsed: 0, maxStrikes: 1, lastStrike: null, comboThisTurn: false, earnUsed: false, danceUsed: false, tripleUsed: false, chainUsed: false, whetUsed: 0, stormPct: 0,
-      chantRing: 0, overcharge: 0, starTurnsLeft: 0, resonanceNext: 0, chantsThisCycle: 0, chantedThisTurn: false, chantHits: 0, echo: 0, flipsLeft: 0, prismSuit: null, pierceHitsThisCycle: 0,
+      chantRing: 0, overcharge: 0, starTurnsLeft: 0, resonanceNext: 0, chantsThisCycle: 0, chantedThisTurn: false, chantHits: 0, echo: 0, flipsLeft: 0, prismSuit: null, pierceHitsThisCycle: 0, cycleActive: false, keepSel: null,
       knifeMark: null, classSpawns: 0, bonusFreeNext: 0, chantsThisCycleAtPlay: 0,
       overflow: 0, rageNext: 0, freeBloodNext: 0,
       earned: { behead: 0, guard: 0, tier: 0, extra: 0 }, caps: { behead: 1, guard: 1 },
@@ -141,7 +148,7 @@ export class Battle2 {
     };
     this.stats = {
       turns: 0, diceAtStart: [], ultimates: 0, plays: 0, basics: 0, rows: {}, bloodRerolls: 0, chantTurns: 0, combos: 0, backlashDeath: false, strikes: 0,
-      preciseSpawns: 0, markSpawns: 0, sleeveSpawns: 0, spawnTurns: 0, marks: 0, mixPlays: 0, fullRingPlays: 0, fullRingDice: 0, big4: 0,
+      preciseSpawns: 0, markSpawns: 0, sleeveSpawns: 0, spawnTurns: 0, marks: 0, mixPlays: 0, fullRingPlays: 0, fullRingDice: 0, big4: 0, big4Rows: {},
       capHits: { overflow: false, relic: false, summon: false },
     };
   }
@@ -177,8 +184,8 @@ export class Battle2 {
     const s = this.s, p = s.player;
     if (s.freeBloodLeft > 0) return 0;
     if (this.hasStatus('player', 'berserk')) return 3;
-    const pct = BLOOD_PCT[Math.min(s.bloodRerolls, BLOOD_PCT.length - 1)] * (s.bloodRerolls >= BLOOD_PCT.length ? 2 ** (s.bloodRerolls - BLOOD_PCT.length + 1) : 1);
-    return Math.ceil(p.maxHp * pct / 100);
+    // v2.2 1.8: the k-th sale this turn costs ceil(maxHp × 2% × 2^(k−1)); free sales count toward k too
+    return Math.ceil(p.maxHp * 0.02 * 2 ** s.bloodRerolls - 1e-9);
   }
   canReroll(uids: number[]): string | null {
     const s = this.s;
@@ -207,7 +214,7 @@ export class Battle2 {
     return out;
   }
   private rowBlocked(def: RowDef): RowOption['reason'] | null {
-    if (def.strike === 'second' && this.s.strikesUsed < 1) return 'strike';
+    if (def.onlyAsStrike === 2 && this.s.strikesUsed < 1) return 'strike';
     if (def.flags?.needChant && this.s.chantsThisCycle < def.flags.needChant) return 'chant';
     return null;
   }
@@ -262,7 +269,7 @@ export class Battle2 {
       if (s.strikesUsed === 0) return 3 + Math.min(3, s.chantRing + (this.talent('t_deepchant') && s.chantsThisCycle < this.talent('t_deepchant') ? 2 : 1));
       return 3 + s.resonanceNext;
     }
-    return 3 + s.carry.length + (s.phase === 'player' && s.classSpawns > 0 ? 1 + this.talent('t_shadowbox') : 0);
+    return 3 + s.carry.length + (s.phase === 'player' ? this.shadowCarryCount() : 0);
   }
 
   /**
@@ -272,8 +279,8 @@ export class Battle2 {
   chantRisk(): number {
     const s = this.s, p = s.player;
     if (this.cls.id !== 'mage' || s.result) return 0;
-    const ring = s.chantRing, over = ring >= 3 ? s.overcharge + 1 : s.overcharge;
-    let barrier = p.barrier + 4 + 2 * ring + 2 * over;
+    const ring = s.chantRing;
+    let barrier = p.barrier + 4 + 2 * (ring + s.overcharge);
     let barrier0 = barrier, armor = p.armor, armor0 = armor;
     let layers = p.backlash, n = s.chantHits, extra = 0;
     const mul = (this.hasStatus('player', 'vulnerable') ? 1.5 : 1);
@@ -289,6 +296,36 @@ export class Battle2 {
       n++; layers = Math.min(BACKLASH_CAP, layers + 2 ** n);
     }
     return extra;
+  }
+
+  /** 刺客: shadow dice that would carry to next turn if the turn ended now (v2.2: only unused ones on the field) */
+  private shadowCarryCount(): number {
+    const s = this.s;
+    if (this.cls.id !== 'rogue' || s.classSpawns <= 0) return 0;
+    return Math.min(1 + this.talent('t_shadowbox'), s.dice.filter(d => d.kind === 'shadowDie').length);
+  }
+  /** 魔导 after a play: how many leftovers may stay (3, 余韵 4), whether the player must choose, and the current pick. null = no choice now */
+  keepInfo(): { cap: number; need: boolean; selected: number[] } | null {
+    const s = this.s;
+    if (this.cls.id !== 'mage' || s.phase !== 'player' || s.strikesUsed === 0 || this.lastWasLightBasic) return null;
+    const cap = 3 + s.resonanceNext;
+    const left = s.dice.filter(d => d.kind !== 'cracked' && d.kind !== 'cursed');
+    return { cap, need: left.length > cap, selected: this.keepSelection(left, cap) };
+  }
+  /** 魔导: choose which leftover dice stay after a play (at most cap). No events. */
+  setKeep(uids: number[]): Result2 {
+    const k = this.keepInfo(); if (!k) return this.fail('现在不用选保留的骰子');
+    const sel = this.pick(uids);
+    if (sel.length !== uids.length || new Set(uids).size !== uids.length) return this.fail('只能选场上的骰子');
+    if (sel.length > k.cap) return this.fail('最多保留 ' + k.cap + ' 颗');
+    this.s.keepSel = uids.slice();
+    return { ok: true, events: [] };
+  }
+  private keepSelection(left: Die[], cap: number): number[] {
+    const ok = left.filter(d => d.kind !== 'cracked' && d.kind !== 'cursed');
+    const sel = this.s.keepSel;
+    if (sel) return sel.filter(u => ok.some(d => d.uid === u)).slice(0, cap);
+    return ok.map((d, i) => ({ d, i })).sort((a, b) => b.d.face.value - a.d.face.value || a.i - b.i).slice(0, cap).map(x => x.d.uid);
   }
 
   intent(e: Enemy): Intent2 {
@@ -328,7 +365,8 @@ export class Battle2 {
     if (s.freeRerollsLeft > 0) { s.freeRerollsLeft--; free = true; }
     else {
       cost = this.bloodCost()!;
-      if (s.freeBloodLeft > 0) s.freeBloodLeft--; else if (!this.hasStatus('player', 'berserk')) s.bloodRerolls++;
+      if (s.freeBloodLeft > 0) s.freeBloodLeft--;
+      s.bloodRerolls++;
       if (cost > 0) { p.hp -= cost; this.emit({ t: 'hp', who: 'player', delta: -cost, hp: p.hp, reason: 'reroll' }); }
       this.stats.bloodRerolls++;
     }
@@ -377,9 +415,10 @@ export class Battle2 {
     return { ok: true, events: this.flush() };
   }
 
-  endTurn(): Result2 {
+  endTurn(opts?: { keep?: number[] }): Result2 {
     this.ev = [];
     if (this.s.phase !== 'player') return this.fail('不是你的回合');
+    if (opts?.keep) { const r = this.setKeep(opts.keep); if (!r.ok) return r; }
     this.finishPlayerTurn();
     if (!this.s.result) this.enemyTurn();
     return { ok: true, events: this.flush() };
@@ -391,6 +430,7 @@ export class Battle2 {
     const s = this.s, p = s.player;
     const m = this.check(ref, uids).match!;
     const sel = this.pick(uids);
+    this.rewards = [];
     if (targetUid != null) { const t = this.enemy(targetUid); if (t && !t.dead) s.targetUid = t.uid; }
     const target = this.target();
     const row = ref === 'basic' ? null : this.board[ref];
@@ -441,7 +481,7 @@ export class Battle2 {
     s.strikesUsed++; this.stats.strikes++;
     if (ref === 'basic') this.stats.basics++; else { this.stats.plays++; this.stats.rows[def!.id] = (this.stats.rows[def!.id] || 0) + 1; }
     if (ultimate) this.stats.ultimates++;
-    if (def && m.count >= 4) this.stats.big4++;
+    if (def && m.count >= 4) { this.stats.big4++; this.stats.big4Rows[def.id] = (this.stats.big4Rows[def.id] || 0) + 1; }
     if (combo) { this.stats.combos++; s.comboThisTurn = true; }
     if (def && this.cls.id === 'mage') {
       if (def.cond.t === 'mixedRelease') this.stats.mixPlays++;
@@ -461,6 +501,7 @@ export class Battle2 {
     const ctx: PlayCtx = {
       row: def, level, ref, tierName, tier, dice: sel, X, count: m.count, coef: def ? this.coefOf(def, level, tier) : this.cls.basicAttack.coef,
       bonusPct: bonus, flat, ultimate, target, strikeIdx, combo, dealt: 0, kills: 0, firstDmg: true, halve: false,
+      holdBurn: !!tier?.effects.some(e => e.t === 'hook' && e.id === 'burnHold'),
     };
     // mage: playing breaks the chant
     if (this.cls.id === 'mage') {
@@ -468,7 +509,7 @@ export class Battle2 {
       this.lastWasLightBasic = light;
       if (!light) {
         if (s.turnDice >= 6 && (m.count + this.devourCount(ctx)) >= 4 && def) { const n = this.talent('t_supernova') ? 3 : 2; s.starTurnsLeft = n; if (this.talent('t_supernova') >= 2) s.bonusFreeNext = 1; this.emit({ t: 'overload', turns: n }); }
-        s.resonanceNext = 0; s.chantRing = 0; s.overcharge = 0; s.chantsThisCycle = 0; s.pierceHitsThisCycle = 0;
+        s.resonanceNext = 0; s.chantRing = 0; s.overcharge = 0; s.chantsThisCycle = 0; s.pierceHitsThisCycle = 0; s.cycleActive = false;
         // 反噬: layers and N both clear on a play (2.2)
         s.chantHits = 0;
         if (p.backlash) { p.backlash = 0; this.emit({ t: 'backlash', stacks: 0 }); }
@@ -503,6 +544,17 @@ export class Battle2 {
     if (this.hasRelic('healing_breeze')) this.changeHp(3, 'heal');
     if (this.hasRelic('lucky_coin')) this.relicGold(2);
     if (this.cls.id === 'mage' && this.talent('t_prism') && def) { const su = suitOfCond(def); if (su) s.prismSuit = su; }
+    // v2.2 R3-3: once a mage play resolves, burns held from earlier 日行 plays go out; the ones this play laid stay
+    if (this.cls.id === 'mage' && !this.lastWasLightBasic) {
+      for (const e of this.alive()) {
+        const b = e.statuses.find(x => x.type === 'burn'); if (!b || !b.held) continue;
+        b.value = Math.max(0, b.value - b.held); b.held = 0;
+        if (b.value <= 0) { e.statuses = e.statuses.filter(x => x !== b); this.emit({ t: 'statusExpire', who: e.uid, type: 'burn' }); }
+      }
+    }
+    // v2.2 1.9: kill rewards come after the whole play (effects, spawned dice), then the turn / wave ends
+    const rw = this.rewards; this.rewards = null;
+    if (rw) for (const f of rw) f();
 
     this.resolveDeaths(true);
     void dry;
@@ -556,7 +608,8 @@ export class Battle2 {
 
   private resolveTier(ctx: PlayCtx, sub = false) {
     const s = this.s, p = s.player, def = ctx.row!, flags = def.flags || {};
-    const fx = ctx.tier?.effects || [];
+    // v2.2: effects tagged onStrike only fire on that strike (1 = the first, 2 = any later one)
+    const fx = (ctx.tier?.effects || []).filter(e => !e.onStrike || (e.onStrike === 1 ? ctx.strikeIdx === 0 : ctx.strikeIdx >= 1));
     const isRogue = this.cls.id === 'rogue';
     // rogue: +1 strike / shadow from the earn tier only once per turn
     const earnGate = isRogue && fx.some(e => e.t === 'earnDie');
@@ -608,7 +661,7 @@ export class Battle2 {
           let v = e.ofX != null ? Math.ceil(ctx.X * e.ofX) : e.value;
           if (e.status === 'burn') { if (flags.burnL3 && ctx.level >= 3) v = Math.ceil(v * flags.burnL3); if (flags.burnHalf) v = Math.ceil(v / 2); }
           if (e.target === 'self') { this.addPlayerStatus(e.status, v, e.duration); break; }
-          for (const t of this.targets(e.target, ctx.target)) this.addEnemyStatus(t, e.status, v, e.duration);
+          for (const t of this.targets(e.target, ctx.target)) this.addEnemyStatus(t, e.status, v, e.duration, e.status === 'burn' && ctx.holdBurn);
           break;
         }
         case 'stun': for (const t of this.targets(e.target, ctx.target)) this.stunEnemy(t, e.look || 'stun', e.turns || 1, ctx.ultimate, e.elseWeak); break;
@@ -653,7 +706,8 @@ export class Battle2 {
       case 'bolts': {
         const stars = ctx.dice.filter(d => this.faceOf(d).suit === 'star');
         const pts = stars.map(d => this.points(d, def));
-        const avg = Math.ceil(pts.reduce((a, b) => a + b, 0) / Math.max(1, pts.length));
+        // v2.2 R3-6: extra bolts use the average star points (not rounded); each bolt rounds on its own (1.6)
+        const avg = pts.reduce((a, b) => a + b, 0) / Math.max(1, pts.length);
         let n = pts.length + s.chantsThisCycleAtPlay + (p.extra || 0);
         if (p.double) n *= 2;
         const per = ctx.coef - (p.minus || 0);   // coef = flat bolt damage for this row
@@ -675,17 +729,19 @@ export class Battle2 {
         if (flags.boltVuln) for (const t of hit) if (!t.dead) this.addEnemyStatus(t, 'vulnerable', 1, 1);
         break;
       }
-      case 'burnHold': for (const t of this.alive()) t.burnHold = true; break;
+      case 'burnHold': break;   // marker: burns this tier lays are held (see PlayCtx.holdBurn)
       case 'devour': break;   // handled up front
-      case 'bladeStrike': {
+      // 刃行: first strike turns blades into shadow dice (淬刃: poison instead); a later strike heals
+      case 'bladeFirst': {
         const blades = ctx.dice.filter(d => this.faceOf(d).suit === 'blade').length;
-        if (ctx.strikeIdx === 0) {
-          if (flags.venomFirst && ctx.target) this.addEnemyStatus(ctx.target, 'poison', blades * flags.venomFirst);
-          else { const n = Math.floor(blades / (p.firstShadowPer || 2)) + (p.firstExtra || 0); if (n > 0) this.spawnShadow(n, 'blade'); }
-        } else {
-          this.healPlayer(blades * (p.secondHealPer || 3) * (p.secondHealMul || 1), flags);
-          if (p.purify) this.purifyPlayer(p.purify);
-        }
+        if (flags.venomFirst && ctx.target) this.addEnemyStatus(ctx.target, 'poison', blades * flags.venomFirst);
+        else { const n = Math.floor(blades / (p.per || 2)) + (p.extra || 0); if (n > 0) this.spawnShadow(n, 'blade'); }
+        break;
+      }
+      case 'bladeSecond': {
+        const blades = ctx.dice.filter(d => this.faceOf(d).suit === 'blade').length;
+        this.healPlayer(blades * (p.per || 3) * (p.mul || 1), flags);
+        if (p.purify) this.purifyPlayer(p.purify);
         break;
       }
       case 'dance': {
@@ -917,11 +973,12 @@ export class Battle2 {
       const light = s.strikesUsed === 1 && this.lastWasLightBasic;
       const chant = s.strikesUsed === 0 || light;
       if (chant) {
-        const before = s.chantRing;
+        const before = s.chantRing, overBefore = s.overcharge;
         let add = 1; if (this.talent('t_deepchant') && s.chantsThisCycle < this.talent('t_deepchant')) add = 2;
         if (s.chantRing >= 3) { s.overcharge++; } else s.chantRing = Math.min(3, s.chantRing + add);
-        s.chantsThisCycle++; s.chantedThisTurn = true; this.stats.chantTurns++;
-        let bar = 4 + 2 * before + 2 * s.overcharge;
+        s.chantsThisCycle++; s.chantedThisTurn = true; s.cycleActive = true; this.stats.chantTurns++;
+        // v2.2 R3-5: barrier = 4 + 2 × (ring before this chant + overcharge turns before this one)
+        let bar = 4 + 2 * (before + overBefore);
         if (light && this.talent('t_lightspell') < 2) bar = Math.ceil(bar / 2);
         p.barrier += bar; this.emit({ t: 'barrier', delta: bar, total: p.barrier });
         this.emit({ t: 'chant', ring: s.chantRing, barrier: p.barrier, overcharge: s.overcharge });
@@ -929,22 +986,32 @@ export class Battle2 {
         if (this.hasRelic('charge_core')) { this.addArmor(4, '蓄力晶核'); this.changeHp(3, 'heal'); }
       }
       const cap = chant ? 3 + s.chantRing : 3 + s.resonanceNext;
+      // v2.2 R3-4: after a play the player picks which leftovers stay (default: highest points); a chant keeps them all
+      const pick = chant ? null : new Set(this.keepSelection(left, cap));
       for (const d of left) {
         if (d.kind === 'cracked' || d.kind === 'cursed') { vanish(d); continue; }
-        if (s.carry.length < cap) { d.persist = 'retained'; s.carry.push(d); } else vanish(d);
+        if ((pick ? pick.has(d.uid) : true) && s.carry.length < cap) { d.persist = 'retained'; s.carry.push(d); } else vanish(d);
       }
+      s.keepSel = null;
       if (!chant) { s.chantRing = s.resonanceNext; }
       // v2.1 反噬: N runs over the whole chant cycle and only clears on a play (doPlay)
     } else {
-      // 暗影残骰: carry 1 (影匣 2 / 3) only when a class spawn happened this turn
+      // 暗影残骰 (v2.2 1.1): a class spawn this turn lets 1 (影匣 2 / 3) shadow die still on the field stay; nothing is created
       const n = s.classSpawns > 0 ? 1 + this.talent('t_shadowbox') : 0;
-      for (const d of left) vanish(d);
-      for (let i = 0; i < n && s.carry.length < 6; i++) { const d = this.newDie('shadowDie', 'mechanic'); d.persist = 'untilUsed'; s.carry.push(d); this.gain(i === 0 ? 0 : 1, 'shadow'); this.emit({ t: 'special', action: 'carry', uid: d.uid, kind: d.kind, value: d.face.value, suit: d.face.suit }); }
+      const keep = left.filter(d => d.kind === 'shadowDie').slice(0, n);
+      for (const d of left) {
+        if (keep.includes(d) && s.carry.length < 6) {
+          d.persist = 'untilUsed'; s.carry.push(d); this.gain(s.carry.length > 1 ? 1 : 0, 'shadow');
+          this.emit({ t: 'special', action: 'carry', uid: d.uid, kind: d.kind, value: d.face.value, suit: d.face.suit });
+        } else vanish(d);
+      }
     }
     if (this.hasRelic('steady_heart') && s.strikesUsed > 0 && s.rerollsThisTurn === 0) s.steadyNext = true;
     this.lastWasLightBasic = false;
   }
   private lastWasLightBasic = false;
+  /** kill rewards queued during a play (paid after it resolves); null outside a play */
+  private rewards: Array<() => void> | null = null;
 
   private enemyTurn() {
     const s = this.s, p = s.player;
@@ -958,8 +1025,10 @@ export class Battle2 {
       const b = e.statuses.find(x => x.type === 'burn');
       if (b && b.value > 0) {
         this.dotEnemy(e, b.value, 'burn');
-        const hold = e.burnHold && s.chantedThisTurn;
-        if (!hold) { e.statuses = e.statuses.filter(x => x !== b); this.emit({ t: 'statusExpire', who: e.uid, type: 'burn' }); }
+        // v2.2: plain burn goes out; the held part (日行 2+) stays until the mage's next play resolves
+        const held = Math.min(b.value, (b.held || 0) + (b.heldNew || 0));
+        if (held > 0) { b.value = held; b.held = held; b.heldNew = 0; }
+        else { e.statuses = e.statuses.filter(x => x !== b); this.emit({ t: 'statusExpire', who: e.uid, type: 'burn' }); }
       }
       if (e.dead) continue;
       const po = e.statuses.find(x => x.type === 'poison');
@@ -1127,7 +1196,7 @@ export class Battle2 {
     if (perfectBlock && this.cls.id === 'warrior' && s.earned.guard < s.caps.guard) { s.earned.guard++; this.gain(1, 'guard', e?.uid); }
     if (perfectBlock && e && this.board.some(r => r.def.flags?.thorns)) { const t = e; if (!t.dead) { t.hp = Math.max(0, t.hp - byArmor); this.emit({ t: 'hit', uid: t.uid, dmg: byArmor, absorbed: 0, hpDmg: byArmor, killed: t.hp <= 0, aoe: false, ultimate: false, source: 'thorns' }); if (t.hp <= 0) this.markDead(t, false, null); } }
     // 法术反噬: hits during a chant cycle (also those the barrier stopped); N counts from the cycle start, cap 30
-    if (!isDot && this.cls.id === 'mage' && s.chantsThisCycle > 0 && v > 0) {
+    if (!isDot && e && this.cls.id === 'mage' && s.cycleActive && v > 0) {
       const blockedByBarrier = rem === 0 && byArmor === 0;
       const sv = this.talent('t_steadyvein');
       let skip = blockedByBarrier && sv > 0;
@@ -1155,10 +1224,16 @@ export class Battle2 {
     e.dead = true; e.hp = 0;
     this.emit({ t: 'death', uid: e.uid, direct, overkill: e.overkill || 0 });
     this.quote(e, 'death', e.rank === 'midBoss' || e.rank === 'boss' ? 1 : 0.5);
+    const ov = e.overkill || 0;
+    if (this.rewards) { this.rewards.push(() => this.killReward(e, direct, ctx, ov)); return; }
+    this.killReward(e, direct, ctx, ov);
+  }
+  private killReward(e: Enemy, direct: boolean, ctx: PlayCtx | null, overkill: number) {
+    const s = this.s;
     const dr = DROPS[e.rank];
     // v2.1 3.2: overflow gold (enemy bonus + 收割 + relics) is summed, then cut to the per-fight cap; summons capped at 5 gold / 5 xp
-    let over = Math.min(dr.maxBonus, Math.floor((direct ? e.overkill : 0) / OVERKILL_PER_GOLD));
-    if (direct && ctx?.row?.flags?.overkillGold) over += Math.floor(e.overkill * ctx.row.flags.overkillGold);
+    let over = Math.min(dr.maxBonus, Math.floor((direct ? overkill : 0) / OVERKILL_PER_GOLD));
+    if (direct && ctx?.row?.flags?.overkillGold) over += Math.floor(overkill * ctx.row.flags.overkillGold);
     const ocap = ECON.overflowGoldCap[this.setup.kind] ?? 6;
     const overG = Math.max(0, Math.min(over, ocap - s.income.overflow));
     if (overG < over) this.stats.capHits.overflow = true;
@@ -1232,7 +1307,7 @@ export class Battle2 {
     return {
       uid: s.enemyUid++, cfgId: cfg.id, name: cfg.name, hp, maxHp: hp, armor: 0, attackDmg: Math.floor(cfg.dmg * sc.dmg),
       ct: cfg.ct, arch: cfg.arch, cat: cfg.cat, rank, statuses: [], distance: cfg.ct === 'warrior' || cfg.ct === 'guardian' ? MELEE_START_DISTANCE : 0,
-      ctlImmune: 0, interrupted: false, skipped: false, taunted: false, burnHold: false,
+      ctlImmune: 0, interrupted: false, skipped: false, taunted: false,
       summoned: 0, isSummoned: false, justSummoned: false, dead: false, phaseIdx: 0, vengeance: 0, quotedLow: false, overkill: 0, killedDirect: false, age: 0,
     };
   }
@@ -1249,13 +1324,14 @@ export class Battle2 {
   private stv(e: Enemy, t: StatusV2) { return e.statuses.find(x => x.type === t)?.value || 0; }
   private upsert(list: Status[], st: Status) {
     const ex = list.find(x => x.type === st.type);
-    if (ex) { ex.value += st.value; if (st.duration != null) ex.duration = Math.max(ex.duration || 0, st.duration); }
+    if (ex) { ex.value += st.value; if (st.duration != null) ex.duration = Math.max(ex.duration || 0, st.duration); if (st.heldNew) ex.heldNew = (ex.heldNew || 0) + st.heldNew; }
     else list.push({ ...st });
   }
-  private addEnemyStatus(e: Enemy, type: StatusV2, value: number, duration?: number) {
+  private addEnemyStatus(e: Enemy, type: StatusV2, value: number, duration?: number, held = false) {
     if (e.dead || value <= 0) return;
     const st: Status = duration != null ? { type, value: type === 'poison' || type === 'burn' ? value : 1, duration } : { type, value };
     if (type === 'vulnerable' || type === 'weak') { st.value = 1; st.duration = duration ?? value; }
+    if (type === 'burn' && held) st.heldNew = value;
     this.upsert(e.statuses, st);
     this.emit({ t: 'statusAdd', who: e.uid, status: { ...st } });
   }

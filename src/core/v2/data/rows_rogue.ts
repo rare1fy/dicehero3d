@@ -1,6 +1,7 @@
 // 影锋刺客 rows and tablets (SPEC_v2.1 2.3).
 import type { RowDef, TabletDef } from '../types';
 import { EARN, dmg, evo, hook, ladder, st, steps, stun, withFlags } from './util';
+// v2.2: SPEC_v2.2 2.3
 
 const R = 'rogue' as const;
 const SHADOW_STRIKE = [{ t: 'extraStrike' as const, n: 1 }, { t: 'spawnShadow' as const, n: 1 }];
@@ -24,12 +25,12 @@ export const R_ROWS: RowDef[] = [
   },
   {
     id: 'r_blade', name: '刃行', classId: R, cond: { t: 'suit', suit: 'blade' },
-    tierRule: { steps: steps(['1～2', 'single'], ['3', 'feed'], ['4+', 'area']) },
+    // v2.2: no 4-dice step (4 blades cannot happen with 3 normal + 1 shadow die); first / second strike effects via onStrike
+    tierRule: { steps: steps(['1～2', 'single'], ['3', 'feed']) },
     coef: [1.5, 1.9, 2.25], tags: ['suit'], icon: { kind: 'suit', suit: 'blade' },
     tiers: ladder({
-      single: { fx: [dmg('one'), hook('bladeStrike', { firstShadowPer: 2, secondHealPer: 3 })] },
-      feed: { fx: [hook('bladeStrike', { firstShadowPer: 2, firstExtra: 1, secondHealPer: 3, secondHealMul: 2, purify: 1 })] },
-      area: { fx: [st('weak', 1, 'all', 1)] },
+      single: { fx: [dmg('one'), { ...hook('bladeFirst', { per: 2 }), onStrike: 1 }, { ...hook('bladeSecond', { per: 3 }), onStrike: 2 }] },
+      feed: { fx: [{ ...hook('bladeFirst', { per: 2, extra: 1 }), onStrike: 1 }, { ...hook('bladeSecond', { per: 3, mul: 2, purify: 1 }), onStrike: 2 }] },
     }),
     evolutions: [
       evo('r_blade_dark', '暗刃', '第二刀可以用 1 刃 + 1 影发动，×2.5 无视护甲'),
@@ -105,7 +106,7 @@ export const R_ROWS: RowDef[] = [
     ],
   },
   {
-    id: 'r_back', name: '背刺', classId: R, cond: { t: 'allAtLeast', value: 4 }, strike: 'second',
+    id: 'r_back', name: '背刺', classId: R, cond: { t: 'allAtLeast', value: 4 }, onlyAsStrike: 2,
     tierRule: { steps: steps(['1～2', 'single'], ['3', 'feed'], ['4+', 'area']) },
     coef: [1.7, 2.1, 2.5], tags: ['point'], icon: { kind: 'atLeast', value: 4 },
     tiers: ladder({

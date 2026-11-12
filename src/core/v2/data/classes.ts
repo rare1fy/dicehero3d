@@ -35,7 +35,7 @@ export const CLASSES: Record<ClassId, ClassDefV2> = {
     tablets: ['w_suit', 'w_point'], versionA: ['w_axe', 'w_same'],
   }),
   mage: mk('mage', {
-    name: '星界魔导', hp: 100,
+    name: '星界魔导', hp: 110,   // v2.2 tuning: 100 → 110 (core2_report 数值调整)
     strikesPerTurn: 1, maxStrikes: 1, leftover: 'retain', overflow: 'discard',
     basicAttack: { minDice: 1, maxDice: 3, coef: 1, name: '奥术弹' },
     specialDice: ['starDie'],

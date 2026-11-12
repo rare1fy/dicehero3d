@@ -12,9 +12,11 @@ export const ENEMIES: Record<string, EnemyCfgV2> = {
   elite_alpha_wolf: {
     id: 'elite_alpha_wolf', name: '狼人首领', hp: 100, dmg: 11, ct: 'warrior', arch: 'berserker', cat: 'elite',
     phases: [{ actions: [
-      { type: '攻击', baseValue: 11 },
-      { type: '攻击', baseValue: 14, description: '狂暴撕咬' },
-      { type: '攻击', baseValue: 9 },
+      // v2.2 tuning (core2_report 数值调整): 11/14/9 → 8 / 嚎叫(护甲 10) / 11 / 7, so a mage can chant once into the howl
+      { type: '攻击', baseValue: 8 },
+      { type: '防御', baseValue: 10, description: '嚎叫' },
+      { type: '攻击', baseValue: 11, description: '狂暴撕咬' },
+      { type: '攻击', baseValue: 7 },
     ] }],
     q: {
       enter: ['月光之下……狼群为王！', '嗅到了……恐惧的味道……'],

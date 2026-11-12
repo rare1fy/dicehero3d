@@ -17,12 +17,12 @@ export const M_ROWS: RowDef[] = [
       area: { fx: [st('burn', 0, 'all', undefined, 1)] },
     }),
     evolutions: [
-      evo('m_sun_resonate', '灼烧共鸣', '每层现有灼烧追加 1 点伤害并延长 1 回合', r => withFlags(r, { burnResonance: 1 })),
+      evo('m_sun_resonate', '灼烧共鸣', '每层现有灼烧追加 1 点伤害并延长 1 回合'),   // not implemented: never offered (v2.2)
       evo('m_sun_corona', '日冕', '2 颗就扩散，灼烧减半', r => withFlags({ ...r, tierRule: { steps: steps(['1', 'single'], ['2+', 'area']) }, tiers: { ...r.tiers, area: { effects: [...r.tiers.area!.effects.filter(e => e.t !== 'hook'), hook('burnHold')] } } }, { burnHalf: 1 })),
     ],
   },
   {
-    id: 'm_mix', name: '元素交汇', classId: M, cond: { t: 'mixedRelease', minDice: 4, minSuits: 2, perSuit: 2 },
+    id: 'm_mix', name: '元素交汇', classId: M, cond: { t: 'mixedRelease', minDice: 4, minSuits: 2, perSuit: 2 }, tierCount: 'all',
     tierRule: { steps: steps(['4', 'area'], ['5', 'earn'], ['6', 'ultimate']) },
     coef: [1.5, 1.9, 2.25], tags: ['suit'], icon: { kind: 'mix', suits: ['star', 'moon', 'sun', 'void'] }, flags: { resonancePct: 0.25 },
     tiers: {

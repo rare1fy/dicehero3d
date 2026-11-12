@@ -8,7 +8,7 @@ import type { Battle2 } from './battle2';
 import type { ClassId } from './types';
 
 export interface FightStat {
-  kind: string; turns: number; ultimates: number; big4: number; diceAtStart: number[]; basics: number; plays: number; rows: Record<string, number>; won: boolean;
+  kind: string; turns: number; ultimates: number; big4: number; big4Rows: Record<string, number>; diceAtStart: number[]; basics: number; plays: number; rows: Record<string, number>; won: boolean;
   bloodRerolls: number; chantTurns: number; combos: number;
   mixPlays: number; fullRingPlays: number; fullRingDice: number; backlashDeath: boolean;
   preciseSpawns: number; markSpawns: number; sleeveSpawns: number; spawnTurns: number;
@@ -66,7 +66,7 @@ const pri = (k: string) => (k === 'engrave' ? 0 : k === 'relic' ? 1 : 2);
 function fightStats(kind: string, b: Battle2): FightStat {
   const st = b.stats, inc = b.s.income;
   return {
-    kind, turns: st.turns, ultimates: st.ultimates, big4: st.big4, diceAtStart: st.diceAtStart.slice(), basics: st.basics, plays: st.plays, rows: { ...st.rows }, won: b.s.result === 'win',
+    kind, turns: st.turns, ultimates: st.ultimates, big4: st.big4, big4Rows: { ...st.big4Rows }, diceAtStart: st.diceAtStart.slice(), basics: st.basics, plays: st.plays, rows: { ...st.rows }, won: b.s.result === 'win',
     bloodRerolls: st.bloodRerolls, chantTurns: st.chantTurns, combos: st.combos,
     mixPlays: st.mixPlays, fullRingPlays: st.fullRingPlays, fullRingDice: st.fullRingDice, backlashDeath: st.backlashDeath,
     preciseSpawns: st.preciseSpawns, markSpawns: st.markSpawns, sleeveSpawns: st.sleeveSpawns, spawnTurns: st.spawnTurns,
@@ -88,6 +88,8 @@ export interface SimReport {
   pct4: number; pct6: number;
   ultPerFight: Record<string, number>; big4PerFight: Record<string, number>; turnsPerFight: Record<string, number>;
   basicShare: number; rows: Record<string, number>;
+  /** 4+ dice plays per fight, by row */
+  big4Rows: Record<string, number>;
   extra: Record<string, number>;
 }
 
@@ -104,6 +106,8 @@ export function simulate(o: { n: number; classId: ClassId; tablet?: string; vers
   const kinds = ['normal', 'elite', 'midBoss'];
   const rows: Record<string, number> = {};
   for (const f of fights) for (const [k, v] of Object.entries(f.rows)) rows[k] = (rows[k] || 0) + v;
+  const big4Rows: Record<string, number> = {};
+  for (const f of fights) for (const [k, v] of Object.entries(f.big4Rows)) big4Rows[k] = (big4Rows[k] || 0) + v / Math.max(1, fights.length);
   const plays = sum(f => f.plays + f.basics);
   const allTurns = Math.max(1, sum(f => f.turns));
   const goldAll = Math.max(1, sum(f => f.gold.kill + f.gold.overflow + f.gold.relic + f.gold.summon));
@@ -117,7 +121,7 @@ export function simulate(o: { n: number; classId: ClassId; tablet?: string; vers
     big4PerFight: Object.fromEntries(kinds.map(k => [k, avg(by(k).map(f => f.big4))])),
     turnsPerFight: Object.fromEntries(kinds.map(k => [k, avg(by(k).map(f => f.turns))])),
     basicShare: sum(f => f.basics) / Math.max(1, plays),
-    rows,
+    rows, big4Rows,
     extra: {
       bloodPerTurn: sum(f => f.bloodRerolls) / allTurns,
       chantShare: sum(f => f.chantTurns) / allTurns,
@@ -163,7 +167,8 @@ export function formatSide(rs: SimReport[]): string {
   return [head, ...lines].join('\n');
 }
 export function formatRows(rs: SimReport[]): string {
-  return rs.map(r => `${r.label}: ` + Object.entries(r.rows).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${slotName(k)} ${v}`).join('，')).join('\n');
+  return rs.map(r => `${r.label}: ` + Object.entries(r.rows).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${slotName(k)} ${v}`).join('，')
+    + (Object.keys(r.big4Rows).length ? '；4 颗以上/场：' + Object.entries(r.big4Rows).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${slotName(k)} ${v.toFixed(2)}`).join('，') : '')).join('\n');
 }
 function slotName(id: string) { try { return slotRow({ rowId: id, level: 1 }).name; } catch { return id; } }
 

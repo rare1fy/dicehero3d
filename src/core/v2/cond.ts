@@ -92,9 +92,11 @@ export function matchRow(row: RowDef, faces: Face[], kinds: (DieKind | undefined
   const m = matchCond(row.cond, faces, kinds, { loose: !!row.flags?.looseSame, anyFourSuits: !!row.flags?.anyFourSuits });
   if (!m) return null;
   if (row.tierRule.maxDice && faces.length > row.tierRule.maxDice) return null;
-  const t = tierOf(row.tierRule, m.count);
+  // v2.2 tierCount: 'matching' (default) counts the dice that meet the condition; 'all' counts every die handed in
+  const count = row.tierCount === 'all' ? faces.length : m.count;
+  const t = tierOf(row.tierRule, count);
   if (!t) return null;
-  return { count: m.count, companions: m.companions, tier: t, tierIdx: tierIdx(t) };
+  return { count, companions: row.tierCount === 'all' ? 0 : m.companions, tier: t, tierIdx: tierIdx(t) };
 }
 
 /** All subsets (as index lists) of n items, non-empty. n ≤ 6 → at most 63. */

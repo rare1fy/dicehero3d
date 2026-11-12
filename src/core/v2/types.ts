@@ -56,9 +56,11 @@ export interface TierRule {
 // ── effects ──────────────────────────────────────────────
 export type Target = 'one' | 'all' | 'adjacent' | 'others' | 'second';
 export type StatusV2 = 'poison' | 'burn' | 'freeze' | 'stun' | 'vulnerable' | 'weak' | 'berserk';
-export interface Status { type: StatusV2; value: number; duration?: number }
+/** v2.2 灼烧: held = layers a 2+ 日行 laid in an earlier play (kept through turn ends until the mage's next play resolves); heldNew = laid by the play in progress */
+export interface Status { type: StatusV2; value: number; duration?: number; held?: number; heldNew?: number }
 
-export type Effect =
+export type Effect = EffectBody & { /** v2.2: only on the 1st / 2nd strike of the turn (刃行) */ onStrike?: 1 | 2 };
+export type EffectBody =
   /** damage = (X × coef × mul + flat) × bonus × modifiers */
   | { t: 'dmg'; target: Target; mul?: number; flat?: number; ignoreArmor?: boolean; armorBreak?: boolean; raw?: boolean }
   /** armor = X × coef2 × mul (of 'coef2'), points of one suit × mul, or a flat mul */
@@ -92,7 +94,10 @@ export interface EvoDef {
 export interface RowDef {
   id: string; name: string; classId: ClassId;
   cond: Condition; tierRule: TierRule;
-  strike?: 'first' | 'second';
+  /** v2.2: may only be played as this strike (背刺 = 2) */
+  onlyAsStrike?: 2;
+  /** v2.2: which dice count for the tier: 'matching' (default; fury row companions do not raise it) or 'all' handed in (元素交汇) */
+  tierCount?: 'matching' | 'all';
   tiers: Partial<Record<TierName, Tier>>;
   coef: [number, number, number];
   /** second coefficient (axe row armor) */
@@ -179,8 +184,6 @@ export interface Enemy {
   /** set when the enemy skipped its action because of the player's stun (warrior 震慑) */
   skipped: boolean;
   taunted: boolean;
-  /** burn does not go out at the next tick (mage sun row while chanting) */
-  burnHold: boolean;
   summoned: number; isSummoned: boolean; justSummoned: boolean;
   dead: boolean; phaseIdx: number; vengeance: number; quotedLow: boolean;
   overkill: number; killedDirect: boolean;

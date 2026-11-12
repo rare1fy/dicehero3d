@@ -292,3 +292,103 @@ describe('rogue', () => {
     expect(b.check(back, [u[0]]).match).not.toBeNull();
   });
 });
+
+describe('v2.2 settlement rules', () => {
+  it('blood k (1.8): free sales count too, so the next paid sale doubles', () => {
+    const b = mk('warrior', 'w_suit');
+    b.reroll([b.s.dice[0].uid]);   // free reroll
+    b.s.freeBloodLeft = 1;
+    const e1 = b.reroll([b.s.dice[0].uid]).events.find(e => e.t === 'reroll');
+    const e2 = b.reroll([b.s.dice[0].uid]).events.find(e => e.t === 'reroll');
+    expect(e1 && e1.t === 'reroll' ? e1.hpCost : -1).toBe(0);
+    expect(e2 && e2.t === 'reroll' ? e2.hpCost : -1).toBe(Math.ceil(120 * 0.04));
+  });
+  it('日行 2+ burn stays through chant turns and goes out after the next play resolves (a new one stays)', () => {
+    const b = mk('mage', 'm_suit', [['forest_ghoul']]);
+    const t = b.s.enemies[0]; t.distance = 5;
+    const sun = b.rows().findIndex(r => r.rowId === 'm_sun');
+    play(b, sun, setDice(b, [5, 5]));
+    const burn = () => t.statuses.find(s => s.type === 'burn');
+    expect(burn()?.heldNew).toBeGreaterThan(0);
+    b.endTurn();               // tick: held part stays
+    expect(burn()?.held).toBeGreaterThan(0);
+    b.endTurn();               // a chant turn: still there
+    expect(burn()).toBeDefined();
+    play(b, 'basic', [b.s.dice[0].uid]);
+    expect(burn()).toBeUndefined();
+    // a 日行 play clears the old held burn but keeps the one it lays
+    const b2 = mk('mage', 'm_suit', [['forest_ghoul']]);
+    const t2 = b2.s.enemies[0]; t2.distance = 5;
+    play(b2, sun, setDice(b2, [5, 5]));
+    b2.endTurn();
+    play(b2, sun, setDice(b2, [5, 5]));
+    const bn = t2.statuses.find(s => s.type === 'burn')!;
+    expect(bn.held).toBe(0); expect(bn.heldNew).toBeGreaterThan(0);
+  });
+  it('a 1-die 日行 burn goes out at the turn-end tick', () => {
+    const b = mk('mage', 'm_suit', [['forest_ghoul']]);
+    const t = b.s.enemies[0]; t.distance = 5;
+    play(b, b.rows().findIndex(r => r.rowId === 'm_sun'), setDice(b, [5]));
+    b.endTurn();
+    expect(t.statuses.find(s => s.type === 'burn')).toBeUndefined();
+  });
+  it('backlash gate: no layers outside a chant cycle, none from DoT', () => {
+    const b = mk('mage', 'm_suit', [['forest_ghoul', 'forest_ghoul']]);
+    for (const e of b.s.enemies) e.distance = 0;
+    play(b, 'basic', [b.s.dice[0].uid]);
+    const ev = b.endTurn().events;    // played this turn: no cycle
+    expect(b.s.cycleActive).toBe(false);
+    expect(of(ev, 'backlash').filter(e => e.stacks > 0)).toHaveLength(0);
+    const b2 = mk('mage', 'm_suit', [['forest_ghoul']]);
+    b2.s.enemies[0].distance = 5;
+    b2.s.player.statuses.push({ type: 'poison', value: 3 });
+    b2.endTurn();
+    expect(b2.s.cycleActive).toBe(true);
+    expect(b2.s.player.backlash).toBe(0);
+  });
+  it('overcharge barrier (R3-5): 4 + 2 × (ring before + overcharge turns before)', () => {
+    const b = mk('mage', 'm_suit', [['forest_ghoul']]);
+    b.s.enemies[0].distance = 99;
+    const bars: number[] = [];
+    for (let i = 0; i < 5; i++) { const ev = b.endTurn().events; bars.push(of(ev, 'barrier').find(e => e.delta > 0)!.delta); }
+    expect(bars).toEqual([4, 6, 8, 10, 12]);
+  });
+  it('mage keep (R3-4): default keeps the highest points; setKeep / endTurn({keep}) choose', () => {
+    const b = mk('mage', 'm_suit', [['forest_ghoul']]);
+    b.s.enemies[0].distance = 5;
+    const u = setDice(b, [1, 2, 3, 4, 6, 5]);
+    play(b, 'basic', [u[0]]);
+    const k = b.keepInfo()!;
+    expect(k).toMatchObject({ cap: 3, need: true });
+    expect(k.selected).toEqual([u[4], u[5], u[3]]);
+    expect(b.setKeep([u[1], u[2], u[3], u[4]]).ok).toBe(false);
+    b.endTurn({ keep: [u[1], u[2]] });
+    const ids = b.s.dice.map(d => d.uid);
+    expect(ids).toContain(u[1]); expect(ids).toContain(u[2]); expect(ids).not.toContain(u[4]);
+    expect(mk('warrior', 'w_suit').keepInfo()).toBeNull();
+  });
+  it('rogue carry (1.1): only an unused shadow die on the field carries; none is created', () => {
+    const b = mk('rogue', 'r_suit');
+    const u = setDice(b, [5, 5, 6, 3]);
+    play(b, 0, [u[0]]);
+    play(b, 0, [u[1], u[2]]);    // precise spawn: a shadow die on the field
+    const sh = b.s.dice.find(d => d.kind === 'shadowDie')!;
+    b.s.maxStrikes = 3; b.s.strikesUsed = 2;
+    const extra = b.clone();
+    // using the spawned die: nothing carries
+    (extra as Battle2).s.dice = extra.s.dice.filter(d => d.uid !== sh.uid);
+    expect(extra.nextDice().count).toBe(3);
+    expect(b.nextDice().count).toBe(4);
+  });
+  it('刃行 onStrike: the first strike spawns shadow dice, a later one heals', () => {
+    const b = mk('rogue', 'r_suit');
+    const blade = b.rows().findIndex(r => r.rowId === 'r_blade');
+    const u = setDice(b, [2, 3, 2, 3]);
+    const e1 = play(b, blade, [u[0], u[1]]);
+    expect(of(e1, 'special').some(e => e.action === 'spawn')).toBe(true);
+    b.s.player.hp = 50;
+    const e2 = play(b, blade, [u[2], u[3]]);
+    expect(of(e2, 'special').some(e => e.action === 'spawn')).toBe(false);
+    expect(b.s.player.hp).toBeGreaterThan(50);
+  });
+});

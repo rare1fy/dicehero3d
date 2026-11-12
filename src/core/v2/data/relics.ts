@@ -1,13 +1,13 @@
-// Relics (SPEC_v2.1 4) and the economy tables (SPEC_v2.1 3.1–3.3). The prototype shop / reward pool is the 5 relics with
+// Relics (SPEC_v2.2 4) and the economy tables (SPEC_v2.2 3.1–3.3). The prototype shop / reward pool is the 3 relics with
 // `prototype: true` (4.4); `prototypeBanned` ones never appear. All "on strike" effects fire once per whole play (4.1).
 import type { RelicDefV2 } from '../types';
 
 export const RELICS_V2: RelicDefV2[] = [
   // 4.4 prototype pool
   { id: 'greedy_hand', name: '贪婪之手', desc: '交出 4 颗以上的出手：+20 基础伤害', rarity: 'common', tag: '通用', trigger: 'onStrike', prototype: true },
-  { id: 'wildfire', name: '怒火燎原', desc: '受到伤害后，下一次交出 ≥2 颗的出手 +15 伤害（不叠加）', rarity: 'common', tag: '通用', trigger: 'onHit', prototype: true },
-  { id: 'iron_charm', name: '铁壁护符', desc: '被攻击 → 下回合免费重投 +1', rarity: 'common', tag: '通用', trigger: 'onHit', prototype: true },
-  { id: 'steady_heart', name: '稳健之心', desc: '本回合一次重投都没用就出手 → 下回合免费重投 +1', rarity: 'common', tag: '通用', trigger: 'onStrike', prototype: true },
+  { id: 'wildfire', name: '怒火燎原', desc: '受到伤害后，下一次交出 ≥2 颗的出手 +15 伤害（不叠加）', rarity: 'common', tag: '通用', trigger: 'onHit' },
+  { id: 'iron_charm', name: '铁壁护符', desc: '被攻击 → 下回合免费重投 +1（每回合最多 1 次）', rarity: 'common', tag: '通用', trigger: 'onHit', prototype: true },
+  { id: 'steady_heart', name: '稳健之心', desc: '本回合一次重投都没用就出手 → 下回合免费重投 +1', rarity: 'common', tag: '通用', trigger: 'onStrike' },
   { id: 'field_aid', name: '战场急救', desc: '击杀回 8 血；每场最多 3 次', rarity: 'common', tag: '通用', trigger: 'onKill', perBattleCap: 3, prototype: true },
   // kept for later (not in the prototype pool)
   { id: 'dice_master', name: '骰子大师', desc: '交出 5 颗以上：+15 伤害、+30%', rarity: 'uncommon', tag: '通用', trigger: 'onStrike' },

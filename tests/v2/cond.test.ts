@@ -106,10 +106,22 @@ describe('conditions', () => {
     expect(matchRow(rowDef('r_shadow'), F('rogue', 5))).toMatchObject({ tier: 'single' });
     expect(matchRow(rowDef('r_shadow'), F('rogue', 5, 6, 5))).toMatchObject({ tier: 'feed' });
     expect(matchRow(rowDef('r_shadow'), F('rogue', 5, 6, 5, 6))).toMatchObject({ tier: 'area' });
-    expect(matchRow(rowDef('r_blade'), F('rogue', 2, 3, 4, 2))).toMatchObject({ tier: 'area' });
+    // v2.2: the blade row tops out at the 3-dice step
+    expect(matchRow(rowDef('r_blade'), F('rogue', 2, 3, 4, 2))).toMatchObject({ tier: 'feed' });
+    expect(rowDef('r_blade').tierRule.steps).toHaveLength(2);
     expect(matchRow(rowDef('r_poison'), F('rogue', 1, 1, 1))).toMatchObject({ tier: 'feed' });
     expect(matchRow(rowDef('r_dance'), F('rogue', 5))).toBeNull();
     expect(matchRow(rowDef('r_knife'), F('rogue', 3))).toMatchObject({ tier: 'single' });
     expect(matchRow(rowDef('r_knife'), F('rogue', 3, 3))).toBeNull();
+  });
+});
+
+describe('v2.2 tierCount', () => {
+  it("元素交汇 counts every die handed in ('all'); 怒行 companions do not raise the tier", () => {
+    expect(rowDef('m_mix').tierCount).toBe('all');
+    expect(matchRow(rowDef('m_mix'), F('mage', 1, 2, 3, 4, 5))).toMatchObject({ count: 5 });
+    expect(rowDef('w_fury').tierCount).toBe('matching');
+    const m = matchRow(rowDef('w_fury'), F('warrior', 6, 1, 2));
+    if (m) expect(m.count).toBe(1);
   });
 });

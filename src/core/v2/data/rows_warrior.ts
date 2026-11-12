@@ -37,7 +37,7 @@ export const W_ROWS: RowDef[] = [
     ],
   },
   {
-    id: 'w_fury', name: '怒行', classId: W, cond: { t: 'suit', suit: 'fury', companions: 2 },
+    id: 'w_fury', name: '怒行', classId: W, cond: { t: 'suit', suit: 'fury', companions: 2 }, tierCount: 'matching',
     tierRule: { steps: steps(['1', 'single'], ['2', 'feed'], ['3', 'ultimate']) },
     coef: [1.8, 2.25, 2.7], tags: ['suit'], icon: { kind: 'suit', suit: 'fury' },
     tiers: ladder({

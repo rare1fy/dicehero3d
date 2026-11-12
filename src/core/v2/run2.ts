@@ -144,7 +144,8 @@ export class Run2 {
     // middle: upgrade
     const u2 = upg(); if (u2) cards.push({ kind: 'upgrade', tablet: u2.tablet, slot: u2.slot, from: u2.sl.level });
     // right: evolve
-    const ev = slots.filter(x => x.sl.level === 3 && !x.sl.evolvedTo);
+    // v2.2: an evolution the engine does not implement is never offered
+    const ev = slots.filter(x => x.sl.level === 3 && !x.sl.evolvedTo && rowDef(x.sl.rowId).evolutions.every(e => e.implemented));
     if (ev.length) { const e = this.rng.pick(ev); const d = rowDef(e.sl.rowId); cards.push({ kind: 'evolve', tablet: e.tablet, slot: e.slot, options: [d.evolutions[0].id, d.evolutions[1].id] }); }
     else { const u3 = upg(); if (u3) cards.push({ kind: 'upgrade', tablet: u3.tablet, slot: u3.slot, from: u3.sl.level }); }
     if (cards.length) { s.queue.push({ kind: 'levelUp', cards }); s.pendingLevelUps++; }
