@@ -6,7 +6,7 @@ import { V3 } from '../engine/world';
 import { CELL } from './kit';
 import type { ModelDef } from './models';
 
-const HUNCH: Record<string, number> = { forest_ghoul: 0.4, forest_old_willow: 0.3, elite_alpha_wolf: 0.25, forest_moss_golem: 0.1, boss_coven_matriarch: 0.12 };
+const HUNCH: Record<string, number> = { forest_ghoul: 0.4, fig_ghoul: 0.35, forest_old_willow: 0.3, elite_alpha_wolf: 0.25, forest_moss_golem: 0.1, boss_coven_matriarch: 0.12 };
 const BIG: Record<string, number> = { boss_ancient_treant: 1.7, boss_root_colossus: 1.5, forest_moss_golem: 1.25, forest_treant: 1.2, boss_lich_forest: 1.2 };
 
 export class BActor extends Actor {
@@ -16,11 +16,12 @@ export class BActor extends Actor {
   private slow: number; private hunch: number; private armed: boolean;
   constructor(readonly def: ModelDef) {
     super();
-    const v = def.build(), lv = v as unknown as { u?: number; p?: number };
-    this.cx = lv.u ?? v.s; this.cy = lv.p ?? v.s;
-    let maxY = 0, maxX = 0; for (const c of v.cells.values()) { maxY = Math.max(maxY, c.y + 1); maxX = Math.max(maxX, Math.abs(c.x + 0.5) + 0.5); }
-    this.top = maxY * this.cy; this.height = Math.min(this.top, 6); this.width = maxX * 2 * this.cx;
+    const v = def.build(), lv = v as unknown as { u?: number; p?: number; k?: number; extent?: { top: number; width: number } };
+    this.cx = lv.u ?? lv.k ?? v.s; this.cy = lv.p ?? lv.k ?? v.s;
     const r = v.build({ glow: def.glow ?? 1.9, jitter: 0, self: def.self ?? 0.06, edge: 0.13 });
+    if (lv.extent && lv.extent.top > 0) { this.top = lv.extent.top; this.width = lv.extent.width; }   // moulded figures measure their meshes
+    else { let maxY = 0, maxX = 0; for (const c of v.cells.values()) { maxY = Math.max(maxY, c.y + 1); maxX = Math.max(maxX, Math.abs(c.x + 0.5) + 0.5); } this.top = maxY * this.cy; this.width = maxX * 2 * this.cx; }
+    this.height = Math.min(this.top, 6);
     this.body.add(r.root); this.bones = r.bones; this.finish(r.meshes);
     this.slow = BIG[def.id] ?? 1; this.hunch = HUNCH[def.id] ?? 0;
     this.armed = !!r.bones.weapon && r.bones.weapon.children.length > 0;

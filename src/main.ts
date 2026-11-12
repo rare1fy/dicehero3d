@@ -14,7 +14,8 @@ import { voxelCast } from './present/actors/voxcast';
 import { bestiaryViewer } from './present/bestiary/viewer';
 import { bestiaryCast } from './present/bestiary/battle';
 import { legoCast } from './present/bestiary/lego';
-import { initLegoEnv } from './present/look/legokit';
+import { initLegoEnv, legoEnvTex } from './present/look/legokit';
+import { figCast, setFigEnv } from './present/bestiary/figs';
 import { GRADE } from './present/look/post';
 import type { Env } from './present/look/env';
 import './present/director';
@@ -51,11 +52,11 @@ const hash = typeof location !== 'undefined' ? location.hash.slice(1) : '';   //
 Promise.resolve().then(() => {
   // the voxel graveyard + the bestiary cast (#classic: the smooth graveyard with the show-04 cast, for comparison)
   const entry0 = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_ENTRY;
-  const classic = hash === 'classic', brick = hash === 'lego' || entry0 === 'lego';
-  if (brick) { initLegoEnv(gfx.renderer); GRADE.bloomThreshold = 1.15; }   // white plastic should shine, not bloom
+  const classic = hash === 'classic', brick = hash === 'brick' || entry0 === 'brick', fig = hash === 'fig' || entry0 === 'fig';
+  if (brick || fig) { initLegoEnv(gfx.renderer); setFigEnv(legoEnvTex()); GRADE.bloomThreshold = 1.15; }   // white plastic should shine, not bloom
   // toy bricks belong in the smooth graveyard; the voxel cast in the voxel one
-  env = buildEnv(null, { voxel: !classic && !brick });
-  const cast = brick ? legoCast() : classic ? voxelCast() : bestiaryCast();
+  env = buildEnv(null, { voxel: !classic && !brick && !fig });
+  const cast = fig ? figCast() : brick ? legoCast() : classic ? voxelCast() : bestiaryCast();
   // the model viewer page: a separate build (VITE_ENTRY=bestiary) or #bestiary on the game build
   const entry = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_ENTRY;
   if (entry === 'bestiary' || hash === 'bestiary') {

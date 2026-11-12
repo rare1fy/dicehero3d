@@ -10,7 +10,7 @@ import { V3, R } from '../engine/world';
 import { PADD, TILE } from '../engine/particles';
 import type { Cast } from '../actors/cast';
 
-const TIP: Record<string, [number, number]> = { warrior: [17, -3], boss_lich_forest: [29, 0], lego_warrior: [9, -3], lego_lich: [19, 0] };
+const TIP: Record<string, [number, number]> = { warrior: [17, -3], boss_lich_forest: [29, 0], lego_warrior: [9, -3], lego_lich: [19, 0], fig_warrior: [19, -3], fig_lich: [29, 0] };
 
 export class BattleActor extends BActor {
   aim = 0; breath = 1; robeFire = 0; walkK = 0; running = false; private runK = 0;

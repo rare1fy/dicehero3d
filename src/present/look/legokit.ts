@@ -10,6 +10,7 @@ import type { Bone } from '../actors/rig';
 
 let envTex: THREE.Texture | null = null;
 /** a small room reflection for the plastic (generated in-browser, no files) */
+export const legoEnvTex = () => envTex;
 export function initLegoEnv(renderer: THREE.WebGLRenderer) { if (envTex) return; const pm = new THREE.PMREMGenerator(renderer); envTex = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose(); }
 
 let plastic: THREE.MeshStandardMaterial | null = null;
