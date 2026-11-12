@@ -9,6 +9,7 @@ import { glow } from '../look/toon';
 import { toon } from '../look/toon';
 import { buildSky, noiseTex, runeTex } from '../look/env';
 import { AREA } from './props';
+import { GRADE } from '../look/post';
 import { Cards, ambientTick, shaft, type Ambient } from './cards';
 
 export interface Mood {
@@ -78,6 +79,8 @@ let current: Stage | null = null;
 export function showStage(def: SceneDef): Stage {
   current?.dispose();
   const g = globals(), root = new THREE.Group(); scene.add(root);
+  // the night is dark in colour, not in exposure: lift the whole frame and ease the vignette so characters and props read
+  GRADE.exposure = 1.6; GRADE.vig = 0.32;
   const md = def.mood, lights: THREE.Light[] = [], flames: Array<{ m: THREE.Mesh; l?: THREE.PointLight; base: number; s: number }> = [], phase: Array<(k: number) => void> = [];
   // mood: sky or void, fog, light colours
   scene.background = new THREE.Color(md.bg); scene.fog = new THREE.FogExp2(md.fog, md.fogD);

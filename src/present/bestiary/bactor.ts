@@ -18,7 +18,7 @@ export class BActor extends Actor {
     super();
     const v = def.build(), lv = v as unknown as { u?: number; p?: number; k?: number; extent?: { top: number; width: number } };
     this.cx = lv.u ?? lv.k ?? v.s; this.cy = lv.p ?? lv.k ?? v.s;
-    const r = v.build({ glow: def.glow ?? 1.9, jitter: 0, self: def.self ?? 0.06, edge: 0.13 });
+    const r = v.build({ glow: def.glow ?? 1.9, jitter: 0, self: (def.self ?? 0.06) + 0.2, rim: 1.7, edge: 0.13 });
     if (lv.extent && lv.extent.top > 0) { this.top = lv.extent.top; this.width = lv.extent.width; }   // moulded figures measure their meshes
     else { let maxY = 0, maxX = 0; for (const c of v.cells.values()) { maxY = Math.max(maxY, c.y + 1); maxX = Math.max(maxX, Math.abs(c.x + 0.5) + 0.5); } this.top = maxY * this.cy; this.width = maxX * 2 * this.cx; }
     this.height = Math.min(this.top, 6);

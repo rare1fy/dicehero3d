@@ -10,6 +10,7 @@ import { toon, glow } from './toon';
 import { onLook, voxelProp, voxMat } from './voxel';
 import { buildVoxArena } from './voxarena';
 import { dressWorld } from '../scenes/dress';
+import { GRADE } from './post';
 import { CELL } from '../bestiary/kit';
 import type { KKAssets } from '../actors/kk';
 
@@ -261,6 +262,7 @@ export function buildEnv(kk?: KKAssets | null, opt: { voxel?: boolean } = {}): E
   if (kk) kayKitSet(root, kk, lanternAt, altar, trim);
   const va = vox ? buildVoxArena({ altar: A, altarR: ARENA.altarR, lanterns: lanternAt }) : null;
   if (va) for (const m of va.meshes) root.add(m);
+  if (va) { GRADE.exposure = 1.6; GRADE.vig = 0.32; }   // same lift as the chapter stages
   if (va) dressWorld(root, va.world, 'grave', { seed: 11, clear: [{ x0: -2.6, z0: -7.2, x1: 2.6, z1: -2.2 }], shafts: [[-6.6, -7.6, 0.3, 0.32, 1.8], [6.8, -8.6, -0.3, 0.3, 1.4]] });
   const flames: THREE.Mesh[] = [], soulLights: THREE.PointLight[] = [];
   const flameMat = glow(0x5affb0, 3.2);
