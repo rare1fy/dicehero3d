@@ -14,7 +14,7 @@ const C = {
 };
 const hash = (a: number, b: number, c = 0) => { let h = (a * 374761393 + b * 668265263 + c * 1274126177) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
-export interface VoxArena { meshes: THREE.Mesh[]; flames: THREE.Vector3[]; altarTop: number }
+export interface VoxArena { meshes: THREE.Mesh[]; flames: THREE.Vector3[]; altarTop: number; world: VoxWorld }
 
 export function buildVoxArena(o: { altar: THREE.Vector3; altarR: number; lanterns: THREE.Vector3[] }): VoxArena {
   const w = new VoxWorld(CELL), M = (m: number) => Math.round(m / CELL);
@@ -100,5 +100,5 @@ export function buildVoxArena(o: { altar: THREE.Vector3; altarR: number; lantern
     w.box(x - 1, hTop + 2, z - 1, x + 1, hTop + 4, z + 1, C.SOUL, 1);
     flames.push(new THREE.Vector3((x + 0.5) * CELL, (hTop + 4) * CELL, (z + 0.5) * CELL));
   }
-  return { meshes: w.build({ glow: 2.6 }), flames, altarTop: top * CELL };
+  return { meshes: w.build({ glow: 2.6 }), flames, altarTop: top * CELL, world: w };
 }

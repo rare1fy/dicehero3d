@@ -9,6 +9,7 @@ import { glow } from '../look/toon';
 import { toon } from '../look/toon';
 import { buildSky, noiseTex, runeTex } from '../look/env';
 import { AREA } from './props';
+import { Cards, ambientTick, shaft, type Ambient } from './cards';
 
 export interface Mood {
   sky: boolean; bg: number; fog: number; fogD: number; hemiSky: number; hemiGround: number; hemiI: number; moon: number; moonI: number; key: number; keyI: number;
@@ -24,6 +25,12 @@ export interface Ctx {
   onPhase(f: (k: number) => void): void;
   /** add a ready-made object (e.g. a prebuilt voxel arena mesh) to the stage */
   add(o: THREE.Object3D): void;
+  /** dressing cards (grass, vines, webs, decals) collected during build, instanced after it */
+  cards: Cards;
+  /** drifting ambient particles while this stage is up */
+  ambient(a: Ambient): void;
+  /** a soft light shaft from above */
+  shaft(x: number, z: number, o?: { w?: number; h?: number; color?: number; tilt?: number; yaw?: number; a?: number }): void;
 }
 export interface SceneDef { id: string; name: string; group: '普通' | '首领' | '节点'; kind: '户外' | '室内' | '地牢' | '洞穴'; blurb: string; mood: Mood; build(c: Ctx): void; foes?: string[] }
 
@@ -69,8 +76,11 @@ export function showStage(def: SceneDef): Stage {
   for (const m of g.mist) { const mm = m.material as THREE.MeshBasicMaterial; mm.color.set(md.mist ?? 0x5a5c8c); mm.opacity = md.mistA ?? 0.08; }
   // the ground beyond the stage
   const earth = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), toon(0xffffff, { map: earthTex(md.earth) })); earth.rotation.x = -Math.PI / 2; earth.position.y = -2 * CELL; earth.receiveShadow = true; root.add(earth);
-  const w = new VoxWorld(CELL);
+  const w = new VoxWorld(CELL), cards = new Cards(), amb: Ambient[] = [];
   const ctx: Ctx = {
+    cards,
+    ambient(a) { amb.push(a); },
+    shaft(x, z, o) { shaft(root, x, z, { color: md.moon, ...o }); },
     w,
     light(p, color, intensity = 5, dist = 7) { const l = new THREE.PointLight(color, intensity, dist, 1.8); l.position.set(...p); scene.add(l); lights.push(l); },
     flame(p, color, size = 0.12) { const m = new THREE.Mesh(new THREE.BoxGeometry(size, size * 1.4, size), glow(color, 3)); m.position.set(...p); root.add(m); flames.push({ m, base: size, s: Math.random() * 10 }); },
@@ -89,9 +99,11 @@ export function showStage(def: SceneDef): Stage {
   };
   def.build(ctx);
   for (const m of w.build({ glow: 2.6 })) root.add(m);
+  cards.build(root);
   const off = { on: true };
   onUpdate((dt, rdt) => {
     if (!off.on) return; const t = clock.rtime;
+    ambientTick(amb, rdt);
     for (const f of flames) {
       if (f.base < 0) { f.m.rotation.z += rdt * 0.08; ((f.m.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(t * 1.6) * 0.12); continue; }
       const s = 1 + Math.sin(t * 9 + f.s) * 0.15 + Math.sin(t * 23 + f.s) * 0.08; f.m.scale.set(s, s * 1.3, s); f.m.rotation.y += dt * 2;

@@ -4,17 +4,18 @@
 import { type SceneDef, type Mood, type Ctx } from './stage';
 import {
   M, hash, pick, AREA, tiles, planks, patches, wall, rockRing, deadTree, pine, stump, log, rock, mushroom, crate, barrel, table, candle, bones, skull,
-  pillar, web, eggSac, sarcophagus, bars, torchPost, brazier, fence, grave, cottageWall,
+  pillar, eggSac, sarcophagus, bars, torchPost, brazier, fence, grave, cottageWall,
 } from './props';
 import { buildVoxArena } from '../look/voxarena';
+import { dress } from './dress';
 import { CELL } from '../bestiary/kit';
 import { V3 } from '../engine/world';
 
 // ------------------------------------------------------------------ moods
 const NIGHT: Mood = { sky: true, bg: 0x0e0c1c, fog: 0x1a1630, fogD: 0.019, hemiSky: 0x6a70a8, hemiGround: 0x221a20, hemiI: 1.2, moon: 0xb8c4ff, moonI: 2.4, key: 0xffd2a8, keyI: 0.8, earth: [0x2a2c2a, 0x2e3a2a, 0x262226], mist: 0x5a5c8c, mistA: 0.08 };
 const SWAMP: Mood = { ...NIGHT, fog: 0x1a2a22, fogD: 0.024, hemiSky: 0x4a7a6a, hemiGround: 0x141a14, moon: 0xa8d8c0, moonI: 2.2, earth: [0x262a20, 0x2a3222, 0x20241c], mist: 0x5a8a6a, mistA: 0.08 };
-const DUNGEON: Mood = { sky: false, bg: 0x07060b, fog: 0x0c0a12, fogD: 0.032, hemiSky: 0x6a6a8a, hemiGround: 0x1a1618, hemiI: 1.15, moon: 0xa8a8c8, moonI: 1.7, key: 0xffc890, keyI: 0.55, earth: [0x121016, 0x16141a, 0x100e12], mist: 0x3a3a50, mistA: 0.06 };
-const CAVE: Mood = { sky: false, bg: 0x050408, fog: 0x0a0a10, fogD: 0.03, hemiSky: 0x6a7a8a, hemiGround: 0x1a1a1e, hemiI: 1.3, moon: 0x8a9ac0, moonI: 1.5, key: 0xc8d0ff, keyI: 0.4, earth: [0x141216, 0x18161a, 0x121014], mist: 0x3a4a5a, mistA: 0.07 };
+const DUNGEON: Mood = { sky: false, bg: 0x07060b, fog: 0x0c0a12, fogD: 0.03, hemiSky: 0x7a7a9a, hemiGround: 0x221e22, hemiI: 1.5, moon: 0xa8a8c8, moonI: 2.0, key: 0xffc890, keyI: 0.55, earth: [0x121016, 0x16141a, 0x100e12], mist: 0x3a3a50, mistA: 0.06 };
+const CAVE: Mood = { sky: false, bg: 0x050408, fog: 0x0a0a10, fogD: 0.028, hemiSky: 0x7a8ab0, hemiGround: 0x22222a, hemiI: 1.75, moon: 0x8a9ac0, moonI: 1.9, key: 0xc8d0ff, keyI: 0.4, earth: [0x141216, 0x18161a, 0x121014], mist: 0x3a4a5a, mistA: 0.07 };
 const HOUSE: Mood = { ...NIGHT, keyI: 0.6, mistA: 0.05 };
 
 const BARK = 0x3e3434, BARK_D = 0x2a2224, PINE = 0x1e3a2e, PINE_T = 0x2e5a40, MOSS = 0x3e5a30, MOSS_D = 0x2e4426, EARTH = [0x3e3634, 0x36422e, 0x342e2c];
@@ -26,6 +27,10 @@ function woodsRing(c: Ctx, seed: number, dense = 1) {
   spots.forEach(([x, z], i) => { if (hash(i, seed, 4) > dense) return; if (hash(i, seed) < 0.6) pine(c.w, x + (hash(i, seed, 1) - 0.5), z, 6 + hash(i, seed, 2) * 3, BARK_D, PINE, PINE_T); else deadTree(c.w, x, z, 5.5 + hash(i, seed, 3) * 2, BARK, BARK_D, { seed: i + seed }); });
 }
 function floorEarth(c: Ctx, cols = EARTH) { patches(c.w, AREA, cols); }
+/** a cobweb card where the old block web stood (y0 and s in blocks, as the block web took them) */
+const cweb = (c: Ctx, x: number, z: number, y0: number, s: number, alongX: boolean) => c.cards.add('web', x, z, { y: (y0 + 2 * s + 1) * CELL, s: ((2 * s + 1) / 32) * 1.25, ry: alongX ? 0 : Math.PI / 2 });
+/** the cave rock ring's inner faces, for hanging growth */
+const RING: Array<[number, number, number, number, 'n' | 's' | 'e' | 'w']> = [[-8.4, -11.6, 8.4, -11.6, 's'], [-9.8, -10, -9.8, 4.5, 'e'], [9.8, -10, 9.8, 4.5, 'w']];
 
 // ================================================================== normal fights (random pool)
 const trail: SceneDef = {
@@ -40,6 +45,7 @@ const trail: SceneDef = {
     c.light([-7, 0.6, 3], 0x4ac8ff, 4, 6); c.light([6.8, 0.6, -3], 0x4ac8ff, 3.5, 6);
     const lp = torchPost(c.w, 6.2, 5.6, 1.8, BARK_D, FIRE); c.flame(lp, FIRE); c.light(lp, 0xff9a50, 5, 7);
     c.w.box(M(-6.2), -2, M(5.4), M(-6.2) + 1, M(1.4), M(5.4) + 1, WOOD_D).box(M(-6.2) - 6, M(1.1), M(5.4), M(-6.2) + 3, M(1.4), M(5.4), WOOD);   // signpost
+    dress(c, 'woods', { seed: 1, shafts: [[-6.4, -7.2, 0.3, 0.32, 1.8], [5.8, -9.2, -0.3, 0.3, 1.4], [7.8, 1.2, 0.2, 0.3, 1.2]] });
   },
 };
 const lumber: SceneDef = {
@@ -58,6 +64,7 @@ const lumber: SceneDef = {
     log(c.w, -2.4, 6.7, 3, true, BARK, 0xb08a5a);
     fence(c.w, -10.5, 7.4, -5, WOOD_D); fence(c.w, 5, 7.4, 10.5, WOOD_D);
     for (const p of [torchPost(c.w, -5.8, -4.6, 2, WOOD_D, FIRE), torchPost(c.w, 6, 1.6, 2, WOOD_D, FIRE)]) { c.flame(p, FIRE); c.light(p, 0xff9a50, 5, 8); }
+    dress(c, 'woods', { seed: 2, dense: 0.8, shafts: [[-1.2, -10.4, 0.2, 0.3, 1.6], [8.4, -0.6, -0.2, 0.3, 1.2]] });
   },
 };
 const village: SceneDef = {
@@ -75,6 +82,7 @@ const village: SceneDef = {
     barrel(c.w, -7.4, 2.2, WOOD, IRON); barrel(c.w, -7.4, 3.2, WOOD, IRON); crate(c.w, -6.2, 4.6, 5, WOOD_L, WOOD_D); crate(c.w, 8.6, -2.4, 6, WOOD_L, WOOD_D);
     deadTree(c.w, -8.8, 5.6, 6, BARK, BARK_D, { seed: 3 }); woodsRing(c, 3, 0.4);
     for (const p of [torchPost(c.w, -5.6, -5.2, 2.4, IRON, 0xffc070), torchPost(c.w, 5.8, -5.6, 2.4, IRON, 0xffc070)]) { c.flame(p, 0xffc070); c.light(p, 0xffb060, 5, 8); }
+    dress(c, 'woods', { seed: 3, dense: 0.8, hang: [[-9.6, -11.4, -3.6, -11.4, 's'], [-10.4, -10.6, -10.4, -3.2, 'e'], [3.8, -11.9, 9.8, -11.9, 's'], [10.4, -11.2, 10.4, -4.2, 'w']], shafts: [[-1.6, -6.2, 0.2, 0.3, 1.4]] });
   },
 };
 const cottage: SceneDef = {
@@ -95,8 +103,9 @@ const cottage: SceneDef = {
     c.w.box(M(5), 0, M(-9.6), M(7.8), M(0.5), M(-6), WOOD_D).box(M(5.2), M(0.5), M(-9.4), M(7.6), M(0.65), M(-6.2), 0x7a6a8a).box(M(5.2), M(0.5), M(-9.4), M(7.6), M(0.8), M(-8.6), 0xd8d0c0);
     c.w.box(M(-7.8), 0, M(-10), M(-4.4), M(2.4), M(-9.6), WOOD_D); for (const y of [0.8, 1.6]) c.w.box(M(-7.8), M(y), M(-9.6), M(-4.4), M(y), M(-9.0), WOOD);
     barrel(c.w, 7.4, 1.6, WOOD, IRON); crate(c.w, 7.2, 4.4, 5, WOOD_L, WOOD_D); crate(c.w, -7.2, 4.6, 4, WOOD_L, WOOD_D);
-    web(c.w, -7.9, -9.9, M(2.0), 9, true, 0xc8c8d0); web(c.w, 7.9, -9.9, M(2.0), 8, true, 0xc8c8d0);
+    cweb(c, -7.9, -9.9, M(2.0), 9, true); cweb(c, 7.9, -9.9, M(2.0), 8, true);
     woodsRing(c, 4, 0.5);
+    dress(c, 'house', { seed: 4, hang: [[-8.4, -10.8, 8.4, -10.8, 's'], [-8.8, -10.2, -8.8, -2.2, 'e'], [8.8, -10.2, 8.8, -2.2, 'w']], webs: [[-7.9, 3.3, -10.0, 0.785], [7.9, 3.3, -10.0, -0.785], [-8.0, 2.7, -2.4, 2.3]], shafts: [[-3.4, -6.4, 0.2, 0.3, 1.6], [3.8, -3.2, -0.2, 0.3, 1.3]] });
   },
 };
 const chapel: SceneDef = {
@@ -117,6 +126,7 @@ const chapel: SceneDef = {
     for (const side of [-1, 1]) for (let i = 0; i < 4; i++) { const x = side * 7.6, z = -7 + i * 2.6; c.w.box(M(x) - 9, 0, M(z) - 3, M(x) + 9, 6, M(z) + 3, WOOD).box(M(x) - 9, 7, M(z) - 3, M(x) + 9, 12, M(z) - 2, WOOD_D); }
     c.w.box(M(3.4), 0, M(-6.2), M(6.4), M(0.5), M(-5.6), WOOD_D);   // a fallen beam
     woodsRing(c, 5, 0.5);
+    dress(c, 'house', { seed: 5, hang: [[-8.8, -11.6, 8.8, -11.6, 's'], [-9.2, -11, -9.2, -3.2, 'e'], [9.2, -11, 9.2, -3.2, 'w']], webs: [[-8.3, 4.6, -10.7, 0.785], [8.3, 4.6, -10.7, -0.785]], shafts: [[-5, -8.4, 0, 0.3, 1.5], [0, -8.4, 0, 0.3, 1.5], [5, -8.4, 0, 0.3, 1.5]] });
   },
 };
 const catacomb: SceneDef = {
@@ -135,6 +145,7 @@ const catacomb: SceneDef = {
     bones(c.w, -6.2, 2.6, BONE); bones(c.w, 6.4, -9, BONE); skull(c.w, -5.8, -9.6, 0, BONE);
     for (const p of [brazier(c.w, -4.8, -9.6, IRON, SOUL), brazier(c.w, 4.8, -9.6, IRON, SOUL)]) { c.flame(p, SOUL, 0.16); c.light(p, 0x4affa0, 5, 9); }
     const t = torchPost(c.w, -8.8, 3.4, 1.8, IRON, FIRE); c.flame(t, FIRE); c.light(t, 0xff9a50, 4, 7);
+    dress(c, 'dungeon', { seed: 6, hang: [[-10.6, -12.4, 10.6, -12.4, 's'], [-11.4, -11.6, -11.4, -0.4, 'e'], [11.4, -11.6, 11.4, -0.4, 'w']], webs: [[-10.4, 4.5, -11.4, 0.785], [10.4, 4.5, -11.4, -0.785], [-10.4, 3.3, -0.6, 2.3], [10.4, 3.3, -0.6, -2.3]] });
   },
 };
 const cells: SceneDef = {
@@ -155,6 +166,7 @@ const cells: SceneDef = {
     c.w.box(M(-6.2), 0, M(4), M(-5.8), M(1.8), M(4.4), WOOD_D).box(M(-3.8), 0, M(4), M(-3.4), M(1.8), M(4.4), WOOD_D).box(M(-6.2), M(0.8), M(4), M(-3.4), M(1.0), M(4.4), WOOD).box(M(-6.2), M(1.6), M(4), M(-3.4), M(1.8), M(4.4), WOOD);
     c.water(5.4, 3.2, 6.6, 4.4, 0x1a2a3a);
     for (const p of [torchPost(c.w, -5.6, -10.6, 2.2, IRON, FIRE), torchPost(c.w, 5.6, -10.6, 2.2, IRON, FIRE), torchPost(c.w, 6.2, 5.4, 1.6, IRON, FIRE)]) { c.flame(p, FIRE); c.light(p, 0xff9a50, 5, 8); }
+    dress(c, 'dungeon', { seed: 7, hang: [[-6.4, -12.4, 6.4, -12.4, 's'], [-11.4, -11.4, -11.4, 0.6, 'e'], [11.4, -11.4, 11.4, 0.6, 'w']], webs: [[-6.4, 4.1, -11.4, 0.785], [6.4, 4.1, -11.4, -0.785], [-10.4, 2.5, -7.3, 0.785], [10.4, 2.5, -3.3, -0.785]] });
   },
 };
 const spiderCave: SceneDef = {
@@ -163,11 +175,12 @@ const spiderCave: SceneDef = {
     patches(c.w, AREA, [0x46444c, 0x3e3c44, 0x504e56], { raise: [2], seed: 4 });
     rockRing(c.w, { x0: -9, z0: -10.8, x1: 9, z1: 7.5 }, 4.4, ROCK, { seed: 3 });
     for (const [x, z, s, h] of [[-7.8, -6, 5, 2.4], [7.4, -7.4, 6, 3], [-8.4, 2.4, 4, 1.6], [7.8, 1.8, 5, 2], [-3.6, -10, 4, 2.8], [4.2, -10.2, 5, 3.4]] as const) { c.w.box(M(x) - s, -2, M(z) - s, M(x) + s, M(h * 0.5), M(z) + s, ROCK[1]); c.w.box(M(x) - s + 2, M(h * 0.5), M(z) - s + 2, M(x) + s - 2, M(h), M(z) + s - 2, ROCK[0]); }
-    web(c.w, -6.2, -8.8, 0, 14, true, 0xd8d8e0); web(c.w, 6.4, -9.6, 4, 12, true, 0xd8d8e0); web(c.w, -9.4, -1.8, 4, 11, false, 0xd8d8e0); web(c.w, 9.4, -3.4, 2, 12, false, 0xd8d8e0);
+    cweb(c, -6.2, -8.8, 0, 14, true); cweb(c, 6.4, -9.6, 4, 12, true); cweb(c, -9.4, -1.8, 4, 11, false); cweb(c, 9.4, -3.4, 2, 12, false);
     for (const [x, z] of [[-7, -4.4], [-6.4, -4.2], [6.6, -5.2], [7.2, -4.8], [-2.6, -9.6], [6.8, 4.4]]) eggSac(c.w, x, z, 3, 0xd8d0c0, 0x9aff3a);
     for (const [x, z] of [[8.6, -1.4], [-8.8, -8.4]]) c.w.box(M(x) - 3, 0, M(z) - 3, M(x) + 3, M(1.6), M(z) + 3, 0xe0dcd0).box(M(x) - 2, M(1.6), M(z) - 2, M(x) + 2, M(1.9), M(z) + 2, 0xe0dcd0);
     bones(c.w, -5.8, 3.4, BONE); bones(c.w, 5.8, -2, BONE); skull(c.w, 6.2, 3, 0, BONE);
     c.light([-6.6, 0.6, -4.3], 0x9aff3a, 4, 6); c.light([6.9, 0.6, -5], 0x9aff3a, 4, 6); c.light([0, 3, -8], 0x8a9ab8, 3, 12);
+    dress(c, 'spider', { seed: 8, hang: RING, webs: [[-7.8, 3.6, -9.6, 0.785], [7.8, 3.8, -9.8, -0.785], [-8.4, 3.2, -4, 1.4], [8.4, 3.0, -1, -1.4], [-2.8, 3.6, -10, 0.2], [3.2, 3.4, -10.2, -0.3], [-8.2, 2.4, 4.2, 2.2]] });
   },
 };
 const grotto: SceneDef = {
@@ -181,6 +194,7 @@ const grotto: SceneDef = {
     for (const [x, z, s, col] of [[-7.4, -6, 3, 0x4ae8ff], [-6.6, -7, 2, 0xb060ff], [7, -5.4, 3, 0x4ae8ff], [7.8, -6.6, 2, 0xb060ff], [-8.2, 1.4, 3, 0x4ae8ff], [8, 2.2, 2, 0xb060ff], [-6.8, 4.8, 2, 0x4ae8ff], [6.4, -9.6, 4, 0x4ae8ff], [-5.8, -10.2, 3, 0xb060ff]] as const) mushroom(c.w, x, z, s, 0xd8d0e0, col, 1);
     for (const [x, z] of [[8.8, -2.6], [-9, -3.6]]) { c.w.box(M(x) - 1, 0, M(z) - 1, M(x) + 1, 14, M(z) + 1, 0x8af0ff, 1); c.w.box(M(x) + 2, 0, M(z), M(x) + 3, 9, M(z) + 1, 0x8af0ff, 1); }
     c.light([-7, 0.8, -6.4], 0x4ae8ff, 5, 7); c.light([7.2, 0.8, -6], 0xb060ff, 5, 7); c.light([0, 1, -9], 0x4ae8ff, 4, 9);
+    dress(c, 'cave', { seed: 9, hang: RING, shafts: [[0, -9.2, 0, 0.12, 2.2]] });
   },
 };
 const swamp: SceneDef = {
@@ -195,6 +209,7 @@ const swamp: SceneDef = {
     for (const [x, z, h, s] of [[-8.6, -6.4, 6, 1], [8.4, -2, 7, 2], [-8.2, 4.6, 5.4, 3], [9, 5.4, 5, 4], [-3.4, -11.6, 6.4, 5]] as const) { deadTree(c.w, x, z, h, 0x3a3630, 0x26221e, { seed: s }); c.w.box(M(x) + 3, M(h * 0.3), M(z), M(x) + 3, M(h * 0.5), M(z), 0x7a8a6a); }
     for (const [x, y, z] of [[-6.8, 1.4, -3.6], [7.2, 1.8, 0.4], [0.6, 1.6, -9.6], [-7.6, 1.2, 4]] as const) c.flame([x, y, z], 0x7affa0, 0.1);
     c.light([-6.8, 1.4, -3.6], 0x7affa0, 3.5, 6); c.light([7.2, 1.8, 0.4], 0x7affa0, 3.5, 6);
+    dress(c, 'swamp', { seed: 10, water: [{ x0: -11, z0: -13, x1: -5.6, z1: 8 }, { x0: 5.8, z0: -13, x1: 11, z1: 8 }, { x0: -5.6, z0: -13, x1: 5.8, z1: -7.4 }], shafts: [[-3, -6.6, 0.2, 0.3, 1.6], [4.2, -4, -0.2, 0.3, 1.2]] });
   },
 };
 
@@ -204,9 +219,10 @@ const lichAltar: SceneDef = {
   build(c) {
     const lanterns = [V3(-4.4, 0, -3.4), V3(4.4, 0, -3.4), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)];
     const va = buildVoxArena({ altar: V3(0, 0.55, -4.7), altarR: 2.2, lanterns });
-    for (const m of va.meshes) c.add(m);
+    for (const [k, v] of va.world.cells) c.w.cells.set(k, v);   // the arena joins the stage world (one mesh build; cards find its surfaces)
     va.flames.forEach((p, i) => { c.flame([p.x, p.y + CELL * 1.5, p.z], SOUL, 0.14); if (i < 2) c.light([p.x, p.y, p.z], 0x4affa0, 5, 6); });
     c.rune(0, va.altarTop + 0.006, -4.7, 2.2);
+    dress(c, 'grave', { seed: 11, clear: [{ x0: -2.6, z0: -7.2, x1: 2.6, z1: -2.2 }], shafts: [[-6.6, -7.6, 0.3, 0.32, 1.8], [6.8, -8.6, -0.3, 0.3, 1.4]] });
   },
 };
 
@@ -225,6 +241,7 @@ const rootDeep: SceneDef = {
     for (const [x, z] of [[-7.8, 4.4], [7.6, 4.8], [-8.4, -2.4]]) rock(c.w, x, z, 7, 5, 0x4a3e34, 0x5a6a3a);
     for (const [x, z] of [[-6, -3.6], [6.2, -2.8]]) mushroom(c.w, x, z, 2, 0xc8b8a0, 0xffa040, 1);
     c.light([-6.4, 1.8, -6.2], 0xffa040, 6, 8); c.light([6.8, 1.8, -7], 0xffa040, 6, 8); c.light([0, 3.4, -5], 0xd89a5a, 4, 12);
+    dress(c, 'roots', { seed: 12, hang: RING, shafts: [[0, -6, 0, 0.1, 2.6]] });
   },
 };
 const covenNest: SceneDef = {
@@ -240,10 +257,11 @@ const covenNest: SceneDef = {
     c.w.box(cx - 4, 0, cz + 9, cx + 4, 2, cz + 11, 0xff8a30, 1); c.light([-4.2, 1.6, -8.4], 0x7aff5a, 7, 9); c.flame([-4.2, 1.2, -8.4], 0x9aff6a, 0.2);
     c.w.box(M(3), 0, M(-11), M(7.6), M(2.8), M(-10.4), TM); for (const y of [0.9, 1.8]) { c.w.box(M(3), M(y), M(-10.4), M(7.6), M(y), M(-9.8), WOOD); for (let i = 0; i < 6; i++) c.w.box(M(3.3 + i * 0.75), M(y) + 1, M(-10.2), M(3.3 + i * 0.75) + 1, M(y) + 4, M(-10), pick([0x9aff3a, 0xb060ff, 0xff6a4a, 0x4ae8ff], i, y * 7), 1); }
     for (let i = 0; i < 9; i++) { const x = -7.6 + i * 1.9; c.w.box(M(x), M(2.2 + hash(i, 4) * 0.8), M(-10.9) + 3, M(x) + 1, M(3.8), M(-10.9) + 3, pick([0x5a8a3a, 0x8a7a3a, 0x6a4a6a], i)); }
-    web(c.w, 0.6, -10.6, M(1.6), 16, true, 0xd0d0d8); web(c.w, -8.4, -6, M(1.0), 10, false, 0xd0d0d8); web(c.w, 8.4, -5, M(1.2), 10, false, 0xd0d0d8);
+    cweb(c, 0.6, -10.6, M(1.6), 16, true); cweb(c, -8.4, -6, M(1.0), 10, false); cweb(c, 8.4, -5, M(1.2), 10, false);
     for (const [x, z] of [[7.4, -7.6], [7.8, -6.8], [-7.6, 3.6], [7.2, 3.8]]) eggSac(c.w, x, z, 3, 0xd8d0c0, 0x9aff3a);
     for (const [x, z] of [[-6.8, -2.8], [6.6, -1.6], [-1.4, -10.2]]) { candle(c.w, x, z, 5, 0x3a2a44, CURSE); c.light([x, 0.5, z], 0xb060ff, 2.5, 4); }
     woodsRing(c, 7, 0.4);
+    dress(c, 'house', { seed: 13, hang: [[-8.8, -11.6, 8.8, -11.6, 's'], [-9.2, -11, -9.2, -2.2, 'e'], [9.2, -11, 9.2, -2.2, 'w']], webs: [[-8.3, 3.9, -10.7, 0.785], [8.3, 3.9, -10.7, -0.785], [-8.3, 3.0, -2.5, 2.3], [8.3, 3.0, -2.5, -2.3]] });
   },
 };
 const ancientGrove: SceneDef = {
@@ -263,6 +281,7 @@ const ancientGrove: SceneDef = {
     for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.2, x = Math.sin(a) * 8.2, z = -1.6 + Math.cos(a) * 7.4; if (Math.abs(x) < 4 && z > 2) continue; const sx = M(x), sz = M(z), h = M(2 + hash(i, 2) * 1.2); c.w.box(sx - 4, -2, sz - 3, sx + 4, h, sz + 3, 0x6a6c74).box(sx - 3, h + 1, sz - 2, sx + 3, h + 2, sz + 2, 0x5a6a4a).box(sx - 1, M(1), sz + 4, sx, M(1.6), sz + 4, 0xb8ff7a, 1); }
     for (let i = 0; i < 12; i++) c.flame([(hash(i, 1) - 0.5) * 18, 0.8 + hash(i, 2) * 2.4, -11 + hash(i, 3) * 16], 0xd8ff7a, 0.06);
     c.light([0, 2.6, -9.6], 0x9aff6a, 7, 10); c.light([-6, 1.4, -2], 0xd8ff7a, 3, 6); c.light([6, 1.4, -2], 0xd8ff7a, 3, 6);
+    dress(c, 'grove', { seed: 14, leaves: [0x1e3a2e, 0x2e5a40, 0x2e5a2a, 0x4a8a3a], shafts: [[-7.4, -6.6, 0.3, 0.3, 2.0], [7.2, -7.8, -0.3, 0.3, 1.6], [-3.2, -3.6, 0.2, 0.32, 1.2]] });
   },
 };
 
@@ -278,6 +297,7 @@ const camp: SceneDef = {
     log(c.w, -2.4, -0.6, 2.6, false, BARK, 0x8a6a4a); log(c.w, 3.2, -0.4, 2.6, false, BARK, 0x8a6a4a); log(c.w, 0.4, -3.4, 3, true, BARK, 0x8a6a4a);
     c.w.box(M(-4), 0, M(2.6), M(-2.2), 2, M(5.2), 0x6a2a2a).box(M(-4), 3, M(2.6), M(-3.4), 4, M(3.2), 0xd8d0c0);   // bedroll
     c.w.box(M(4.6), 0, M(-6.8), M(7.6), M(1.4), M(-4), 0x6a6448).box(M(5), M(1.4), M(-6.8), M(7.2), M(1.9), M(-4), 0x5a5440).box(M(5.8), M(1.9), M(-6.8), M(6.4), M(2.2), M(-4), 0x4a4434);
+    dress(c, 'woods', { seed: 15, clear: [{ x0: -1.2, z0: -2.2, x1: 2, z1: 1 }], shafts: [[-6.6, -6.8, 0.3, 0.32, 1.6], [7.4, 1.4, -0.2, 0.3, 1.2]] });
   },
 };
 const merchant: SceneDef = {
@@ -292,6 +312,7 @@ const merchant: SceneDef = {
     crate(c.w, -3.4, -4.6, 5, WOOD_L, WOOD_D); crate(c.w, -4.4, -4.2, 4, WOOD_L, WOOD_D); barrel(c.w, 3.6, -4.4, WOOD, IRON); barrel(c.w, 4.4, -4.8, WOOD, IRON);
     table(c.w, 0, -4.4, 3, 1, WOOD_L, WOOD_D); for (let i = 0; i < 5; i++) c.w.box(M(-1.2 + i * 0.6), 12, M(-4.4) - 1, M(-1.2 + i * 0.6) + 1, 15, M(-4.4), pick([0x9aff3a, 0xb060ff, 0xff6a4a, 0x4ae8ff, 0xffd040], i), 1);
     const lp = torchPost(c.w, -2.2, -5.6, 2.2, WOOD_D, 0xffc070); c.flame(lp, 0xffc070); c.light(lp, 0xffb060, 7, 9);
+    dress(c, 'woods', { seed: 16, shafts: [[-7, -4.4, 0.3, 0.3, 1.6], [7.6, -1.4, -0.2, 0.3, 1.2]] });
   },
 };
 const shrine: SceneDef = {
@@ -306,6 +327,7 @@ const shrine: SceneDef = {
     for (const [x, z] of [[-1.4, -4.2], [1.4, -4.2]]) c.w.box(M(x) - 2, 0, M(z) - 2, M(x) + 2, 1, M(z) + 2, pick([0xb84a3a, 0xd8b040], x * 3));
     c.light([0, 3, -7.6], 0xa8e0ff, 6, 9); c.light([0, 0.6, -6.6], 0xffc070, 3, 6);
     for (const [x, z, h, s] of [[-7, -8, 5.5, 1], [7.4, -6.4, 6, 2]] as const) deadTree(c.w, x, z, h, BARK, BARK_D, { seed: s });
+    dress(c, 'grove', { seed: 17, dense: 0.8, shafts: [[0, -7.4, 0, 0.12, 2.4], [-6.6, -3, 0.3, 0.3, 1.2]] });
   },
 };
 
