@@ -17,10 +17,7 @@ import { Die3D, flyDie, throwHooks, DICE3D } from './dice/die3d';
 import { simThrow, playThrow, FIELD } from './dice/throw';
 import { presentQuat } from './dice/faces';
 import { DIE } from './dice/signature';
-import { Fishman } from './actors/fishman';
-import { Hero } from './actors/hero';
-import { Lich } from './actors/lich';
-import { Ghoul } from './actors/ghoul';
+import type { Cast, HeroLike, LichLike, GhoulLike } from './actors/cast';
 import type { Actor } from './actors/actor';
 import { popText, slamTitle, fadeOut, flyText, Counter, speech } from './battle/text3d';
 import { fxImpact, fxRing, fxGlow, fxSparks, fxStatus, fxHeal, fxShield, fxSmoke, fxEmbers, fxFlare, fxChips, trailSeg, COL } from './fx/fx';
@@ -55,14 +52,13 @@ const quatFor = (base: THREE.Vector3, look: THREE.Vector3) => { const o = new TH
 
 export class BattleShow {
   b!: Battle; dice = new Map<number, Die3D>(); sel: number[] = []; busy = true; stage: 'title' | 'intro' | 'battle' | 'reward' | 'over' = 'title';
-  hero: Fishman; lich = new Lich(); foes = new Map<number, Actor>(); lanes = new Map<number, number>();
+  hero: HeroLike; lich: LichLike; foes = new Map<number, Actor>(); lanes = new Map<number, number>();
   hud = new Hud(); relics = new RelicBar(); counter = new Counter(() => this.hero.weapon().add(V3(0.2, 0.9, 0)));
   private chain: Promise<void> = Promise.resolve(); private slide: { to: boolean } | null = null; private botOn = false; private seed: number; private rewardModels: THREE.Group[] = [];
-  private bossUid = -1; private lastHeroHp = 0;
+  private bossUid = -1; private lastHeroHp = 0; private summoned = 0;
 
-  constructor(private platform: Platform, private env: Env, model: { scene: THREE.Group; clips: THREE.AnimationClip[] } | null, seed?: number) {
-    // the Blender fishman; if the model failed to load, the procedural stand-in keeps the game playable
-    this.hero = model ? new Fishman(model) : (new Hero() as unknown as Fishman);
+  constructor(private platform: Platform, private env: Env, private cast: Cast, seed?: number) {
+    this.hero = cast.hero(); this.lich = cast.lich();
     this.seed = seed ?? ((Date.now() % 100000) | 0);
     throwHooks.impact = (d, v) => { cue('clack', Math.min(1, v / 9)); if (v > 3) fxSmoke(V3(d.root.position.x, 0.06, d.root.position.z), 0x6a6878, 2, { s: 0.2, alpha: 0.3, up: 0.4 }); };
     throwHooks.landed = d => d.fx('land');
@@ -205,7 +201,7 @@ export class BattleShow {
       case 'statusExpire': this.refresh(); return;
       case 'armor': {
         const a = e.who === 'player' ? this.hero : this.foes.get(e.who); if (!a) return;
-        if (e.who === 'player') { fxShield(this.hero.home, 1.0); } else { fxShield(a.home, 1.8); fxGlow(a.chest(), COL.blue, 3, 0.5, 2); (a as Lich).shield?.(); }
+        if (e.who === 'player') { fxShield(this.hero.home, 1.0); } else { fxShield(a.home, 1.8); fxGlow(a.chest(), COL.blue, 3, 0.5, 2); (a as LichLike).shield?.(); }
         popText(`+${e.delta}`, a.head().add(V3(0.5, 0.2, 0)), { gradient: ['#e0f4ff', '#5aaaff'], size: 0.5 }); cue('armor');
         this.refresh(); await wait(0.28); return;
       }
@@ -225,7 +221,7 @@ export class BattleShow {
         this.hud.showBanner('敌方回合', '', 0.5, ['#ffd8d0', '#e8584a']); await wait(0.55); return;
       }
       case 'enemyMove': {
-        const a = this.foes.get(e.uid) as Ghoul; if (!a) return;
+        const a = this.foes.get(e.uid) as GhoulLike; if (!a) return;
         const to = ghoulPos(this.lane(e.uid), e.distance), from = a.home.clone(); a.walkK = 1; a.faceToward(this.hero.home);
         await animP(0.6, k => { a.home.lerpVectors(from, to, ease.inOut(k)); }); a.walkK = 0;
         return;
@@ -251,11 +247,14 @@ export class BattleShow {
         d.dispose(); this.refresh(); return;
       }
       case 'summon': {
-        const en = b.enemy(e.uid)!, g = new Ghoul(); const p = ghoulPos(this.lane(e.uid), en.distance); g.place(V3(p.x, -1.8, p.z)); g.faceToward(this.hero.home); this.foes.set(e.uid, g);
+        const en = b.enemy(e.uid)!, g = this.cast.ghoul(this.summoned++); const p = ghoulPos(this.lane(e.uid), en.distance); g.place(V3(p.x, g.rise ? 0 : -1.8, p.z)); g.faceToward(this.hero.home); this.foes.set(e.uid, g);
+        if (g.rise) g.rise();
         this.lich.summon(); fxGlow(this.lich.weapon(), COL.green, 2.5, 0.6, 2.4); cue('summon');
         fxRing(V3(p.x, 0.05, p.z), COL.green, 2.2, { life: 0.8, width: 0.15, fill: 0.3 }); decalFx(V3(p.x, 0, p.z), { radius: 2, alpha: 0.6, life: 4 });
         for (let i = 0; i < 18; i++) PADD.emit({ p: V3(p.x + R(-0.6, 0.6), 0.1, p.z + R(-0.6, 0.6)), v: V3(R(-0.5, 0.5), R(1.5, 3.5), R(-0.5, 0.5)), s0: 0.12, s1: 0.02, life: R(0.6, 1.1), c0: new THREE.Color(0xc0ffd8), c1: COL.green, bright: 2.4, tile: TILE.glow });
-        await animP(0.7, k => { g.home.y = lerp(-1.8, 0, ease.outBack(k)); }); g.shriek(); cue('summon');
+        if (g.rise) { for (let i = 0; i < 10; i++) PALPHA.emit({ p: V3(p.x + R(-0.7, 0.7), 0.2, p.z + R(-0.7, 0.7)), v: V3(R(-0.3, 0.3), R(0.6, 1.4), R(-0.3, 0.3)), s0: 0.4, s1: 1.0, life: R(0.8, 1.4), c0: new THREE.Color(0x3a3a34), alpha: 0.45, tile: TILE.smoke }); await wait(1.55); }
+        else await animP(0.7, k => { g.home.y = lerp(-1.8, 0, ease.outBack(k)); });
+        g.shriek(); cue('summon');
         this.refresh(); await wait(0.3); return;
       }
       case 'phase': return this.phaseTwo();
@@ -327,7 +326,7 @@ export class BattleShow {
     const heavy = e.hpDmg >= 60 || frac >= 0.5, mid = !heavy && (e.hpDmg >= 25 || frac >= 0.25);
     const power = Math.min(3.2, 0.6 + e.dmg / 22);
     fxImpact(p.clone().add(V3(0, 0, 0.4)), e.aoe ? 0xffc040 : 0xffe2a8, power, { dir: V3(0, 0.1, -1), chips: a === this.lich ? [0xe6dcc4, 0x2c1f44, 0x4affa0] : [0x7a8c6c, 0x4a5a44] });
-    (a as Lich | Ghoul).hurt?.(Math.min(1.6, 0.6 + e.hpDmg / 30));
+    (a as LichLike | GhoulLike).hurt?.(Math.min(1.6, 0.6 + e.hpDmg / 30));
     if (e.absorbed) popText(`-${e.absorbed}`, p.clone().add(V3(0.7, 0.6, 0)), { gradient: ['#e0f4ff', '#5aaaff'], size: 0.42 });
     if (e.armorBroke) { popText('破甲', p.clone().add(V3(-0.8, 0.9, 0)), { gradient: ['#fff0d0', '#ff9a40'], size: 0.5 }); fxSparks(p, 0x9ad0ff, 24, 6, { life: 0.5 }); cue('block'); }
     popText(String(e.hpDmg), a.head().add(V3(0, 0.5, 0)), { big: e.hpDmg >= 20, gradient: heavy ? ['#ffffff', '#ff4a20'] : mid ? ['#fff8d0', '#ffb030'] : ['#fffaf0', '#f0d8a8'], life: 1.3, rise: 1.0 });
@@ -352,7 +351,7 @@ export class BattleShow {
       await act.impact; await this.orb(L.weapon(), this.hero.chest(), 0x6aff9a, 0.55);
       return;
     }
-    const g = a as Ghoul;
+    const g = a as GhoulLike;
     if (e.kind === 'attack') {
       g.faceToward(this.hero.home);
       shot('ghoul', () => ({ base: this.hero.home.clone().add(V3(3.6, 4.2, 3.4)), look: this.hero.home.clone().lerp(g.home, 0.5).add(V3(0, 1, 0)), fov: 44 }), { speed: 3 });
@@ -401,10 +400,18 @@ export class BattleShow {
       await wait(1.4);
       return;
     }
-    const g = a as Ghoul; g.dead = true; cue('shatter', 0.8);
-    fxChips(g.chest(), [0x7a8c6c, 0x4a5a44, 0x2a1416], 30, { speed: 5, up: 4, size: 0.14, glow: 0.3 }); fxSmoke(g.chest(), 0x3a4a3a, 6, { alpha: 0.5 });
-    anim(0.4, k => g.root.scale.setScalar(Math.max(0.01, 1 - ease.inCubic(k))), () => { g.root.visible = false; });
-    await wait(0.45);
+    const g = a as GhoulLike; cue('shatter', 0.8);
+    if (g.die) {   // the skeleton clatters into a heap of bones, then crumbles into the ground
+      const c = g.chest(); g.die(); fxChips(c, [0xe8e0cc, 0xb8b09c, 0x3a3440], 22, { speed: 4, up: 3, size: 0.12, glow: 0.2 }); fxSmoke(V3(g.home.x, 0.3, g.home.z), 0x3a4a3a, 6, { alpha: 0.4 });
+      await wait(0.55);
+      anim(1.0, k => { g.home.y = -0.9 * ease.inCubic(k); }, () => { g.root.visible = false; });
+      after(0.6, () => fxSmoke(V3(g.home.x, 0.2, g.home.z), 0x4a4a44, 5, { alpha: 0.35 }));
+    } else {
+      g.dead = true;
+      fxChips(g.chest(), [0x7a8c6c, 0x4a5a44, 0x2a1416], 30, { speed: 5, up: 4, size: 0.14, glow: 0.3 }); fxSmoke(g.chest(), 0x3a4a3a, 6, { alpha: 0.5 });
+      anim(0.4, k => g.root.scale.setScalar(Math.max(0.01, 1 - ease.inCubic(k))), () => { g.root.visible = false; });
+      await wait(0.45);
+    }
   }
 
   private async victory(choices: string[]) {
@@ -442,7 +449,7 @@ export class BattleShow {
   }
   private restart() {
     for (const d of [...DICE3D]) d.dispose(); this.dice.clear(); this.sel = [];
-    for (const [uid, a] of this.foes) { if (a !== this.lich) a.root.parent?.remove(a.root); this.hud.dropPlate(uid); } this.foes.clear(); this.lanes.clear();
+    for (const [uid, a] of this.foes) { if (a !== this.lich) { const g = a as GhoulLike; if (g.dispose) g.dispose(); else a.root.parent?.remove(a.root); } this.hud.dropPlate(uid); } this.foes.clear(); this.lanes.clear(); this.summoned = 0;
     for (const m of this.rewardModels) scene.remove(m); this.rewardModels = [];
     for (const o of [...scene.children]) if ((o as THREE.Sprite).isSprite && (o as THREE.Sprite).userData.base) scene.remove(o);
     GRADE.desat = 0; audio.muffle(0); this.hero.dead = false; this.hero.act = null; this.lich.root.visible = false; this.lich.dead = false; this.hud.hideBanner();
@@ -479,7 +486,7 @@ export class BattleShow {
       const it = b.intent(en), col = it.kind === 'atk' ? '#ff8a7a' : it.kind === 'def' ? '#8ac8ff' : it.kind === 'mov' ? '#ffd27a' : '#d4a8ff';
       this.hud.plate(uid).set({ name: en.name, hp: en.hp, max: en.maxHp, armor: en.armor, intent: s.phase === 'player' ? [{ t: (it.kind === 'atk' ? '⚔ ' : '') + it.text, c: col }] : [], status: [statusText(en.statuses), en.bloodFury ? `血怒${en.bloodFury}` : '', en.vengeance ? `复仇${en.vengeance}` : ''].filter(Boolean).join(' ') });
     }
-    const lines: Span[] = [{ t: '鱼人狂战', c: '#f4e8d0', s: 13 }];
+    const lines: Span[] = [{ t: '嗜血狂战', c: '#f4e8d0', s: 13 }];
     const st = statusText(p.statuses); if (st) lines.push({ t: '  ' + st, c: '#d8c8f0' });
     if (s.bloodRerollCount) lines.push({ t: `  血怒 ${s.bloodRerollCount}`, c: '#ff8a7a' });
     if (p.rageFireBonus) lines.push({ t: `  怒火燎原 +${p.rageFireBonus}`, c: '#ffb070' });

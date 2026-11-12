@@ -21,7 +21,7 @@ export abstract class Actor {
   dead = false;
   lowHp = 0;
   abstract readonly height: number;
-  private flashMats: Array<{ m: THREE.MeshToonMaterial | THREE.MeshStandardMaterial; base: THREE.Color }> = [];
+  protected flashMats: Array<{ m: THREE.MeshToonMaterial | THREE.MeshStandardMaterial; base: THREE.Color }> = [];
 
   constructor() { this.root.add(this.body); scene.add(this.root); }
 

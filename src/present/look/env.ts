@@ -7,6 +7,8 @@ import { scene, canvasTex, V3 } from '../engine/world';
 import { onUpdate } from '../engine/world';
 import { clock } from '../engine/clock';
 import { toon, glow } from './toon';
+import { onLook, voxelProp, voxMat } from './voxel';
+import type { KKAssets } from '../actors/kk';
 
 export const ARENA = { lichAltar: V3(0, 0.55, -4.7), altarR: 2.2 };
 const rnd = (() => { let a = 1337; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
@@ -117,9 +119,64 @@ function deadTree(b: Batch, m: THREE.Material, base: THREE.Vector3, h: number) {
   branch(base, V3(rr(-0.15, 0.15), 1, rr(-0.15, 0.15)).normalize(), h * 0.42, 0.22, 4);
 }
 
+// ---------------------------------------------------------------- KayKit set dressing (Halloween Bits + Forest, CC0)
+const ALTAR_VOX = 0.11, ALTAR_VOX_TOP = Math.ceil(0.55 / ALTAR_VOX + 1e-6) * ALTAR_VOX;
+type Place = [key: string, x: number, z: number, rotY?: number, s?: number, y?: number];
+function kayKitSet(root: THREE.Object3D, kk: KKAssets, lanternAt: THREE.Vector3[], altar: THREE.Object3D, trim: THREE.Object3D) {
+  const S = 0.9, A = ARENA.lichAltar, P: Place[] = [];
+  // the lich's mausoleum, framed by the arch behind the altar, and shrines either side
+  P.push(['crypt', 0, -14.2, 0, 1.0], ['arch_gate', 0, -7.6, 0, 1.3], ['shrine_candles', -4.2, -7.9, 0.3, 1], ['shrine_candles', 4.2, -7.9, -0.3, 1]);
+  // back fence with pillars, a broken run on the right
+  for (let i = 0; i < 3; i++) for (const sx of [-1, 1]) { const x = sx * (4.6 + i * 3.6); P.push([(i + (sx > 0 ? 1 : 0)) % 3 === 2 ? 'fence_broken' : 'fence', x, -10.4, 0, S]); P.push([i === 1 && sx > 0 ? 'fence_pillar_broken' : 'fence_pillar', x + sx * 1.8, -10.4, 0, S]); }
+  P.push(['fence_pillar', -2.8, -10.4, 0, S], ['fence_pillar', 2.8, -10.4, 0, S]);
+  // graves in rough rows on both flanks, leaning a little
+  const graves = ['gravestone', 'grave_A', 'gravemarker_A', 'grave_B', 'gravemarker_B', 'grave_A_destroyed', 'gravestone', 'gravemarker_A'];
+  let gi = 0;
+  for (let row = 0; row < 5; row++) for (let k = 0; k < 2; k++) for (const sx of [-1, 1]) {
+    const x = sx * (7.4 + k * 2.3 + rr(-0.3, 0.3) + (row % 2) * 0.6), z = -8.4 + row * 3.0 + rr(-0.4, 0.4);
+    P.push([graves[gi++ % graves.length], x, z, rr(-0.25, 0.25) + sx * 0.15, S * rr(0.85, 1.05)]);
+  }
+  P.push(['grave_A', -5.4, -8.6, 0.2, 0.8], ['gravemarker_B', 5.8, -8.2, -0.3, 0.9], ['grave_A_destroyed', 6.6, 5.2, -0.4, 0.8], ['coffin_decorated', -8.6, 6.4, 0.5, 0.7]);
+  // dead trees at the corners, rocks and dry bushes along the courtyard rim
+  P.push(['tree_dead_large_decorated', -8.6, -3.2, 0.4, 1.25], ['tree_dead_large', 9.4, -7.6, 2.2, 1.35], ['tree_dead_medium', -10.6, 4.4, 1, 1.3], ['tree_dead_large', 11.2, 2.2, -0.8, 1.2], ['tree_dead_small', -6.9, -9.2, 0, 1.1], ['Tree_Bare_2_B', 13.5, -12, 0, 1.3], ['Tree_Bare_2_B', -13, -12.5, 2, 1.2]);
+  P.push(['Rock_1_J', -15, -9, 0.4, 0.8], ['Rock_1_D', -6.6, 2.6, 0.2, 1.1], ['Rock_1_D', 6.8, -1.2, 2, 0.9], ['Rock_2_B', 6.4, 4.2, 1, 1.2], ['Rock_3_C', -6.7, -5.2, 0, 1.2], ['Rock_1_A', 7.6, 6.2, 0, 1.4], ['Rock_1_A', -7.4, 5.8, 1, 1.1]);
+  for (const [x, z] of [[-6.4, -1.2], [6.6, 1.8], [-6.2, 4.8], [6.2, -4.6], [-3.2, -7.0], [3.4, -6.8]]) P.push([rnd() < 0.5 ? 'Grass_1_A' : 'Grass_2_B', x, z, rr(0, 6), rr(0.7, 1)]);
+  // bones of the lich's past challengers, candles on the altar's back rim, lantern stands
+  P.push(['skull', -3.0, -4.2, 0.6, 0.45], ['ribcage', 2.9, -5.6, 1.4, 0.55], ['bone_C', 3.3, -3.9, 0.3, 0.6], ['bone_A', -2.8, -5.8, 2.2, 0.6], ['bone_B', -4.6, 3.2, 1, 0.6], ['skull', 4.8, 4.6, -0.8, 0.4], ['bone_A', 3.6, 4.6, 0.3, 0.6]);
+  for (let i = 0; i < 7; i++) { const a = Math.PI * (0.62 + i * 0.125), r = ARENA.altarR - 0.35; P.push([['candle_triple', 'candle_melted', 'skull_candle', 'candle'][i % 4], A.x + Math.cos(a) * r, A.z - Math.sin(a) * r, rr(0, 6), i % 4 === 2 ? 0.4 : 0.55, 0.55]); }
+  for (const p of lanternAt) P.push(['fence_pillar_broken', p.x, p.z, 0, 0.9], ['lantern_standing', p.x, p.z, 0, 0.9, 1.35]);
+
+  // smooth: every placement baked into one mesh (one draw call); voxel: each prop voxelised once in its own space, then baked
+  const smoothParts: THREE.BufferGeometry[] = [], voxParts: THREE.BufferGeometry[] = [], voxCache = new Map<string, THREE.BufferGeometry | null>();
+  for (const [key, x, z, ry = 0, sc = 1, y = 0] of P) {
+    const src = kk.props.get(key); if (!src) continue;
+    const mx = new THREE.Matrix4().compose(V3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), V3(sc, sc, sc));
+    src.updateMatrixWorld(true);
+    src.traverse(o => { const m = o as THREE.Mesh; if (!m.isMesh) return; smoothParts.push(flatColors(m.geometry, new THREE.Matrix4().multiplyMatrices(mx, m.matrixWorld))); });
+    if (!voxCache.has(key)) { const bb = new THREE.Box3().setFromObject(src), dim = Math.max(...bb.getSize(V3()).toArray()); voxCache.set(key, voxelProp(src, Math.max(0.075, dim / 38))?.geo ?? null); }
+    const vg = voxCache.get(key); if (vg) voxParts.push(flatColors(vg, mx));
+  }
+  const smooth = new THREE.Mesh(mergeGeometries(smoothParts)!, toon(0xffffff, { vertexColors: true, rim: 0.5 }));
+  const vox = new THREE.Mesh(mergeGeometries(voxParts)!, voxMat(0.5));
+  for (const m of [smooth, vox]) { m.castShadow = m.receiveShadow = true; root.add(m); }
+  // the procedural altar gets a voxel twin too
+  const av = voxelProp(altar, ALTAR_VOX), altarVox = av ? new THREE.Mesh(av.geo, voxMat(0.5)) : null;
+  if (altarVox) { altarVox.castShadow = altarVox.receiveShadow = true; root.add(altarVox); }
+  onLook(v => { smooth.visible = !v; vox.visible = v; altar.visible = !v; trim.visible = !v; if (altarVox) altarVox.visible = v; });
+}
+/** a geometry with position / normal / float rgb colour only, transformed (so everything merges into one buffer) */
+function flatColors(g: THREE.BufferGeometry, mx: THREE.Matrix4) {
+  const o = new THREE.BufferGeometry(), pos = g.attributes.position, n = pos.count, col = g.attributes.color, c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { c[i * 3] = col ? col.getX(i) : 1; c[i * 3 + 1] = col ? col.getY(i) : 1; c[i * 3 + 2] = col ? col.getZ(i) : 1; }
+  o.setAttribute('position', pos.clone()); if (g.attributes.normal) o.setAttribute('normal', g.attributes.normal.clone()); o.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+  o.setIndex(new THREE.Uint32BufferAttribute(g.index ? Uint32Array.from(g.index.array as ArrayLike<number>) : Uint32Array.from({ length: n }, (_, i) => i), 1));
+  o.applyMatrix4(mx); if (!g.attributes.normal) o.computeVertexNormals();
+  return o;
+}
+
 export interface Env { sky: THREE.ShaderMaterial; rune: THREE.Mesh; runeMat: THREE.MeshBasicMaterial; soulLights: THREE.PointLight[]; flames: THREE.Mesh[]; mist: THREE.Mesh[]; moon: THREE.DirectionalLight; hemi: THREE.HemisphereLight; warm: THREE.PointLight; phase2(k: number): void }
 
-export function buildEnv(): Env {
+export function buildEnv(kk?: KKAssets | null): Env {
   scene.background = new THREE.Color(0x0e0c1c);
   scene.fog = new THREE.FogExp2(0x1a1630, 0.028);
   const sky = buildSky();
@@ -139,21 +196,22 @@ export function buildEnv(): Env {
   const earth = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), toon(0xffffff, { map: earthT })); earth.rotation.x = -Math.PI / 2; earth.receiveShadow = true; root.add(earth);
 
   const stone = toon(0x6a6c80), stoneD = toon(0x4a4a5c), stoneL = toon(0x8a8ca0), bark = toon(0x3a3036), iron = toon(0x26242c), gold = toon(0xc8a050, { emissive: 0x3a2400 });
-  const B = new Batch();
+  const B = new Batch(), AB = new Batch();
   // courtyard rim: low broken wall segments
-  for (let i = 0; i < 14; i++) { const side = i < 7 ? -1 : 1, z = -8 + (i % 7) * 2.4 + rr(-0.3, 0.3), h = rr(0.3, 0.9); B.add(new THREE.BoxGeometry(0.6, h, rr(1.4, 2.2)), stoneD, V3(side * 6.8 + rr(-0.2, 0.2), h / 2, z), new THREE.Euler(0, rr(-0.1, 0.1), 0)); }
+  if (!kk) for (let i = 0; i < 14; i++) { const side = i < 7 ? -1 : 1, z = -8 + (i % 7) * 2.4 + rr(-0.3, 0.3), h = rr(0.3, 0.9); B.add(new THREE.BoxGeometry(0.6, h, rr(1.4, 2.2)), stoneD, V3(side * 6.8 + rr(-0.2, 0.2), h / 2, z), new THREE.Euler(0, rr(-0.1, 0.1), 0)); }
   // the lich's altar: stepped round dais
   const A = ARENA.lichAltar;
-  B.add(new THREE.CylinderGeometry(ARENA.altarR, ARENA.altarR + 0.25, 0.55, 28), stone, V3(A.x, 0.275, A.z));
-  B.add(new THREE.CylinderGeometry(ARENA.altarR + 0.55, ARENA.altarR + 0.75, 0.22, 28), stoneD, V3(A.x, 0.11, A.z));
-  for (let i = 0; i < 3; i++) B.add(new THREE.BoxGeometry(2.6 - i * 0.3, 0.18, 0.5), stoneL, V3(A.x, 0.09 + i * 0.18, A.z + ARENA.altarR + 0.85 - i * 0.42));
+  AB.add(new THREE.CylinderGeometry(ARENA.altarR, ARENA.altarR + 0.25, 0.55, 28), stone, V3(A.x, 0.275, A.z));
+  AB.add(new THREE.CylinderGeometry(ARENA.altarR + 0.55, ARENA.altarR + 0.75, 0.22, 28), stoneD, V3(A.x, 0.11, A.z));
+  for (let i = 0; i < 3; i++) AB.add(new THREE.BoxGeometry(2.6 - i * 0.3, 0.18, 0.5), stoneL, V3(A.x, 0.09 + i * 0.18, A.z + ARENA.altarR + 0.85 - i * 0.42));
   // broken gothic arch behind the altar
-  for (const sx of [-1, 1]) {
+  if (!kk) for (const sx of [-1, 1]) {
     const x = A.x + sx * 2.6, z = A.z - 2.2;
     B.add(new THREE.BoxGeometry(1.0, 0.5, 1.0), stoneD, V3(x, 0.25, z));
     B.add(new THREE.CylinderGeometry(0.38, 0.42, sx < 0 ? 6.2 : 4.4, 10), stone, V3(x, (sx < 0 ? 6.2 : 4.4) / 2 + 0.5, z));
     B.add(new THREE.BoxGeometry(0.95, 0.4, 0.95), stoneL, V3(x, (sx < 0 ? 6.2 : 4.4) + 0.7, z));
   }
+  if (!kk) {
   B.add(new THREE.TorusGeometry(2.6, 0.36, 8, 18, Math.PI * 0.62), stone, V3(A.x, 6.9, A.z - 2.2), new THREE.Euler(0, 0, Math.PI * 0.38));
   // fallen pillar chunks
   B.add(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 10), stoneL, V3(3.9, 0.4, -5.6), new THREE.Euler(Math.PI / 2, 0.6, 0));
@@ -170,27 +228,32 @@ export function buildEnv(): Env {
   B.add(new THREE.BoxGeometry(5.5, 0.06, 0.06), iron, V3(-5.4, 0.4, -10.2)); B.add(new THREE.BoxGeometry(5.5, 0.06, 0.06), iron, V3(5.4, 0.4, -10.2));
   // dead trees
   for (const [x, z, h] of [[-8.5, -3, 6.5], [9.2, -8.5, 7.5], [-10.5, 4.5, 5.5], [11, 2.5, 6]] as const) deadTree(B, bark, V3(x, 0, z), h);
+  }
   // distant spires / hills (silhouettes in the fog)
   const far = toon(0x1c1a2c, { rim: 0.4 });
   for (const [x, z, w, h] of [[-26, -45, 6, 16], [-18, -50, 4, 24], [-12, -48, 5, 13], [16, -46, 7, 18], [24, -52, 5, 26], [32, -44, 8, 12]] as const) { B.add(new THREE.BoxGeometry(w, h, w), far, V3(x, h / 2, z)); B.add(new THREE.ConeGeometry(w * 0.6, h * 0.45, 4), far, V3(x, h + h * 0.22, z), new THREE.Euler(0, Math.PI / 4, 0)); }
   for (let i = 0; i < 9; i++) B.add(new THREE.SphereGeometry(rr(10, 18), 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), far, V3(-60 + i * 15, -2, rr(-70, -55)), undefined, V3(1.6, 0.45, 1));
   B.build(root);
+  const altar = new THREE.Group(); root.add(altar); AB.build(altar);
 
   // gold trim of the altar, lanterns on posts with soul fire
   const G2 = new Batch();
   G2.add(new THREE.TorusGeometry(ARENA.altarR + 0.02, 0.05, 6, 40), gold, V3(A.x, 0.56, A.z), new THREE.Euler(Math.PI / 2, 0, 0));
-  const lanternAt = [V3(-3.2, 0, -3.0), V3(3.2, 0, -3.0), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)];
-  for (const p of lanternAt) { G2.add(new THREE.BoxGeometry(0.14, 2.2, 0.14), iron, p.clone().add(V3(0, 1.1, 0))); G2.add(new THREE.BoxGeometry(0.42, 0.06, 0.42), iron, p.clone().add(V3(0, 2.25, 0))); G2.add(new THREE.ConeGeometry(0.32, 0.3, 4), iron, p.clone().add(V3(0, 2.75, 0)), new THREE.Euler(0, Math.PI / 4, 0)); for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) G2.add(new THREE.BoxGeometry(0.04, 0.4, 0.04), iron, p.clone().add(V3(dx * 0.17, 2.45, dz * 0.17))); }
-  G2.build(root, { cast: true });
+  const lanternAt = kk ? [V3(-4.4, 0, -3.4), V3(4.4, 0, -3.4), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)] : [V3(-3.2, 0, -3.0), V3(3.2, 0, -3.0), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)];
+  const flameY = kk ? 1.86 : 2.46;
+  if (!kk) for (const p of lanternAt) { G2.add(new THREE.BoxGeometry(0.14, 2.2, 0.14), iron, p.clone().add(V3(0, 1.1, 0))); G2.add(new THREE.BoxGeometry(0.42, 0.06, 0.42), iron, p.clone().add(V3(0, 2.25, 0))); G2.add(new THREE.ConeGeometry(0.32, 0.3, 4), iron, p.clone().add(V3(0, 2.75, 0)), new THREE.Euler(0, Math.PI / 4, 0)); for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) G2.add(new THREE.BoxGeometry(0.04, 0.4, 0.04), iron, p.clone().add(V3(dx * 0.17, 2.45, dz * 0.17))); }
+  const trim = new THREE.Group(); root.add(trim); G2.build(trim, { cast: true });
+  if (kk) kayKitSet(root, kk, lanternAt, altar, trim);
   const flames: THREE.Mesh[] = [], soulLights: THREE.PointLight[] = [];
   const flameMat = glow(0x5affb0, 3.2);
   for (const [i, p] of lanternAt.entries()) {
-    const f = new THREE.Mesh(new THREE.OctahedronGeometry(0.14, 1), flameMat); f.position.copy(p).add(V3(0, 2.46, 0)); root.add(f); flames.push(f);
+    const f = new THREE.Mesh(new THREE.OctahedronGeometry(kk ? 0.11 : 0.14, 1), flameMat); f.position.copy(p).add(V3(0, flameY, 0)); root.add(f); flames.push(f);
     if (i < 2) { const l = new THREE.PointLight(0x4affa0, 5, 6, 1.8); l.position.copy(f.position); scene.add(l); soulLights.push(l); }
   }
   // rune circle on the altar
   const runeMat = new THREE.MeshBasicMaterial({ map: runeTex(), color: new THREE.Color(0.35, 1.6, 0.9), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
   const rune = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.altarR * 2, ARENA.altarR * 2), runeMat); rune.rotation.x = -Math.PI / 2; rune.position.set(A.x, 0.565, A.z); root.add(rune);
+  if (kk) onLook(v => { rune.position.y = v ? ALTAR_VOX_TOP + 0.015 : 0.565; });
   // ground mist: drifting noise layers
   const nt = noiseTex(), mist: THREE.Mesh[] = [];
   for (let i = 0; i < 4; i++) {
