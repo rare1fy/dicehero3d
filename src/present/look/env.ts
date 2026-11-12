@@ -174,7 +174,7 @@ function flatColors(g: THREE.BufferGeometry, mx: THREE.Matrix4) {
   return o;
 }
 
-export interface Env { sky: THREE.ShaderMaterial; rune: THREE.Mesh; runeMat: THREE.MeshBasicMaterial; soulLights: THREE.PointLight[]; flames: THREE.Mesh[]; mist: THREE.Mesh[]; moon: THREE.DirectionalLight; hemi: THREE.HemisphereLight; warm: THREE.PointLight; phase2(k: number): void }
+export interface Env { root: THREE.Group; sky: THREE.ShaderMaterial; rune: THREE.Mesh; runeMat: THREE.MeshBasicMaterial; soulLights: THREE.PointLight[]; flames: THREE.Mesh[]; mist: THREE.Mesh[]; moon: THREE.DirectionalLight; hemi: THREE.HemisphereLight; warm: THREE.PointLight; phase2(k: number): void }
 
 export function buildEnv(kk?: KKAssets | null): Env {
   scene.background = new THREE.Color(0x0e0c1c);
@@ -269,7 +269,7 @@ export function buildEnv(kk?: KKAssets | null): Env {
     runeMat.opacity = 0.45 + Math.sin(t * 1.6) * 0.12; rune.rotation.z += rdt * 0.08;
   });
   return {
-    sky, rune, runeMat, soulLights, flames, mist, moon, hemi, warm,
+    root, sky, rune, runeMat, soulLights, flames, mist, moon, hemi, warm,
     phase2(k: number) {   // the lich's second phase: sickly green sky, thicker fog, brighter runes
       (sky.uniforms.uTint.value as THREE.Color).setRGB(1 - 0.25 * k, 1 + 0.15 * k, 1 - 0.2 * k);
       (scene.fog as THREE.FogExp2).density = 0.028 + 0.012 * k; (scene.fog as THREE.FogExp2).color.setRGB(0.1 - 0.02 * k, 0.086 + 0.05 * k, 0.19 - 0.06 * k);

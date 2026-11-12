@@ -11,6 +11,7 @@ import { BattleShow, SHOTS } from './present/show';
 import { Vector3 } from 'three';
 import { actorGallery } from './present/actors/gallery';
 import { voxelCast } from './present/actors/voxcast';
+import { bestiaryViewer } from './present/bestiary/viewer';
 import type { Env } from './present/look/env';
 import './present/director';
 import './audio/audio';
@@ -46,7 +47,12 @@ const hash = typeof location !== 'undefined' ? location.hash.slice(1) : '';   //
 Promise.resolve().then(() => {
   env = buildEnv(null);
   const cast = voxelCast();
-  if (flags.view === 'actors' || hash === 'actors' || hash === 'hero') {
+  // the model viewer page: a separate build (VITE_ENTRY=bestiary) or #bestiary on the game build
+  const entry = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_ENTRY;
+  if (entry === 'bestiary' || hash === 'bestiary') {
+    G.__bv = bestiaryViewer(env);
+    gfx.start(() => {}, () => { frames++; });
+  } else if (flags.view === 'actors' || hash === 'actors' || hash === 'hero') {
     G.__actors = actorGallery(hash === 'hero' ? 'hero' : platform.query('shot'), cast);
     gfx.start(() => {}, () => { frames++; });
   } else {
