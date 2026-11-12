@@ -38,6 +38,12 @@ export interface Enemy {
   ct: string; arch?: string; cat: string; statuses: Status[]; distance: number; attackCount: number;
   hpScale: number; dmgScale: number; dropGold: number; summoned: number; isSummoned: boolean; revived: boolean;
   wasFrozen: boolean; dead: boolean; quotedLow: boolean; phaseIdx: number; killedDirect?: boolean; overkill?: number;
+  /** warrior-type trait: +1 when hit by a play and survives (cap 4); attack ×(1 + 0.25/0.40 per stack) */
+  bloodFury: number;
+  /** berserker trait: +1 per ally killed by a play; attack ×(1 + 0.5 per stack), uncapped */
+  vengeance: number;
+  /** summoned at the start of this enemy turn: does not act until next turn */
+  justSummoned: boolean;
 }
 
 export interface RelicDef { id: string; name: string; desc: string; rarity: string; trigger: string }

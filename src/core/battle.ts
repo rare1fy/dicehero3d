@@ -1,5 +1,5 @@
 // The battle state machine (rules only). Port of the 3D prototype's rules (03_rules.js + the rule parts of 04_battle.js), corrected
-// against the 2D original where they differ (see docs/规则对照_阶段1.md; places still waiting on that check are marked SPEC).
+// against the 2D original's code where they differ (docs/规则对照_阶段1.md). DECIDE marks copy-vs-code conflicts left for the user.
 // Usage: const b = new Battle(setup); b.start(); then b.reroll(uids) / b.play(uids, target) / b.endTurn(), each returning the events
 // the presentation stages. Deterministic for a given seed. No three.js, no DOM, no timers.
 import { createRng, type Rng } from './rng';
@@ -18,8 +18,10 @@ export const depthScale = (d: number) => DEPTH_SCALING[clamp(d, 0, 14)];
 /** Die bonus growth with depth (bonusDamage × dmg, bonusMult + mult). */
 export const depthBonus = (d: number) => ({ dmg: 1 + Math.floor(Math.max(0, d) / 3) * 0.15, mult: Math.floor(Math.max(0, d) / 5) * 0.05 });
 export const STATUS_CN: Record<StatusType, string> = { poison: '中毒', burn: '灼烧', vulnerable: '易伤', weak: '虚弱', strength: '力量', freeze: '冻结', slow: '减速' };
-const DOT_DESC: Record<string, StatusType> = { '剧毒': 'poison', '毒雾': 'poison', '毒素': 'poison', '灼烧': 'burn', '火焰': 'burn' };
-const CTL_DESC: Record<string, StatusType> = { '虚弱': 'weak', '易伤': 'vulnerable', '冻结': 'freeze' };
+// logic/enemyActionDispatch.ts:23-39. The lich's 「诅咒」 is 1 poison here — the original never reads the curseDice field
+// (docs/规则对照_阶段1.md §8.4); cursed dice only come from the boss trait.
+const DOT_DESC: Record<string, StatusType> = { '灼烧': 'burn', '剧毒': 'poison', '火球': 'burn', '诅咒': 'poison', '诅咒爆发': 'poison' };
+const CTL_DESC: Record<string, StatusType> = { '冻结': 'freeze', '虚弱': 'weak', '易伤': 'vulnerable', '碎裂诅咒': 'vulnerable', '诅咒注入': 'weak', '诅咒锻造': 'weak' };
 export const isNeg = (s: Status) => ['poison', 'burn', 'vulnerable', 'weak'].includes(s.type);
 export const stv = (list: Status[], t: StatusType) => list.find(s => s.type === t)?.value || 0;
 export function upsertStatus(list: Status[], s: Status) {
@@ -27,8 +29,26 @@ export function upsertStatus(list: Status[], s: Status) {
   if (ex) { ex.value += s.value; if (s.duration != null) ex.duration = Math.max(ex.duration || 0, s.duration); } else list.push({ ...s });
   return list;
 }
+/** enemySkills.tickStatuses: poison and burn are untouched (they tick on their own); statuses with a duration lose a turn; the rest lose a stack. */
 export function tickStatuses(list: Status[]) {
-  return list.map(s => (s.duration !== undefined && s.duration > 0 ? { ...s, duration: s.duration - 1 } : s)).filter(s => s.duration === undefined || s.duration > 0);
+  const out: Status[] = [];
+  for (const s of list) {
+    if (s.type === 'poison' || s.type === 'burn') { out.push(s); continue; }
+    if (s.duration !== undefined) { if (s.duration - 1 > 0) out.push({ ...s, duration: s.duration - 1 }); continue; }
+    if (s.value - 1 > 0) out.push({ ...s, value: s.value - 1 });
+  }
+  return out;
+}
+/** Original boss / elite test is by max HP, not category (logic/elites.ts:19-26). */
+export const isBossHp = (e: { maxHp: number }) => e.maxHp > 200;
+export const isEliteHp = (e: { maxHp: number }) => e.maxHp > 80 && e.maxHp <= 200;
+/** Warrior-type traits (logic/enemyTraits.ts): blood fury and berserker vengeance; bosses (boss_*) take no traits. */
+export function attackTraitMultiplier(e: Enemy) {
+  if (e.cfgId.startsWith('boss_')) return 1;
+  let mul = 1;
+  if (e.ct === 'warrior' && e.bloodFury) mul *= 1 + (e.arch === 'berserker' ? 0.4 : 0.25) * e.bloodFury;
+  if (e.arch === 'berserker' && e.vengeance > 0) mul *= 1 + 0.5 * e.vengeance;
+  return mul;
 }
 
 // ---------------------------------------------------------------- setup / state
@@ -50,12 +70,12 @@ export interface BattleSetup {
 
 export interface PlayerState {
   cls: string; hp: number; maxHp: number; gold: number; statuses: Status[]; relics: string[];
-  drawCount: number; maxPlays: number; freeRerolls: number; canBloodReroll: boolean; furyHits: number; depth: number;
+  drawCount: number; maxPlays: number; freeRerolls: number; canBloodReroll: boolean; furyBonus: number; rageFireBonus: number; depth: number;
 }
 export interface BattleState {
   turn: number; phase: 'idle' | 'player' | 'enemy' | 'over'; result: null | 'win' | 'lose';
   playsLeft: number; rerollCount: number; bloodRerollCount: number; hpLostThisTurn: number; armor: number;
-  reapKill: number; reapBlock: number; rageMult: number; rageFireBonus: number; played: boolean; comboCount: number; lastHand: string | null;
+  reapKill: number; reapBlock: number; rageMult: number; played: boolean; comboCount: number; lastHand: string | null;
   extraPlaysNext: number; tauntUsed: boolean;
   enemies: Enemy[]; waves: string[][]; waveIdx: number; targetUid: number | null; goldEarned: number; isBoss: boolean;
   piles: P.Piles<Die>;
@@ -81,11 +101,11 @@ export class Battle {
     const owned = (setup.owned || cd.initialDice).slice();
     this.player = {
       cls: cd.id, hp: setup.hp ?? cd.hp, maxHp: cd.maxHp, gold: setup.gold || 0, statuses: [], relics: (setup.relics || []).slice(),
-      drawCount: cd.drawCount, maxPlays: cd.maxPlays, freeRerolls: cd.freeRerolls, canBloodReroll: cd.canBloodReroll, furyHits: 0, depth: setup.depth,
+      drawCount: cd.drawCount, maxPlays: cd.maxPlays, freeRerolls: cd.freeRerolls, canBloodReroll: cd.canBloodReroll, furyBonus: 0, rageFireBonus: 0, depth: setup.depth,
     };
     this.s = {
       turn: 1, phase: 'idle', result: null, playsLeft: 0, rerollCount: 0, bloodRerollCount: 0, hpLostThisTurn: 0, armor: 0,
-      reapKill: 0, reapBlock: 0, rageMult: 0, rageFireBonus: 0, played: false, comboCount: 0, lastHand: null, extraPlaysNext: 0, tauntUsed: false,
+      reapKill: 0, reapBlock: 0, rageMult: 0, played: false, comboCount: 0, lastHand: null, extraPlaysNext: 0, tauntUsed: false,
       enemies: [], waves: setup.waves.map(w => w.slice()), waveIdx: 0, targetUid: null, goldEarned: 0, isBoss: !!setup.isBoss,
       piles: { owned, bag: this.rng.shuffle(owned), discard: [], hand: [] },
     };
@@ -139,11 +159,11 @@ export class Battle {
     const sel = this.pick(uids); if (!sel.length) return this.fail('先选要重投的骰子');
     let cost = this.rerollHpCost();
     if (cost < 0) return this.fail('免费重投已用完');
-    if (cost > 0 && sel.some(d => d.def.isCursed)) cost *= 2;   // SPEC: cursed doubling condition
+    if (cost > 0 && sel.some(d => d.def.isCursed)) cost *= 2;   // useReroll.tsx:59-60
     if (cost >= p.hp) return this.fail('生命不足以支付重投代价');
     let bloodCapped = false;
     if (cost > 0) {
-      p.hp -= cost; s.hpLostThisTurn += cost;
+      p.hp -= cost;   // not counted in hpLostThisTurn and triggers no on-damage relic (useReroll.tsx:91)
       this.emit({ t: 'hp', who: 'player', delta: -cost, hp: p.hp, reason: 'reroll' });
       bloodCapped = s.bloodRerollCount >= 5;
       s.bloodRerollCount = Math.min(5, s.bloodRerollCount + 1);
@@ -179,12 +199,12 @@ export class Battle {
       const r = this.hitEnemy(e, out.damage, out.armorBreak);
       this.emit({ t: 'hit', uid: e.uid, dmg: out.damage, absorbed: r.absorbed, hpDmg: r.hpDmg, armorBroke: r.armorBroke, killed: r.killed, aoe: out.aoe, source: 'play' });
       for (const st of out.statuses) { upsertStatus(e.statuses, st); this.emit({ t: 'statusAdd', who: e.uid, status: { ...st } }); }
-      this.afterEnemyHit(e, r.hpDmg);
+      this.afterEnemyHit(e, r.hpDmg, { play: true, single: !out.aoe });
     }
     const ops = out.skipOnPlay ? [] : sel.map(d => d.def.onPlay || {});
     if (!out.aoe && target && ops.some(o => o.splinterDamage) && (target.overkill || 0) > 0) {
       const others = this.alive().filter(x => x !== target);
-      if (others.length) { const o2 = this.rng.pick(others); const r = this.hitEnemy(o2, target.overkill || 0, false); this.emit({ t: 'hit', uid: o2.uid, dmg: target.overkill || 0, absorbed: r.absorbed, hpDmg: r.hpDmg, armorBroke: false, killed: r.killed, aoe: false, source: 'splinter' }); this.afterEnemyHit(o2, r.hpDmg); }
+      if (others.length) { const o2 = this.rng.pick(others); const r = this.hitEnemy(o2, target.overkill || 0, false); this.emit({ t: 'hit', uid: o2.uid, dmg: target.overkill || 0, absorbed: r.absorbed, hpDmg: r.hpDmg, armorBroke: false, killed: r.killed, aoe: false, source: 'splinter' }); this.afterEnemyHit(o2, r.hpDmg, { play: true }); }
     }
     // effects on the player
     if (out.armor > 0) { s.armor += out.armor; this.emit({ t: 'armor', who: 'player', delta: out.armor, total: s.armor, reason: '出牌' }); }
@@ -193,7 +213,7 @@ export class Battle {
     if (out.gold > 0) { p.gold += out.gold; }
     for (const [k, v] of out.post) {
       if (k === 'freeReroll') s.rerollCount -= v || 1;
-      if (k === 'consumeRage') s.rageFireBonus = 0;
+      if (k === 'consumeRage') p.rageFireBonus = 0;
       if (k === 'maxHp') { p.maxHp += v || 0; p.hp += v || 0; this.emit({ t: 'hp', who: 'player', delta: v || 0, hp: p.hp, reason: 'maxHp' }); }
     }
     // dice bookkeeping
@@ -201,6 +221,7 @@ export class Battle {
     this.emit({ t: 'spent', uids: sel.map(d => d.uid) });
     if (ops.some(o => (o as { grantExtraPlay?: number }).grantExtraPlay)) s.playsLeft++;
     s.lastHand = out.hands.bestHand;
+    s.rerollCount = Math.max(s.rerollCount, p.freeRerolls);   // unused free rerolls are voided by a play (useBattleCombat.tsx:191-198)
     P.compact(s.piles);
     this.check('play');
     this.resolveDeaths(true);
@@ -231,11 +252,13 @@ export class Battle {
     const s = this.s, p = this.player;
     if (s.result) return;
     s.phase = 'player';
-    s.armor = 0; s.playsLeft = p.maxPlays + (this.hasRelic('double_strike') ? 1 : 0) + s.extraPlaysNext; s.extraPlaysNext = 0;
+    // passive extra play (double_strike) only on the first turn (battleInit.ts:60)
+    s.armor = 0; s.playsLeft = p.maxPlays + (this.hasRelic('double_strike') && s.turn === 1 ? 1 : 0) + s.extraPlaysNext; s.extraPlaysNext = 0;
     s.rerollCount = 0; s.hpLostThisTurn = 0; s.played = false; s.tauntUsed = false;
-    // draw phase: the warrior keeps nothing; temporary dice vanish, cracked dice break, the rest go to the discard
+    // draw phase: the warrior keeps nothing; everything unplayed goes to the discard — cracked dice too (the original code never
+    // destroys them at turn end, despite their description; drawPhase.ts:106)
     const hand = s.piles.hand.filter(d => !d.spent);
-    const gone = P.discardDice(s.piles, hand);
+    const gone = P.discardDice(s.piles, hand, { keepCracked: true });
     if (hand.length) this.emit({ t: 'discard', uids: hand.map(d => d.uid), destroyed: gone.map(d => d.uid) });
     const reap = p.cls === 'warrior' ? s.reapKill + s.reapBlock : 0;
     s.reapKill = 0; s.reapBlock = 0;
@@ -251,15 +274,19 @@ export class Battle {
 
   private enemyTurn() {
     const s = this.s, p = this.player;
+    // order (logic/enemyAI.ts:128-794): summons → player poison → enemy burn (+ armor reset) → enemy poison + durations → actions →
+    // boss / elite junk dice → boss / elite armor → turn+1 → player burn → player durations
     this.emit({ t: 'enemyTurn', turn: s.turn });
     s.bloodRerollCount = 0; s.comboCount = 0; s.lastHand = null;
+    for (const e of this.alive()) e.justSummoned = false;
+    for (const e of this.alive().slice()) this.trySummon(e, s.turn);
     // player poison ticks at the start of the enemy turn
     const pp = p.statuses.find(x => x.type === 'poison');
     if (pp && pp.value > 0) { const dmg = pp.value; pp.value -= 1; if (pp.value <= 0) p.statuses.splice(p.statuses.indexOf(pp), 1); this.emit({ t: 'statusTick', who: 'player', type: 'poison', dmg }); this.playerTakeHit(dmg, null, true); if (s.result) return; }
     // enemies: armor resets, burn then poison ticks
     let dot = false;
     for (const e of this.alive()) {
-      e.armor = 0;   // SPEC: does enemy armor reset every turn?
+      e.armor = 0;   // enemy armor resets at the first step of the enemy turn (enemyStatusSettlement.ts:58,60)
       const b = e.statuses.find(x => x.type === 'burn');
       if (b && b.value > 0) { dot = true; e.statuses = e.statuses.filter(x => x !== b); e.hp = Math.max(0, e.hp - b.value); this.emit({ t: 'statusTick', who: e.uid, type: 'burn', dmg: b.value }); this.afterEnemyHit(e, b.value); }
     }
@@ -275,14 +302,12 @@ export class Battle {
       if (hadFreeze && !e.statuses.some(x => x.type === 'freeze')) e.wasFrozen = true;
     }
     if (dot && !this.resolveDeaths(false)) return;
-    // actions
-    for (const e of this.alive().slice()) { if (s.result) return; if (e.dead) continue; this.enemyAct(e); if (s.result) return; }
-    // elite / boss traits, summons (logic/elites.ts, logic/enemySummonRevive.ts)
+    // actions (enemies summoned this turn wait until the next one)
+    for (const e of this.alive().slice()) { if (s.result) return; if (e.dead || e.justSummoned) continue; this.enemyAct(e); if (s.result) return; }
+    // elite / boss traits (logic/elites.ts): first the junk dice for every enemy, then the armor
     const t = s.turn;
-    for (const e of this.alive().slice()) {
-      this.eliteTraits(e, t);
-      this.trySummon(e, t);
-    }
+    for (const e of this.alive()) this.junkTrait(e, t);
+    for (const e of this.alive()) this.armorTrait(e, t);
     s.turn++;
     // player burn ticks at the end of the enemy turn, then durations count down
     const pb = p.statuses.find(x => x.type === 'burn');
@@ -293,14 +318,18 @@ export class Battle {
     this.turnStart();
   }
 
-  private eliteTraits(e: Enemy, t: number) {
-    // SPEC: v6 did both junk dice and stacked boss armor every 2 turns; the original adds ONE junk die per turn (cursed if < 40% HP on
-    // its cycle, else cracked on its cycle). Cycles below are v6's until the spec confirms ELITE_CONFIG.
-    if (e.cat === 'elite' && t % 3 === 0) { this.addJunk('cracked', e); return; }
-    if (e.cat === 'boss') {
+  /** logic/elites.ts:72-91 — at most ONE junk die per enemy turn: boss below 40% on even turns → cursed (and stop), else every 3rd turn → cracked. */
+  private junkTrait(e: Enemy, t: number) {
+    if (isEliteHp(e) && t % 3 === 0) { this.addJunk('cracked', e); return; }
+    if (isBossHp(e)) {
       if (e.hp / e.maxHp < 0.4 && t % 2 === 0) { this.addJunk('cursed', e); return; }
-      if (t % 3 === 0) { this.addJunk('cracked', e); return; }
+      if (t % 3 === 0) this.addJunk('cracked', e);
     }
+  }
+  /** logic/elites.ts:138-148 — a boss shields itself every 2nd turn for floor(attackDmg × 2); it lasts through the player's next turn. */
+  private armorTrait(e: Enemy, t: number) {
+    if (isBossHp(e) && t > 0 && t % 2 === 0) { const v = Math.floor(e.attackDmg * 2); e.armor += v; this.emit({ t: 'armor', who: e.uid, delta: v, total: e.armor, reason: '护盾' }); }
+    // elite armor (ELITE_CONFIG) is not ported: no elites in this slice
   }
 
   private trySummon(e: Enemy, t: number) {
@@ -312,8 +341,10 @@ export class Battle {
     if (sm.hpThreshold != null && e.hp / e.maxHp > sm.hpThreshold) return;
     const n = Math.min(count, maxTotal - e.summoned, waveCap - wave);
     for (let i = 0; i < n; i++) {
-      const m = this.buildEnemy(enemyCfg(sm.minionId), 1, 1);   // original: summons are not depth-scaled
-      m.isSummoned = true; m.distance = 1;   // SPEC: summon start distance
+      // logic/enemySummonRevive.ts: buildEnemy(cfg, 1, 1) — not depth-scaled, normal starting distance (2 for melee); summoned at the
+      // start of the enemy turn and does not act that turn
+      const m = this.buildEnemy(enemyCfg(sm.minionId), 1, 1);
+      m.isSummoned = true; m.justSummoned = true;
       this.s.enemies.push(m);
       this.emit({ t: 'summon', by: e.uid, uid: m.uid });
     }
@@ -326,7 +357,7 @@ export class Battle {
     if (e.statuses.some(x => x.type === 'freeze' && (x.duration || 0) > 0)) { this.emit({ t: 'enemyAct', uid: e.uid, kind: 'frozen' }); return; }
     if (melee && e.distance > 0) { e.distance--; this.emit({ t: 'enemyMove', uid: e.uid, distance: e.distance }); return; }
     const a = this.enemyAction(e, s.turn); const pc = e.ct === 'priest' || e.ct === 'caster';
-    let type = a.type; if (pc && type === '攻击') type = '技能';   // SPEC: the original caster attack behaviour
+    let type = a.type; if (pc && type === '攻击') type = '技能';   // casters never attack directly (enemyAI.ts:304-309)
     if (type === '防御') {
       const v = Math.floor(a.value * (e.arch === 'bulwark' ? 2 : 1));
       e.armor += v; this.emit({ t: 'enemyAct', uid: e.uid, kind: 'defend', value: v }); this.emit({ t: 'armor', who: e.uid, delta: v, total: e.armor, reason: '防御' });
@@ -335,7 +366,6 @@ export class Battle {
     let rider: { st: StatusType; val: number } | null = null;
     if (type === '技能') {
       const dot = a.desc ? DOT_DESC[a.desc] : undefined, ctl = a.desc ? CTL_DESC[a.desc] : undefined;
-      if (a.curseDice) { this.emit({ t: 'enemyAct', uid: e.uid, kind: 'curse', desc: a.desc }); for (let i = 0; i < (a.curseDiceCount || 1); i++) this.addJunk(a.curseDice, e); return; }
       if (!pc && (dot || ctl)) rider = { st: (dot || ctl)!, val: Math.max(1, Math.floor((a.value || 1) / 2)) };
       else if (dot || ctl) {
         this.emit({ t: 'enemyAct', uid: e.uid, kind: 'skill', desc: a.desc, value: a.value });
@@ -349,12 +379,19 @@ export class Battle {
     this.emit({ t: 'enemyAct', uid: e.uid, kind: 'attack', desc: a.desc, value: dmg });
     this.playerTakeHit(dmg, e, false);
     if (s.result) return;
+    // after the main hit — counts even when armor absorbed all of it (enemyAI.ts:566-589)
+    for (const id of this.player.relics) {
+      const fx = RELIC_FX[id]?.on_damage_taken; if (!fx) continue;
+      const r = fx(this.relicCtx({}));
+      if (r.damage) { this.player.rageFireBonus += r.damage; this.emit({ t: 'relic', id, trigger: 'on_damage_taken', to: 'weapon', text: '下次出牌 +' + this.player.rageFireBonus + ' 伤害' }); }
+    }
+    if (s.piles.owned.includes('w_fury')) { this.player.furyBonus += 1; this.emit({ t: 'fury', bonus: this.player.furyBonus }); }
     if (rider) { if (rider.st === 'burn' || rider.st === 'poison') this.applyPlayerStatus(rider.st, rider.val, rider.st === 'burn' ? 3 : undefined); else this.applyPlayerStatus(rider.st, 1, rider.st === 'freeze' ? 1 : 2); }
     if (this.rng.next() < 0.3) this.quote(e, 'attack', 1);
   }
 
   private casterSkill(e: Enemy) {
-    // SPEC: v6's caster skill (random poison / burn / weak). Waiting for the original's caster behaviour.
+    // enemySkills.ts:207-265 default caster odds, from attackDmg (the action's own value is unused): 40% poison, 30% burn, 30% poison + weak
     const r = this.rng.next(), atk = e.attackDmg;
     this.emit({ t: 'enemyAct', uid: e.uid, kind: 'skill', desc: '施法' });
     if (r < 0.4) this.applyPlayerStatus('poison', Math.max(2, Math.floor(atk * 0.4)));
@@ -369,7 +406,7 @@ export class Battle {
     const acts = chosen.actions;
     if (!acts.length) return { type: '攻击' as const, value: e.attackDmg, phaseIdx: idx };
     const a = acts[(((t - 1) % acts.length) + acts.length) % acts.length];
-    return { type: a.type, value: a.scalable === false ? a.baseValue : Math.floor(a.baseValue * e.dmgScale), desc: a.description, curseDice: a.curseDice, curseDiceCount: a.curseDiceCount, phaseIdx: idx };
+    return { type: a.type, value: a.scalable === false ? a.baseValue : Math.floor(a.baseValue * e.dmgScale), desc: a.description, phaseIdx: idx };
   }
 
   /** What an enemy will do this turn (intent bubble). */
@@ -384,7 +421,6 @@ export class Battle {
       if (!pc && (dot || ctl)) { const v = this.attackValue(e, e.attackDmg); return { kind: 'atk', text: v + '+' + STATUS_CN[(dot || ctl)!], value: v, status: dot || ctl }; }
       if (dot) return { kind: 'skl', text: STATUS_CN[dot] + ' ' + a.value, status: dot, value: a.value, desc: a.desc };
       if (ctl) return { kind: 'skl', text: STATUS_CN[ctl], status: ctl, desc: a.desc };
-      if (a.curseDice) return { kind: 'skl', text: '诅咒骰', desc: a.desc };
       return { kind: 'skl', text: '施法', desc: a.desc };
     }
     const v = this.attackValue(e, a.value);
@@ -394,7 +430,8 @@ export class Battle {
   /** Enemy → player attack value (logic/attackCalc.ts). */
   attackValue(e: Enemy, base: number, o: { player?: boolean } = {}) {
     let v = base;
-    if (e.ct === 'warrior') v = Math.floor(v * 1.3);   // SPEC
+    if (e.ct === 'warrior') v = Math.floor(v * 1.3);
+    const tm = attackTraitMultiplier(e); if (tm !== 1) v = Math.floor(v * tm);
     const str = stv(e.statuses, 'strength'); if (str) v += str;
     if (e.statuses.some(x => x.type === 'weak')) v = Math.max(1, Math.floor(v * 0.75));
     if (o.player && this.player.statuses.some(x => x.type === 'vulnerable')) v = Math.floor(v * 2.0);
@@ -411,10 +448,6 @@ export class Battle {
     }
     const perfectBlock = !isDot && dmg > 0 && rem === 0;
     this.emit({ t: 'playerHit', from: e ? e.uid : null, dmg, byArmor, hpDmg, isDot, perfectBlock });
-    if (rem > 0 && !isDot) {
-      if (this.hasRelic('rage_fire_relic')) { s.rageFireBonus += 15; this.emit({ t: 'relic', id: 'rage_fire_relic', trigger: 'on_damage_taken', to: 'weapon', text: '下次出牌 +15 伤害' }); }   // SPEC: stacking
-      p.furyHits = Math.min(10, p.furyHits + 1);
-    }
     if (!isDot && p.cls === 'warrior' && dmg > 0 && byArmor === dmg && s.reapBlock < 1) { s.reapBlock = 1; this.emit({ t: 'reap', kind: 'block' }); }
     if (p.hp <= 0) {
       if (this.hasRelic('emergency_hourglass')) { p.hp = 1; this.emit({ t: 'relic', id: 'emergency_hourglass', trigger: 'on_fatal', to: 'hero', text: '免疫致命伤害' }); }
@@ -459,21 +492,31 @@ export class Battle {
     return { absorbed, hpDmg, overkill, armorBroke, killed: e.hp <= 0 };
   }
 
-  /** Phase change and low-HP / hurt quotes after an enemy loses HP. */
-  private afterEnemyHit(e: Enemy, hpDmg: number) {
+  /**
+   * After an enemy loses HP: boss phase switch (crossing a phase threshold: banner + lowHp line, logic/bossPhaseSwitch.ts), the 50% / 30%
+   * low-HP line (single-target plays only, and not on the hit that switched phase — damageApplication.ts:291-358), and the warrior-type
+   * blood fury (+1 when hit by a play and still standing, cap 4).
+   */
+  private afterEnemyHit(e: Enemy, hpDmg: number, o: { play?: boolean; single?: boolean } = {}) {
     if (e.hp <= 0) return;
     const ph = this.enemyAction(e, this.s.turn).phaseIdx;
-    if (ph !== e.phaseIdx) { e.phaseIdx = ph; this.emit({ t: 'phase', uid: e.uid, phaseIdx: ph }); }
-    if (!e.quotedLow && e.hp / e.maxHp < (e.cat === 'boss' ? 0.5 : 0.3)) { e.quotedLow = true; this.quote(e, 'lowHp', 1); return; }   // SPEC: thresholds
-    if (hpDmg > 0 && e.cat === 'boss') this.quote(e, 'hurt', 0.35);
+    let switched = false;
+    if (ph !== e.phaseIdx) { e.phaseIdx = ph; switched = true; this.emit({ t: 'phase', uid: e.uid, phaseIdx: ph }); this.quote(e, 'lowHp', 1); }
+    if (!e.quotedLow && e.hp / e.maxHp < (e.cfgId.startsWith('boss_') ? 0.5 : 0.3)) { e.quotedLow = true; if (!switched && o.single) this.quote(e, 'lowHp', 1); }
+    else if (!switched && hpDmg > 0 && e.cfgId.startsWith('boss_')) this.quote(e, 'hurt', 0.35);   // presentation flavour
+    if (o.play && hpDmg > 0 && e.ct === 'warrior' && !e.cfgId.startsWith('boss_') && e.arch !== 'paladin' && e.bloodFury < 4) {
+      e.bloodFury++; this.emit({ t: 'trait', uid: e.uid, kind: 'bloodFury', stacks: e.bloodFury });
+    }
   }
 
   /** Deaths: on_kill relics, warrior reap, gold; wave transition or victory. Returns true if the battle goes on. */
   private resolveDeaths(direct: boolean): boolean {
     const s = this.s, p = this.player;
+    let killedByPlay = 0;
     for (const e of s.enemies) {
       if (e.dead || e.hp > 0) continue;
       e.dead = true; s.goldEarned += e.dropGold || 0;
+      if (direct) killedByPlay++;
       this.emit({ t: 'death', uid: e.uid, direct, overkill: e.overkill || 0, gold: e.dropGold || 0 });
       this.quote(e, 'death', e.cat === 'boss' ? 1 : 0.5);
       if (e.killedDirect && direct && p.cls === 'warrior' && s.reapKill < 1) { s.reapKill = 1; this.emit({ t: 'reap', kind: 'kill' }); }
@@ -485,6 +528,8 @@ export class Battle {
         if (r.grantExtraPlay) s.playsLeft += r.grantExtraPlay;
       }
     }
+    // berserker vengeance: +1 per ally killed by a play (enemyTraits.ts:177-187, damageApplication.ts:206-228,385-401)
+    if (killedByPlay) for (const e of this.alive()) if (e.arch === 'berserker') { e.vengeance += killedByPlay; this.emit({ t: 'trait', uid: e.uid, kind: 'vengeance', stacks: e.vengeance }); }
     if (this.alive().length) return true;
     if (s.waveIdx + 1 < s.waves.length) {
       const hd = this.hand; const gone = P.discardDice(s.piles, hd);
@@ -505,6 +550,7 @@ export class Battle {
     for (const id of p.relics) { const fx = RELIC_FX[id]?.on_battle_end; if (!fx) continue; const r = fx(this.relicCtx({})); if (r.goldBonus) { gold += r.goldBonus; this.emit({ t: 'relic', id, trigger: 'on_battle_end', to: 'gold', text: relicText(r) }); } }
     const hd = this.hand; P.discardDice(s.piles, hd, { keepCracked: true }); P.victoryCleanup(s.piles);
     p.gold += gold; p.statuses = [];
+    // DECIDE: the original code gives the mid boss a dice choice and NO relic (lootHandler.ts:78-90, looks like a bug); stage-1 doc asks for a relic choice
     const choices = this.rng.shuffle(RELIC_POOL.filter(id => !this.hasRelic(id) && DATA.relics[id] && ['rare', 'legendary', 'uncommon'].includes(DATA.relics[id].rarity))).slice(0, 3);   // SPEC: boss reward pool
     this.emit({ t: 'victory', gold, relicChoices: choices });
   }
@@ -541,29 +587,32 @@ export class Battle {
       if (res.grantFreeReroll) { out.post.push(['freeReroll', res.grantFreeReroll]); used = true; }
       if (used) { out.relics.push(id); step({ kind: 'relic', label: DATA.relics[id].name, txt: relicText(res), id, dmg: res.damage || 0, mult: res.multiplier || 1, armor: res.armor || 0, heal: res.heal || 0, gold: res.goldBonus || 0, to: relicTarget(res) }); }
     }
-    if (s.rageFireBonus > 0) { out.extra += s.rageFireBonus; out.relics.push('rage_fire_relic'); out.post.push(['consumeRage']); step({ kind: 'relic', label: DATA.relics.rage_fire_relic.name, txt: '+' + s.rageFireBonus + ' 伤害', id: 'rage_fire_relic', dmg: s.rageFireBonus, mult: 1, to: 'weapon' }); }
+    if (p.rageFireBonus > 0) { out.extra += p.rageFireBonus; out.relics.push('rage_fire_relic'); out.post.push(['consumeRage']); step({ kind: 'relic', label: DATA.relics.rage_fire_relic.name, txt: '+' + p.rageFireBonus + ' 伤害', id: 'rage_fire_relic', dmg: p.rageFireBonus, mult: 1, to: 'weapon' }); }
     // a multi-die high card disables die effects (warrior may multi-select; the effects stay off)
     const skip = sel.length > 1 && hands.activeHands.length === 1 && hands.activeHands[0] === '普通攻击';
     out.skipOnPlay = skip;
-    if (skip) sel.forEach(d => { if (d.def.onPlay?.armorBreak) out.armorBreak = true; });   // SPEC
+    if (skip) sel.forEach(d => { if (d.def.onPlay?.armorBreak) out.armorBreak = true; });   // armor break survives a multi-die high card (expectedOutcomeCalc.ts:189-196)
     const db = depthBonus(p.depth);
     const hasTriple = hands.activeHands.some(h => TRIPLE_OR_BETTER.includes(h as HandName));
     const procDie = (d: Die) => {
       const op = d.def.onPlay || {};
-      if (op.selfDamage && p.hp + out.heal > op.selfDamage) out.heal -= op.selfDamage;
+      const ownHeal = (op.heal || 0) + (op.healFromValue ? d.value : 0);   // the self-damage gate looks at this die alone (diceOnPlay/index.ts:59-63)
+      if (op.selfDamage && p.hp + ownHeal > op.selfDamage) out.heal -= op.selfDamage;
       if (op.bonusDamage && !op.requiresTriple) out.extra += Math.ceil(op.bonusDamage * db.dmg);
       if (op.bonusMult) out.multiplier *= 1 + (op.bonusMult - 1 + db.mult);
       if (op.heal) out.heal += op.heal;
       if (op.pierce) out.pierce += op.pierce;
       if (op.statusToEnemy) upsertStatus(out.statuses, { ...op.statusToEnemy });
-      if (op.selfDamagePercent) { const sd = Math.ceil(p.maxHp * op.selfDamagePercent); if (p.hp + out.heal > sd) out.heal -= sd; }
+      if (op.selfDamagePercent) { const sd = Math.ceil(p.maxHp * op.selfDamagePercent); if (p.hp + ownHeal > sd) out.heal -= sd; }
       if (op.armor) out.armor += op.armor;
       if (op.armorFromTotalPoints) out.armor += X;
       if (op.armorMultFromTotalPoints) out.armor += Math.ceil(X * op.armorMultFromTotalPoints);
       if (op.armorBreak) out.armorBreak = true;
       if (op.armorToDamage && target) out.extra += target.armor || 0;
-      if (op.scaleWithHits) out.extra += Math.min(10, p.furyHits);   // SPEC: 怒火 in the original
+      // DECIDE: code = flat bonus, +1 per enemy attack branch, uncapped; description = face value +1, max +10
+      if (op.scaleWithHits) out.extra += p.furyBonus;   // flat bonus, uncapped, kept for the run (warriorCalc.ts:45; its description says otherwise)
       if (op.scaleWithLostHp) out.extra += Math.ceil((p.maxHp - p.hp) * op.scaleWithLostHp);
+      // DECIDE: code heals as soon as the target is below 25% (warriorCalc.ts:54-59); the description says only on a kill
       if (op.executeThreshold && target && target.hp / target.maxHp < op.executeThreshold) { out.multiplier *= op.executeMult || 1; if (op.executeHeal) out.heal += op.executeHeal; }   // SPEC: heal only on kill?
       if (op.aoeDamage) out.extra += op.aoeDamage;
       if (op.healFromValue) out.heal += d.value;
@@ -571,7 +620,7 @@ export class Battle {
       if (op.lowHpOverrideValue && op.lowHpThreshold && p.hp / p.maxHp < op.lowHpThreshold && d.value < op.lowHpOverrideValue) out.extra += op.lowHpOverrideValue - d.value;
       if (op.requiresTriple && op.bonusDamageFromPoints && hasTriple) out.extra += Math.ceil(X * op.bonusDamageFromPoints);
       if (op.scaleWithBloodRerolls && s.bloodRerollCount) out.extra += Math.min(s.bloodRerollCount, 3);
-      if (op.selfBerserk) { out.multiplier *= 1.3; const bd = Math.ceil(p.maxHp * 0.05); if (p.hp + out.heal > bd) out.heal -= bd; }
+      if (op.selfBerserk) { out.multiplier *= 1.3; const bd = Math.ceil(p.maxHp * 0.05); if (p.hp + ownHeal > bd) out.heal -= bd; }
       if (op.scaleWithSelfDamage) out.multiplier *= 1 + (s.bloodRerollCount || 0) * 2 * 0.2;
       if (op.damageFromArmor) out.extra += Math.ceil((s.armor + out.armor) * op.damageFromArmor);
       if (op.purifyAll) out.purify += 99;
@@ -601,7 +650,8 @@ export class Battle {
     if (p.cls === 'warrior' && s.rageMult > 0) { dmg = Math.ceil(dmg * (1 + s.rageMult)); out.tags.push('过充 +' + Math.round(s.rageMult * 100) + '%'); }
     for (const tg of out.tags) step({ kind: 'mod', label: tg.split(' ')[0], txt: tg.split(' ').slice(1).join(' ') });
     out.damage = dmg; out.total = total;
-    out.aoe = (!skip && sel.some(d => d.def.onPlay?.aoe)) || hands.activeHands.some(h => STRAIGHTS.includes(h as HandName));
+    // damageApplication.ts:89-90 ignores skipOnPlay: a multi-die high card with 旋风斩 still hits everyone (preview follows the settlement)
+    out.aoe = sel.some(d => d.def.onPlay?.aoe) || hands.activeHands.some(h => STRAIGHTS.includes(h as HandName));
     out.tier = handTier(hands);
     return out;
   }
@@ -621,7 +671,8 @@ export class Battle {
     return {
       uid: this.enemyUid++, cfgId: cfg.id, name: cfg.name, hp, maxHp: hp, armor: 0, attackDmg: Math.floor(cfg.dmg * dmgScale), ct: cfg.ct, arch: cfg.arch, cat: cfg.cat,
       statuses: [], distance: cfg.ct === 'warrior' || cfg.ct === 'guardian' ? 2 : 3, attackCount: 0, hpScale, dmgScale, dropGold: cfg.drops?.gold ?? 20,
-      summoned: 0, isSummoned: false, revived: false, wasFrozen: false, dead: false, quotedLow: false, phaseIdx: cfg.phases.length - 1,
+      summoned: 0, isSummoned: false, revived: false, wasFrozen: false, dead: false, quotedLow: false, phaseIdx: 0,
+      bloodFury: 0, vengeance: 0, justSummoned: false,
     };
   }
   private quote(e: Enemy, kind: QuoteKind, chance: number) {

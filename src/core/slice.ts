@@ -4,7 +4,7 @@ import type { BattleSetup } from './battle';
 
 export const SLICE_DICE = ['standard', 'standard', 'standard', 'standard', 'w_bloodthirst', 'w_ironwall', 'w_fury', 'w_titanfist', 'w_whirlwind', 'w_execute'];
 export const SLICE_RELICS = ['crimson_grail', 'rage_fire_relic', 'point_accumulator'];
-/** Map depth of the boss node. SPEC: the lich is the chapter-1 mid boss (depth 7 in the original map); final value after the rules check. */
+/** Map depth of the boss node: the lich is the chapter-1 mid boss at depth 7 (config/balance/world.ts:54,66) → 216 HP, boss rules by max HP. */
 export const SLICE_DEPTH = 7;
 
 export function sliceSetup(seed: number, o: Partial<BattleSetup> = {}): BattleSetup {

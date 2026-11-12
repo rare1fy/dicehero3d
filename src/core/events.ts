@@ -25,6 +25,10 @@ export type BattleEvent =
   | { t: 'hp'; who: 'player'; delta: number; hp: number; reason: 'heal' | 'self' | 'reroll' | 'maxHp' }
   | { t: 'purify'; removed: StatusType[]; junk?: { id: string; where: string; uid?: number } }
   | { t: 'reap'; kind: 'kill' | 'block' }
+  /** 怒火骰 grew (after an enemy attack branch) */
+  | { t: 'fury'; bonus: number }
+  /** an enemy trait stacked: warrior-type blood fury, berserker vengeance */
+  | { t: 'trait'; uid: number; kind: 'bloodFury' | 'vengeance'; stacks: number }
   | { t: 'spent'; uids: number[] }
   | { t: 'enemyTurn'; turn: number }
   | { t: 'enemyMove'; uid: number; distance: number }
