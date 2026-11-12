@@ -150,5 +150,6 @@
   - `docs\godot-port\` 是原版的系统设计文档，有规则公式，也有结算演出的逐帧时序（`08-damage-settlement-relic-drawer.md`：牌型卡片、遗物刷光联动、伤害数字爆出的节奏）。原版的爽点就在这套节奏里，3D 版的演出要在它的基础上做得更强。
 - `C:\Users\liufengyun\Documents\GameProtos\pxui\`：UI 层和编辑器。启动方式是双击 `启动UI编辑器.bat`。
 - `C:\Users\liufengyun\Documents\GameProtos\sfx\`、`...\voice\`：音效和语音生成流水线。
+- 旧版本对比链接（从 tag 原样构建，私有）：show-00 https://claude.ai/artifact/CYqhqFvTzNtGidrwSx6Hkp ；show-01 https://claude.ai/artifact/PB7RP3JT13m5dZqxCzSFJF ；show-02（含黑屏修复）https://claude.ai/artifact/L7fMcDTm523ThMSJhnswnB 。重建方法：`git archive <tag> | tar -x` 到一个和 `pxui` 同级的目录（或给 `../pxui` 建链接），链上 node_modules 后 `npx vite build`。
 - 线上预览（私有）：v6 第 2 轮 https://claude.ai/artifact/78eAwmrtoSKxfoEVGARXfX ；v1–v5 https://claude.ai/artifact/9Mp6EDhu2RS1D6jyGPGV5G （当前内容是 v5）。
 - 本机环境：RTX 3060 12GB、Node、git、uv、Python 3.13；没有 ffmpeg。微信开发者工具在 `E:\Tencent\微信web开发者工具`，服务端口还没开，需要用户扫码登录后在「设置 → 安全设置」里打开。
