@@ -17,7 +17,7 @@ export class BActor extends Actor {
     const v = def.build();
     let maxY = 0, maxX = 0; for (const c of v.cells.values()) { maxY = Math.max(maxY, c.y + 1); maxX = Math.max(maxX, Math.abs(c.x + 0.5) + 0.5); }
     this.top = maxY * CELL; this.height = Math.min(this.top, 6); this.width = maxX * 2 * CELL;
-    const r = v.build({ glow: def.glow ?? 1.9, jitter: 0.05, self: def.self ?? 0.06 });
+    const r = v.build({ glow: def.glow ?? 1.9, jitter: 0, self: def.self ?? 0.06, edge: 0.13 });
     this.body.add(r.root); this.bones = r.bones; this.finish(r.meshes);
     this.slow = BIG[def.id] ?? 1; this.hunch = HUNCH[def.id] ?? 0;
     this.armed = !!r.bones.weapon && r.bones.weapon.children.length > 0;
@@ -25,7 +25,7 @@ export class BActor extends Actor {
   weapon() { return this.bones.weapon ? this.bones.weapon.localToWorld(V3(0, 0, 8 * CELL)) : this.chest(); }
   head() { return this.local(0, this.top + 0.3, 0); }
   chest() { return this.local(0, this.top * 0.55, 0.3); }
-  attack() { return this.play(new Action('attack', (this.def.attack === 'slam' ? 1.3 : this.def.attack === 'shoot' ? 1.2 : this.def.attack === 'dual' ? 0.9 : 1.0) * this.slow, 0.5)); }
+  attack(dist?: number) { return this.play(new Action('attack', (this.def.attack === 'slam' ? 1.3 : this.def.attack === 'shoot' ? 1.2 : this.def.attack === 'dual' ? 0.9 : 1.0) * this.slow, 0.5, dist != null ? { dist } : {})); }
   cast() { return this.play(new Action('cast', 1.2 * this.slow, 0.6)); }
   hurt(power = 1) { this.hit(power); return this.play(new Action('hurt', 0.5 * Math.sqrt(this.slow), 0.1, { power })); }
   roar() { return this.play(new Action('roar', 1.6 * this.slow, 0.35)); }
@@ -75,6 +75,8 @@ export class BActor extends Actor {
       rot(b.spine, -0.35 * s, sh, 0); rot(b.neck, -0.45 * s, 0, 0); rot(b.jaw, 0.8 * s, 0, 0); rot(b.armL, -1.6 * s, 0, 1.0 * s); rot(b.armR, -1.4 * s, 0, -1.0 * s); this.off.y += 0.2 * s;
       return;
     }
+    if (n !== 'attack' && n !== 'cast') return;   // other names belong to subclasses
+    const D = (a.data.dist as number | undefined);
     if (kind === 'quad') {   // pounce and bite / howl
       if (n === 'attack') { const coil = curve(k, [[0, 0], [0.3, 1], [0.45, 0], [1, 0]]), lunge = snap(k, [[0, 0], [0.38, 0], [0.5, 1], [0.7, 1], [1, 0]]);
         mov(b.chest, 0, -0.15 * coil, 0); this.off.z = 1.2 * lunge - 0.2 * coil; this.off.y = 0.3 * curve(k, [[0, 0], [0.38, 0], [0.45, 1], [0.55, 0], [1, 0]]); rot(b.neck, 0.4 * lunge - 0.2 * coil, 0, 0); rot(b.jaw, 0.7 * curve(k, [[0, 0], [0.35, 1], [0.5, 0], [1, 0]]), 0, 0);
@@ -97,7 +99,7 @@ export class BActor extends Actor {
     switch (at) {
       case 'swing': {   // over the head, chop into the ground in front
         const wind = curve(k, [[0, 0], [0.3, 1], [0.46, 1], [0.54, 0], [1, 0]]), chop = snap(k, [[0, 0], [0.44, 0], [0.54, 1], [0.76, 1], [1, 0]]);
-        this.off.z = curve(k, [[0, 0], [0.3, -0.15], [0.52, 0.7], [0.74, 0.7], [1, 0]]); this.off.y += curve(k, [[0, 0], [0.3, 0], [0.41, 0.4], [0.52, 0], [1, 0]]);
+        this.off.z = curve(k, [[0, 0], [0.3, -0.15], [0.52, D ?? 0.7], [0.74, D ?? 0.7], [1, 0]]); this.off.y += curve(k, [[0, 0], [0.3, 0], [0.41, 0.4], [0.52, 0], [1, 0]]);
         rot(b.spine, -0.3 * wind + 0.3 * chop, 0, 0); rot(b.chest, -0.15 * wind + 0.12 * chop, 0.25 * wind, 0);
         rot(b.armR, -2.75 * wind + 0.15 * chop, 0, 0.15 * wind); rot(b.foreR, 0.75 * wind + 1.5 * chop, 0, 0); rot(b.weapon, 0.1 * wind + 1.35 * chop, 0, 0);
         rot(b.armL, -1.8 * wind - 0.6 * chop, 0, -0.1); rot(b.jaw, 0.45 * (wind + chop), 0, 0); rot(b.legL, -0.5 * chop + 0.25 * wind, 0, 0); rot(b.legR, 0.45 * chop - 0.25 * wind, 0, 0);
@@ -111,7 +113,7 @@ export class BActor extends Actor {
       }
       case 'claw': {   // lunge with a double claw swipe
         const coil = curve(k, [[0, 0], [0.3, 1], [0.42, 0], [1, 0]]), sw = snap(k, [[0, 0], [0.4, 0], [0.5, 1], [0.7, 1], [1, 0]]), sw2 = snap(k, [[0, 0], [0.55, 0], [0.65, 1], [0.8, 1], [1, 0]]);
-        this.off.z = curve(k, [[0, 0], [0.3, -0.2], [0.48, 0.9], [0.72, 0.9], [1, 0]]); this.off.y += curve(k, [[0, 0], [0.32, 0], [0.4, 0.35], [0.48, 0], [1, 0]]);
+        this.off.z = curve(k, [[0, 0], [0.3, -0.2], [0.48, D ?? 0.9], [0.72, D ?? 0.9], [1, 0]]); this.off.y += curve(k, [[0, 0], [0.32, 0], [0.4, 0.35], [0.48, 0], [1, 0]]);
         mov(b.hips, 0, -0.15 * coil, 0); rot(b.spine, 0.3 * coil - 0.15 * sw, 0, 0); rot(b.jaw, 0.7 * (coil + sw), 0, 0);
         rot(b.armR, -2.3 * coil + 2.5 * sw, 0, -0.4 * sw); rot(b.armL, -2.0 * coil + 2.2 * sw2, 0, 0.4 * sw2); rot(b.foreR, -0.5 * coil, 0, 0);
         break;

@@ -8,6 +8,8 @@ import { onUpdate } from '../engine/world';
 import { clock } from '../engine/clock';
 import { toon, glow } from './toon';
 import { onLook, voxelProp, voxMat } from './voxel';
+import { buildVoxArena } from './voxarena';
+import { CELL } from '../bestiary/kit';
 import type { KKAssets } from '../actors/kk';
 
 export const ARENA = { lichAltar: V3(0, 0.55, -4.7), altarR: 2.2 };
@@ -46,6 +48,15 @@ function flagstoneTex() {
     }
   });
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  return t;
+}
+/** dark earth and moss as one texel per block, nearest-filtered, so the ground beyond the courtyard reads as voxels too */
+function blockEarthTex() {
+  const S = 64, cols = ['#2c2628', '#302a2c', '#2a2426', '#2e3a2a', '#34402c', '#3a3640'], t = canvasTex(S, S, g => {
+    // calm patches of 8x8 blocks, not per-block noise
+    for (let y = 0; y < S; y += 8) for (let x = 0; x < S; x += 8) { const r = rnd(); g.fillStyle = cols[r < 0.55 ? 0 : r < 0.75 ? 1 : r < 0.9 ? 3 : 4]; g.fillRect(x, y, 8, 8); }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
   return t;
 }
 function earthTex() {
@@ -176,7 +187,8 @@ function flatColors(g: THREE.BufferGeometry, mx: THREE.Matrix4) {
 
 export interface Env { root: THREE.Group; sky: THREE.ShaderMaterial; rune: THREE.Mesh; runeMat: THREE.MeshBasicMaterial; soulLights: THREE.PointLight[]; flames: THREE.Mesh[]; mist: THREE.Mesh[]; moon: THREE.DirectionalLight; hemi: THREE.HemisphereLight; warm: THREE.PointLight; phase2(k: number): void }
 
-export function buildEnv(kk?: KKAssets | null): Env {
+export function buildEnv(kk?: KKAssets | null, opt: { voxel?: boolean } = {}): Env {
+  const vox = !!opt.voxel && !kk;
   scene.background = new THREE.Color(0x0e0c1c);
   scene.fog = new THREE.FogExp2(0x1a1630, 0.028);
   const sky = buildSky();
@@ -190,28 +202,30 @@ export function buildEnv(kk?: KKAssets | null): Env {
   const warm = new THREE.PointLight(0xff9a50, 6, 8, 1.8); warm.position.set(-3.4, 2.6, 6.2); scene.add(warm);
 
   // ground: flagstone courtyard + dark earth beyond
-  const court = new THREE.Mesh(new THREE.PlaneGeometry(13, 17), toon(0xffffff, { map: (() => { const t = flagstoneTex(); t.repeat.set(3.2, 4.2); return t; })() }));
-  court.rotation.x = -Math.PI / 2; court.position.set(0, 0.002, -0.6); court.receiveShadow = true; root.add(court);
-  const earthT = earthTex(); earthT.repeat.set(16, 16);
-  const earth = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), toon(0xffffff, { map: earthT })); earth.rotation.x = -Math.PI / 2; earth.receiveShadow = true; root.add(earth);
+  if (!vox) {
+    const court = new THREE.Mesh(new THREE.PlaneGeometry(13, 17), toon(0xffffff, { map: (() => { const t = flagstoneTex(); t.repeat.set(3.2, 4.2); return t; })() }));
+    court.rotation.x = -Math.PI / 2; court.position.set(0, 0.002, -0.6); court.receiveShadow = true; root.add(court);
+  }
+  const earthT = vox ? blockEarthTex() : earthTex(); earthT.repeat.set(vox ? 120 / (64 * CELL) : 16, vox ? 120 / (64 * CELL) : 16);
+  const earth = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), toon(0xffffff, { map: earthT })); earth.rotation.x = -Math.PI / 2; earth.position.y = vox ? -2 * CELL : 0; earth.receiveShadow = true; root.add(earth);
 
   const stone = toon(0x6a6c80), stoneD = toon(0x4a4a5c), stoneL = toon(0x8a8ca0), bark = toon(0x3a3036), iron = toon(0x26242c), gold = toon(0xc8a050, { emissive: 0x3a2400 });
   const B = new Batch(), AB = new Batch();
   // courtyard rim: low broken wall segments
-  if (!kk) for (let i = 0; i < 14; i++) { const side = i < 7 ? -1 : 1, z = -8 + (i % 7) * 2.4 + rr(-0.3, 0.3), h = rr(0.3, 0.9); B.add(new THREE.BoxGeometry(0.6, h, rr(1.4, 2.2)), stoneD, V3(side * 6.8 + rr(-0.2, 0.2), h / 2, z), new THREE.Euler(0, rr(-0.1, 0.1), 0)); }
+  if (!kk && !vox) for (let i = 0; i < 14; i++) { const side = i < 7 ? -1 : 1, z = -8 + (i % 7) * 2.4 + rr(-0.3, 0.3), h = rr(0.3, 0.9); B.add(new THREE.BoxGeometry(0.6, h, rr(1.4, 2.2)), stoneD, V3(side * 6.8 + rr(-0.2, 0.2), h / 2, z), new THREE.Euler(0, rr(-0.1, 0.1), 0)); }
   // the lich's altar: stepped round dais
   const A = ARENA.lichAltar;
-  AB.add(new THREE.CylinderGeometry(ARENA.altarR, ARENA.altarR + 0.25, 0.55, 28), stone, V3(A.x, 0.275, A.z));
-  AB.add(new THREE.CylinderGeometry(ARENA.altarR + 0.55, ARENA.altarR + 0.75, 0.22, 28), stoneD, V3(A.x, 0.11, A.z));
-  for (let i = 0; i < 3; i++) AB.add(new THREE.BoxGeometry(2.6 - i * 0.3, 0.18, 0.5), stoneL, V3(A.x, 0.09 + i * 0.18, A.z + ARENA.altarR + 0.85 - i * 0.42));
+  if (!vox) AB.add(new THREE.CylinderGeometry(ARENA.altarR, ARENA.altarR + 0.25, 0.55, 28), stone, V3(A.x, 0.275, A.z));
+  if (!vox) AB.add(new THREE.CylinderGeometry(ARENA.altarR + 0.55, ARENA.altarR + 0.75, 0.22, 28), stoneD, V3(A.x, 0.11, A.z));
+  if (!vox) for (let i = 0; i < 3; i++) AB.add(new THREE.BoxGeometry(2.6 - i * 0.3, 0.18, 0.5), stoneL, V3(A.x, 0.09 + i * 0.18, A.z + ARENA.altarR + 0.85 - i * 0.42));
   // broken gothic arch behind the altar
-  if (!kk) for (const sx of [-1, 1]) {
+  if (!kk && !vox) for (const sx of [-1, 1]) {
     const x = A.x + sx * 2.6, z = A.z - 2.2;
     B.add(new THREE.BoxGeometry(1.0, 0.5, 1.0), stoneD, V3(x, 0.25, z));
     B.add(new THREE.CylinderGeometry(0.38, 0.42, sx < 0 ? 6.2 : 4.4, 10), stone, V3(x, (sx < 0 ? 6.2 : 4.4) / 2 + 0.5, z));
     B.add(new THREE.BoxGeometry(0.95, 0.4, 0.95), stoneL, V3(x, (sx < 0 ? 6.2 : 4.4) + 0.7, z));
   }
-  if (!kk) {
+  if (!kk && !vox) {
   B.add(new THREE.TorusGeometry(2.6, 0.36, 8, 18, Math.PI * 0.62), stone, V3(A.x, 6.9, A.z - 2.2), new THREE.Euler(0, 0, Math.PI * 0.38));
   // fallen pillar chunks
   B.add(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 10), stoneL, V3(3.9, 0.4, -5.6), new THREE.Euler(Math.PI / 2, 0.6, 0));
@@ -231,28 +245,31 @@ export function buildEnv(kk?: KKAssets | null): Env {
   }
   // distant spires / hills (silhouettes in the fog)
   const far = toon(0x1c1a2c, { rim: 0.4 });
-  for (const [x, z, w, h] of [[-26, -45, 6, 16], [-18, -50, 4, 24], [-12, -48, 5, 13], [16, -46, 7, 18], [24, -52, 5, 26], [32, -44, 8, 12]] as const) { B.add(new THREE.BoxGeometry(w, h, w), far, V3(x, h / 2, z)); B.add(new THREE.ConeGeometry(w * 0.6, h * 0.45, 4), far, V3(x, h + h * 0.22, z), new THREE.Euler(0, Math.PI / 4, 0)); }
-  for (let i = 0; i < 9; i++) B.add(new THREE.SphereGeometry(rr(10, 18), 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), far, V3(-60 + i * 15, -2, rr(-70, -55)), undefined, V3(1.6, 0.45, 1));
+  for (const [x, z, w, h] of [[-26, -45, 6, 16], [-18, -50, 4, 24], [-12, -48, 5, 13], [16, -46, 7, 18], [24, -52, 5, 26], [32, -44, 8, 12]] as const) { B.add(new THREE.BoxGeometry(w, h, w), far, V3(x, h / 2, z)); if (vox) for (let k = 0; k < 4; k++) B.add(new THREE.BoxGeometry(w * (0.8 - k * 0.2), h * 0.12, w * (0.8 - k * 0.2)), far, V3(x, h + h * 0.06 + k * h * 0.12, z)); else B.add(new THREE.ConeGeometry(w * 0.6, h * 0.45, 4), far, V3(x, h + h * 0.22, z), new THREE.Euler(0, Math.PI / 4, 0)); }
+  for (let i = 0; i < 9; i++) { const r = rr(10, 18), x = -60 + i * 15, z = rr(-70, -55); if (vox) for (let k = 0; k < 4; k++) B.add(new THREE.BoxGeometry(r * 3.2 * (1 - k * 0.22), r * 0.14, r * 2 * (1 - k * 0.22)), far, V3(x, -2 + r * 0.07 + k * r * 0.14, z)); else B.add(new THREE.SphereGeometry(r, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), far, V3(x, -2, z), undefined, V3(1.6, 0.45, 1)); }
   B.build(root);
   const altar = new THREE.Group(); root.add(altar); AB.build(altar);
 
   // gold trim of the altar, lanterns on posts with soul fire
   const G2 = new Batch();
-  G2.add(new THREE.TorusGeometry(ARENA.altarR + 0.02, 0.05, 6, 40), gold, V3(A.x, 0.56, A.z), new THREE.Euler(Math.PI / 2, 0, 0));
-  const lanternAt = kk ? [V3(-4.4, 0, -3.4), V3(4.4, 0, -3.4), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)] : [V3(-3.2, 0, -3.0), V3(3.2, 0, -3.0), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)];
+  if (!vox) G2.add(new THREE.TorusGeometry(ARENA.altarR + 0.02, 0.05, 6, 40), gold, V3(A.x, 0.56, A.z), new THREE.Euler(Math.PI / 2, 0, 0));
+  const lanternAt = kk || vox ? [V3(-4.4, 0, -3.4), V3(4.4, 0, -3.4), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)] : [V3(-3.2, 0, -3.0), V3(3.2, 0, -3.0), V3(-5.6, 0, 1.5), V3(5.6, 0, 1.5)];
   const flameY = kk ? 1.86 : 2.46;
-  if (!kk) for (const p of lanternAt) { G2.add(new THREE.BoxGeometry(0.14, 2.2, 0.14), iron, p.clone().add(V3(0, 1.1, 0))); G2.add(new THREE.BoxGeometry(0.42, 0.06, 0.42), iron, p.clone().add(V3(0, 2.25, 0))); G2.add(new THREE.ConeGeometry(0.32, 0.3, 4), iron, p.clone().add(V3(0, 2.75, 0)), new THREE.Euler(0, Math.PI / 4, 0)); for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) G2.add(new THREE.BoxGeometry(0.04, 0.4, 0.04), iron, p.clone().add(V3(dx * 0.17, 2.45, dz * 0.17))); }
+  if (!kk && !vox) for (const p of lanternAt) { G2.add(new THREE.BoxGeometry(0.14, 2.2, 0.14), iron, p.clone().add(V3(0, 1.1, 0))); G2.add(new THREE.BoxGeometry(0.42, 0.06, 0.42), iron, p.clone().add(V3(0, 2.25, 0))); G2.add(new THREE.ConeGeometry(0.32, 0.3, 4), iron, p.clone().add(V3(0, 2.75, 0)), new THREE.Euler(0, Math.PI / 4, 0)); for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) G2.add(new THREE.BoxGeometry(0.04, 0.4, 0.04), iron, p.clone().add(V3(dx * 0.17, 2.45, dz * 0.17))); }
   const trim = new THREE.Group(); root.add(trim); G2.build(trim, { cast: true });
   if (kk) kayKitSet(root, kk, lanternAt, altar, trim);
+  const va = vox ? buildVoxArena({ altar: A, altarR: ARENA.altarR, lanterns: lanternAt }) : null;
+  if (va) for (const m of va.meshes) root.add(m);
   const flames: THREE.Mesh[] = [], soulLights: THREE.PointLight[] = [];
   const flameMat = glow(0x5affb0, 3.2);
   for (const [i, p] of lanternAt.entries()) {
-    const f = new THREE.Mesh(new THREE.OctahedronGeometry(kk ? 0.11 : 0.14, 1), flameMat); f.position.copy(p).add(V3(0, flameY, 0)); root.add(f); flames.push(f);
+    const f = new THREE.Mesh(va ? new THREE.BoxGeometry(CELL * 2, CELL * 2, CELL * 2) : new THREE.OctahedronGeometry(kk ? 0.11 : 0.14, 1), flameMat);
+    if (va) f.position.copy(va.flames[i]).add(V3(0, CELL * 1.5, 0)); else f.position.copy(p).add(V3(0, flameY, 0)); root.add(f); flames.push(f);
     if (i < 2) { const l = new THREE.PointLight(0x4affa0, 5, 6, 1.8); l.position.copy(f.position); scene.add(l); soulLights.push(l); }
   }
   // rune circle on the altar
   const runeMat = new THREE.MeshBasicMaterial({ map: runeTex(), color: new THREE.Color(0.35, 1.6, 0.9), transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  const rune = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.altarR * 2, ARENA.altarR * 2), runeMat); rune.rotation.x = -Math.PI / 2; rune.position.set(A.x, 0.565, A.z); root.add(rune);
+  const rune = new THREE.Mesh(new THREE.PlaneGeometry(ARENA.altarR * 2, ARENA.altarR * 2), runeMat); rune.rotation.x = -Math.PI / 2; rune.position.set(A.x, va ? va.altarTop + 0.006 : 0.565, A.z); root.add(rune);
   if (kk) onLook(v => { rune.position.y = v ? ALTAR_VOX_TOP + 0.015 : 0.565; });
   // ground mist: drifting noise layers
   const nt = noiseTex(), mist: THREE.Mesh[] = [];

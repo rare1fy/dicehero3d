@@ -4,8 +4,8 @@
 // sym*), y up from the ground, front = +z; held weapons are built along +z from the fist (the idle pose stands them upright).
 import { VoxChar, type Col } from '../look/voxkit';
 
-/** one block = 8 cm: a human-sized figure is ~25 blocks tall */
-export const CELL = 0.08;
+/** one block = 7 cm: a human-sized figure is ~28 blocks tall (about 2 m) */
+export const CELL = 0.07;
 
 export const P = {
   DARK: 0x161018, INK: 0x241a28, WHITE: 0xfff6e8, GOLD: 0xffc640, GOLD_D: 0xc88a24, SILVER: 0xc8d0dc,
@@ -88,9 +88,11 @@ export function biped(v: V, o: Biped): Anchors {
   if (o.robe) {
     const fl = o.robe.flare ?? 2;
     v.part('hips');
-    for (let y = 0; y < hipY + hipH; y++) {
-      const t = 1 - y / (hipY + hipH), w = Math.round(torsoW / 2 + fl * t), d = Math.round(torsoD / 2 + fl * 0.7 * t);
-      rowOct(v, w, d, y, y === 0 || y === 1 ? (o.robe.hem ?? o.robe.c) : y === 2 && o.robe.trim ? o.robe.trim : o.robe.c);
+    // two clean tiers (a wide hem, then straight) instead of a stepped flare
+    const top = hipY + hipH, low = Math.max(3, Math.round(top * 0.4));
+    for (let y = 0; y < top; y++) {
+      const wide = y < low, w = torsoW / 2 + (wide ? fl : 0), d = torsoD / 2 + (wide ? Math.ceil(fl * 0.6) : 0);
+      rbox(v, -w, y, -d, w - 1, y, d - 1, y <= 1 ? (o.robe.hem ?? o.robe.c) : y === low - 1 && o.robe.trim ? o.robe.trim : o.robe.c, 1, false);
     }
     v.part('footL').box(gap, 0, lz1 + 1, gap + legW - 1, 0, lz1 + 2, o.boots ?? P.LEATH_D);
     v.part('footR').box(-gap - legW, 0, lz1 + 1, -gap - 1, 0, lz1 + 2, o.boots ?? P.LEATH_D);
@@ -168,4 +170,16 @@ export function staff(v: V, A: Anchors, o: { len?: number; wood?: Col; part?: st
 export function foliage(v: V, cx: number, cy: number, cz: number, r: number, c: Col, light: Col, o: { g?: number; squash?: number } = {}) {
   v.ell(cx, cy, cz, r, r * (o.squash ?? 0.8), r, c, o.g ?? 0);
   v.paint(cc => (Math.hypot(cc.x + 0.5 - cx, cc.z + 0.5 - cz) < r * 0.85 && cc.y + 0.5 > cy + r * (o.squash ?? 0.8) * 0.45 && cc.c === c ? light : null));
+}
+
+/** stacked square tiers, each narrower than the last: hats, roofs, obelisks — a few big steps instead of a staircase */
+export function tiers(v: V, cx: number, y0: number, cz: number, halves: number[], h: number, c: Col | ((i: number) => Col), o: { dz?: number; dx?: number; g?: number } = {}) {
+  let y = y0;
+  halves.forEach((r, i) => { const col = typeof c === 'function' ? c(i) : c, ox = Math.round((o.dx ?? 0) * i), oz = Math.round((o.dz ?? 0) * i); v.box(cx - r + ox, y, cz - r + oz, cx + r - 1 + ox, y + h - 1, cz + r - 1 + oz, col, o.g ?? 0); y += h; });
+  return y;
+}
+/** a tidy cube cluster (foliage, moss, mushroom caps): a chamfered block with a lighter top */
+export function bush(v: V, x0: number, y0: number, z0: number, w: number, h: number, d: number, c: Col, top: Col) {
+  rbox(v, x0, y0, z0, x0 + w - 1, y0 + h - 1, z0 + d - 1, c, 1, true);
+  rbox(v, x0 + 1, y0 + h - 1, z0 + 1, x0 + w - 2, y0 + h - 1, z0 + d - 2, top, 0, false);
 }
