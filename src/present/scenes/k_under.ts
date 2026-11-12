@@ -15,11 +15,15 @@ export type Look = 's' | 'n' | 'e' | 'w';
 export type P3 = [number, number, number];
 
 // ------------------------------------------------------------------ moods (lighter fog than the shared ones: the back landmark must read)
-export const CRYPT: Mood = { ...DUNGEON, fog: 0x0a0c12, fogD: 0.017, hemiSky: 0x8a94b8, hemiGround: 0x262430, hemiI: 1.5, moon: 0x9ab4d8, moonI: 1.3, key: 0xc0d0f0, keyI: 1.05, mist: 0x3a5a54, mistA: 0.05 };
-export const JAIL: Mood = { ...DUNGEON, fog: 0x0c0a10, fogD: 0.017, hemiSky: 0x8a8aa4, hemiGround: 0x2a2224, hemiI: 1.5, moon: 0xa8b8d8, moonI: 1.3, key: 0xffd8b0, keyI: 1.0, mistA: 0.05 };
-export const WEBCAVE: Mood = { ...CAVE, fog: 0x090b0a, fogD: 0.019, hemiSky: 0x8494a4, hemiGround: 0x22261f, hemiI: 1.75, moon: 0x9ab0c8, moonI: 1.2, key: 0xd0e0d0, keyI: 1.0, mist: 0x4a5a3a, mistA: 0.07 };
-export const GLOWCAVE: Mood = { ...CAVE, fog: 0x080a12, fogD: 0.019, hemiSky: 0x6a88b4, hemiGround: 0x1e2230, hemiI: 1.6, moon: 0x8aa8d8, moonI: 1.2, key: 0xb8c8ff, keyI: 0.85, mist: 0x3a4a72, mistA: 0.08 };
-export const ROOTDEEP: Mood = { ...CAVE, fog: 0x0e0a08, fogD: 0.019, hemiSky: 0x7a6a56, hemiGround: 0x221a12, hemiI: 1.75, moon: 0xa0b0d0, moonI: 1.2, key: 0xffd0a0, keyI: 1.05, earth: [0x1c1612, 0x221a14, 0x18120e], mist: 0x5a4a3a, mistA: 0.07 };
+export const CRYPT: Mood = { ...DUNGEON, bg: 0x06060c, fog: 0x0c0c18, fogD: 0.019, hemiSky: 0x8088aa, hemiGround: 0x1e1c26, hemiI: 1.90, moon: 0xa4acd4, moonI: 1.85, key: 0xb0b6d0, keyI: 1.0, mist: 0x4a4e6e, mistA: 0.09 };
+export const JAIL: Mood = { ...DUNGEON, bg: 0x06060c, fog: 0x0c0c16, fogD: 0.019, hemiSky: 0x8288a8, hemiGround: 0x201c24, hemiI: 1.90, moon: 0xa8b0d4, moonI: 1.85, key: 0xb4b8d0, keyI: 1.0, mist: 0x4a4a6a, mistA: 0.09 };
+export const WEBCAVE: Mood = { ...CAVE, bg: 0x05050a, fog: 0x0a0a14, fogD: 0.021, hemiSky: 0x747aa8, hemiGround: 0x1a1824, hemiI: 1.95, moon: 0x9aa4d8, moonI: 1.65, key: 0xa8b0d8, keyI: 0.9, mist: 0x4a4c70, mistA: 0.11 };
+export const GLOWCAVE: Mood = { ...CAVE, bg: 0x05050c, fog: 0x0a0a16, fogD: 0.021, hemiSky: 0x6a74b4, hemiGround: 0x1a1a2c, hemiI: 1.90, moon: 0x8a9ce0, moonI: 1.60, key: 0xa8b0e8, keyI: 0.85, mist: 0x3e4678, mistA: 0.11 };
+export const ROOTDEEP: Mood = { ...CAVE, bg: 0x06050a, fog: 0x0c0a14, fogD: 0.021, hemiSky: 0x6e6c98, hemiGround: 0x1c1820, hemiI: 1.95, moon: 0x9aa4d8, moonI: 1.65, key: 0xb0acd0, keyI: 0.95, earth: [0x16141a, 0x1a181e, 0x141216], mist: 0x4a4668, mistA: 0.11 };
+/** the dark coping on a cut wall top (what shows when the vault is hidden) */
+export const SECTION = 0x0e0c14;
+/** rusted iron */
+export const RUST = 0x6a4232, RUST_D = 0x4a3028;
 
 // ------------------------------------------------------------------ a wall face in local cells
 /** A vertical face looking into the room. Local cells: u along the run (absolute world cells along x or z), v = height, d = depth into
@@ -52,9 +56,10 @@ export interface Stone { a: Col; b: Col; mortar: Col; base: Col; baseTop: Col; t
 
 /** A dungeon wall run from u0 to u1, H cells tall: stepped plinth, brick courses (flush mortar, a third of the bricks a shade lighter),
  *  a dentil band and a two-step cornice, pilasters with base and capital at the given u. */
-export function dWall(f: Face, u0: number, u1: number, H: number, s: Stone, o: { t?: number; pil?: number[]; pw?: number; course?: number; top?: boolean } = {}) {
-  const t = o.t ?? 7, pw = o.pw ?? 5, C = o.course ?? 6;
-  f.box(u0, -2, 0, u1, H, t - 1, s.a);
+export function dWall(f: Face, u0: number, u1: number, H: number, s: Stone, o: { t?: number; pil?: number[]; pw?: number; course?: number; top?: boolean; hollow?: boolean; section?: Col; y0?: number } = {}) {
+  const t = o.t ?? 7, pw = o.pw ?? 5, C = o.course ?? 6, Y0 = o.y0 ?? -2;
+  if (o.hollow && t > 2) f.box(u0, Y0, 0, u1, H, 0, s.a).box(u0, Y0, t - 1, u1, H, t - 1, s.a).box(u0, Y0, 0, u0, H, t - 1, s.a).box(u1, Y0, 0, u1, H, t - 1, s.a).box(u0, H, 0, u1, H, t - 1, s.a);
+  else f.box(u0, Y0, 0, u1, H, t - 1, s.a);
   for (let r = 0, v = 7; v + C <= H - 6; r++, v += C) {
     f.box(u0, v, 0, u1, v, 0, s.mortar);
     const off = r & 1 ? 7 : 0;
@@ -65,7 +70,7 @@ export function dWall(f: Face, u0: number, u1: number, H: number, s: Stone, o: {
     }
   }
   // plinth: a toe and a course, the course capped in a lighter stone
-  f.box(u0, -2, -1, u1, 4, -1, s.base).box(u0, 5, -1, u1, 5, -1, s.baseTop).box(u0, -2, -2, u1, 1, -2, s.base);
+  if (Y0 < 5) f.box(u0, Y0, -1, u1, 4, -1, s.base).box(u0, 5, -1, u1, 5, -1, s.baseTop).box(u0, Y0, -2, u1, 1, -2, s.base);
   if (o.top !== false) {
     for (let u = u0 + 1; u + 1 <= u1; u += 4) f.box(u, H - 5, -1, u + 1, H - 4, -1, s.trim);
     f.box(u0, H - 3, -1, u1, H - 2, -1, s.trim).box(u0, H - 1, -2, u1, H, -1, s.trimL).box(u0, H, 0, u1, H, t - 1, s.trimL);
@@ -78,16 +83,19 @@ export function dWall(f: Face, u0: number, u1: number, H: number, s: Stone, o: {
     f.box(Math.max(u0, a - 1), -2, -3, Math.min(u1, b + 1), 6, -1, s.base).box(Math.max(u0, a - 1), 7, -3, Math.min(u1, b + 1), 7, -1, s.baseTop);
     f.box(Math.max(u0, a - 1), H - 7, -3, Math.min(u1, b + 1), H - 5, -1, s.trim);
     if (o.top !== false) f.box(Math.max(u0, a - 2), H - 4, -3, Math.min(u1, b + 2), H, -1, s.trimL);
+    if (o.section != null) f.box(Math.max(u0, a - 2), H + 1, -3, Math.min(u1, b + 2), H + 1, -1, o.section);
   }
+  if (o.section != null) f.box(u0, H + 1, o.top !== false ? -2 : 0, u1, H + 1, t - 1, o.section);
 }
 
 /** a recess with a stepped arch head (each tier `ins` cells narrower per side, `rise` tall), a flush frame and a sill; returns its rects */
-export function niche(f: Face, uc: number, v0: number, hw: number, h: number, depth: number, s: Stone, o: { steps?: number; rise?: number; ins?: number; frame?: Col | null; fw?: number; sill?: Col | null; back?: Col; inner?: Col } = {}) {
+export function niche(f: Face, uc: number, v0: number, hw: number, h: number, depth: number, s: Stone, o: { steps?: number; rise?: number; ins?: number; frame?: Col | null; fw?: number; sill?: Col | null; back?: Col; inner?: Col; t?: number; skin?: Col } = {}) {
   const steps = o.steps ?? 1, rise = o.rise ?? 2, ins = o.ins ?? 2, fw = o.fw ?? 1;
   const rects: Array<[number, number, number, number]> = [[uc - hw, v0, uc + hw, v0 + h - 1]];
   for (let k = 1; k <= steps; k++) rects.push([uc - hw + k * ins, v0 + h + (k - 1) * rise, uc + hw - k * ins, v0 + h + k * rise - 1]);
   const top = rects[rects.length - 1][3];
   if (o.frame !== null) for (const [a, b, c, d] of rects) f.box(a - fw, b === v0 ? b - fw : b, 0, c + fw, d + fw, 0, o.frame ?? s.trim);
+  if (o.t != null && depth >= o.t - 1) f.box(uc - hw - 2, v0 - 2, o.t - 1, uc + hw + 2, top + 2, depth + 1, o.skin ?? s.a);   // a skin where the niche pokes out of a thin wall
   f.box(uc - hw - 1, v0 - 1, 1, uc + hw + 1, top + 1, depth, o.inner ?? s.dark);
   for (const [a, b, c, d] of rects) { f.box(a, b, 0, c, d, depth - 1, null); f.box(a, b, depth, c, d, depth, o.back ?? s.dark); }
   if (o.sill !== null) f.box(uc - hw - 1, v0 - 1, -1, uc + hw + 1, v0 - 1, -1, o.sill ?? s.trimL);
@@ -136,7 +144,7 @@ export function bonePile(w: W, x: number, z: number, look: Look, len = 2.0, o: {
 // ------------------------------------------------------------------ crypt furniture
 /** an effigy sarcophagus along z (head toward -z): plinth, chest with sunk panels, two-step lid, a carved knight lying on it.
  *  open: the lid has been shoved off onto the floor beside it and the chest gapes, a skull inside. */
-export function effigyTomb(w: W, x: number, z: number, s: { stone: Col; panel: Col; lid: Col; effigy: Col; base: Col; trim: Col }, o: { open?: boolean; side?: 1 | -1 } = {}) {
+export function effigyTomb(w: W, x: number, z: number, s: { stone: Col; panel: Col; lid: Col; effigy: Col; base: Col; trim: Col }, o: { open?: boolean; side?: 1 | -1; cracked?: boolean } = {}) {
   const X = M(x), Z = M(z);
   w.box(X - 9, -1, Z - 17, X + 9, 1, Z + 17, s.base).box(X - 9, 1, Z - 17, X + 9, 1, Z + 17, s.trim);
   w.box(X - 7, 2, Z - 15, X + 7, 8, Z + 15, s.stone);
@@ -152,28 +160,29 @@ export function effigyTomb(w: W, x: number, z: number, s: { stone: Col; panel: C
     w.box(lx - 1, y + 2, lz - 9, lx + 1, y + 3, lz - 8, e);                                                                // folded hands
     w.box(lx - 3, y + 1, lz + 11, lx - 1, y + 3, lz + 12, e).box(lx + 1, y + 1, lz + 11, lx + 3, y + 3, lz + 12, e);         // feet
   };
-  if (!o.open) { lid(X, 9, Z); return; }
+  if (!o.open) { lid(X, 9, Z); if (o.cracked) w.box(X - 8, 9, Z + 3, X + 8, 16, Z + 3, null).box(X - 8, 8, Z + 3, X + 8, 8, Z + 3, 0x1a1820).box(X - 8, 9, Z + 4, X + 8, 16, Z + 16, null).box(X - 8, 8, Z + 4, X + 8, 8, Z + 16, s.trim).box(X - 7, 7, Z + 4, X + 7, 7, Z + 15, s.lid).box(X - 3, 8, Z + 5, X + 3, 8, Z + 11, s.effigy).box(X - 3, 9, Z + 11, X - 1, 10, Z + 12, s.effigy).box(X + 1, 9, Z + 11, X + 3, 10, Z + 12, s.effigy); return; }
   w.box(X - 5, 4, Z - 13, X + 5, 8, Z + 13, null).box(X - 5, 3, Z - 13, X + 5, 3, Z + 13, 0x1a1820);
   skullAt(w, X, 4, Z - 9, 's', BONE); boneRod(w, X - 3, 4, Z - 2, 9, false, BONE); boneRod(w, X + 2, 4, Z, 8, false, BONE_D);
   const sx = o.side ?? 1; lid(X + sx * 19, -1, Z + 4);
 }
 
 /** a cluster of candles of different heights on a wax-pooled base; the tallest two cells thick */
-export function candles(w: W, x: number, z: number, y0 = 0, n = 5, wax = 0xe8e0c8, flame = 0xffc060) {
+export function candles(w: W, x: number, z: number, y0 = 0, n = 5, wax = 0xe8e0c8, flame = 0xffc060, lit = 99) {
   const X = M(x), Z = M(z), spots: Array<[number, number, number, number]> = [[0, 0, 8, 2], [3, 2, 5, 1], [-3, 1, 6, 1], [2, -3, 3, 1], [-2, -3, 4, 1], [4, -1, 2, 1], [-4, 3, 3, 1]];
   w.box(X - 4, y0, Z - 3, X + 4, y0, Z + 3, 0xd4caae);
-  for (const [dx, dz, h, s] of spots.slice(0, n)) {
-    const a = s === 2 ? 0 : 0, b = s === 2 ? 1 : 0;
-    w.box(X + dx - a, y0 + 1, Z + dz - a, X + dx + b, y0 + h, Z + dz + b, wax).box(X + dx, y0 + h + 1, Z + dz, X + dx, y0 + h + (s === 2 ? 2 : 1), Z + dz, flame, 1);
-  }
+  spots.slice(0, n).forEach(([dx, dz, h0, s], i) => {
+    const b = s === 2 ? 1 : 0, h = i < lit ? h0 : Math.max(1, h0 - 3);   // burnt-out ones are stubs with a black wick
+    w.box(X + dx, y0 + 1, Z + dz, X + dx + b, y0 + h, Z + dz + b, wax);
+    if (i < lit) w.box(X + dx, y0 + h + 1, Z + dz, X + dx, y0 + h + (s === 2 ? 2 : 1), Z + dz, flame, 1); else w.set(X + dx, y0 + h + 1, Z + dz, 0x1e1a1a);
+  });
 }
 /** an iron candelabrum: footed base, a stem, a cross-arm with three candles */
-export function candelabrum(w: W, x: number, z: number, h = 16, iron = 0x34323e, wax = 0xe8e0c8, flame = 0xffc060, alongX = true) {
+export function candelabrum(w: W, x: number, z: number, h = 16, iron = 0x34323e, wax = 0xe8e0c8, flame = 0xffc060, alongX = true, lit = true) {
   const X = M(x), Z = M(z);
   w.box(X - 2, 0, Z - 2, X + 2, 0, Z + 2, iron).box(X - 1, 1, Z - 1, X + 1, 1, Z + 1, iron).box(X, 2, Z, X, h, Z, iron);
   const arm = (k: number) => (alongX ? [X + k, Z] : [X, Z + k]) as [number, number];
   const [ax0, az0] = arm(-4), [ax1, az1] = arm(4); w.box(ax0, h + 1, az0, ax1, h + 1, az1, iron);
-  for (const k of [-4, 0, 4]) { const [cx, cz] = arm(k), hh = k ? 3 : 4; w.box(cx, h + 2, cz, cx, h + 1 + hh, cz, wax).set(cx, h + 2 + hh, cz, flame, 1); }
+  for (const k of [-4, 0, 4]) { const [cx, cz] = arm(k), hh = lit ? (k ? 3 : 4) : (k ? 1 : 2); w.box(cx, h + 2, cz, cx, h + 1 + hh, cz, wax); if (lit) w.set(cx, h + 2 + hh, cz, flame, 1); else w.set(cx, h + 2 + hh, cz, 0x1e1a1a); }
   return [x, (h + 6) * CELL, z] as P3;
 }
 /** a soul-fire brazier: stepped stone foot, iron bowl, a two-tier flame */
@@ -203,9 +212,9 @@ export function column(w: W, x: number, z: number, H: number, s: Stone, o: { r?:
 
 // ------------------------------------------------------------------ gates, bars, chains
 /** a barred gate in a wall: a stepped-arch opening through the wall, a grid of bars (portcullis spikes at the foot), a voussoir band and keystone */
-export function barGate(f: Face, uc: number, v0: number, hw: number, h: number, s: Stone, iron: Col, o: { steps?: number; ins?: number; rise?: number; depth?: number; set?: number; pitch?: number; band?: number; key?: Col; spikes?: boolean; rail?: number } = {}) {
+export function barGate(f: Face, uc: number, v0: number, hw: number, h: number, s: Stone, iron: Col, o: { steps?: number; ins?: number; rise?: number; depth?: number; set?: number; pitch?: number; band?: number; key?: Col; spikes?: boolean; rail?: number; t?: number } = {}) {
   const depth = o.depth ?? 10, set = o.set ?? 2, P = o.pitch ?? 3, band = o.band ?? 3;
-  const { rects, top } = niche(f, uc, v0, hw, h, depth, s, { steps: o.steps ?? 2, ins: o.ins ?? 4, rise: o.rise ?? 3, frame: s.trimL, fw: band, sill: null, back: 0x07060a, inner: s.dark });
+  const { rects, top } = niche(f, uc, v0, hw, h, depth, s, { steps: o.steps ?? 2, ins: o.ins ?? 4, rise: o.rise ?? 3, frame: s.trimL, fw: band, sill: null, back: 0x07060a, inner: s.dark, t: o.t });
   for (const [a, b, c, d] of rects) for (let u = a + 1; u < c; u++) if ((u - uc) % P === 0) f.box(u, b, set, u, d, set, iron);
   const rail = o.rail ?? 7;
   for (let v = v0 + 2; v <= top; v += rail) for (const [a, b, c, d] of rects) if (v >= b && v <= d) f.box(a, v, set, c, v, set, iron);
@@ -227,8 +236,9 @@ export function chainSag(f: Face, u0: number, u1: number, v: number, sag: number
   f.box(u0, v - sag, -1, u0 + q, v - sag, -1, iron).box(u1 - q, v - sag, -1, u1, v - sag, -1, iron).box(u0 + q, v - sag - 2, -1, u1 - q, v - sag - 2, -1, iron).box(u0 + q, v - sag - 2, -1, u0 + q, v - sag, -1, iron).box(u1 - q, v - sag - 2, -1, u1 - q, v - sag, -1, iron);
 }
 /** a wall sconce: iron bracket, a cup and a flame block; returns the flame position */
-export function sconce(f: Face, u: number, v: number, iron: Col, fire: Col) {
-  f.box(u - 1, v - 4, 0, u + 1, v - 1, 0, 0x2a2830).box(u, v - 3, -1, u, v - 1, -2, iron).box(u - 1, v, -3, u + 1, v, -1, iron).box(u, v + 1, -2, u, v + 2, -2, fire, 1);
+export function sconce(f: Face, u: number, v: number, iron: Col, fire: Col, lit = true) {
+  f.box(u - 1, v - 4, 0, u + 1, v - 1, 0, 0x2a2830).box(u, v - 3, -1, u, v - 1, -2, iron).box(u - 1, v, -3, u + 1, v, -1, iron);
+  if (lit) f.box(u, v + 1, -2, u, v + 2, -2, fire, 1); else f.box(u, v + 1, -2, u, v + 1, -2, 0x241e1c);
   return f.pos(u, v + 2, -2);
 }
 
@@ -264,11 +274,11 @@ export function cellFront(w: W, x0: number, x1: number, z: number, H: number, ir
 // ------------------------------------------------------------------ cell furniture
 export const STRAW = [0x8a7434, 0xa88e44, 0xc4aa58];
 /** a heap of straw in two tiers with lengthwise stalk lines on top */
-export function straw(w: W, x: number, z: number, a: number, b: number) {
+export function straw(w: W, x: number, z: number, a: number, b: number, C: Col[] = STRAW) {
   const X = M(x), Z = M(z);
-  w.box(X - a, 0, Z - b, X + a, 1, Z + b, STRAW[0]).box(X - a + 2, 2, Z - b + 2, X + a - 2, 3, Z + b - 2, STRAW[1]);
-  for (let k = -a + 3; k <= a - 3; k += 3) w.box(X + k, 3, Z - b + 3, X + k, 3, Z + b - 3, STRAW[2]);
-  w.box(X + a + 2, 0, Z - 2, X + a + 5, 0, Z - 2, STRAW[1]).box(X - a - 4, 0, Z + 2, X - a - 2, 0, Z + 2, STRAW[1]);
+  w.box(X - a, 0, Z - b, X + a, 1, Z + b, C[0]).box(X - a + 2, 2, Z - b + 2, X + a - 2, 3, Z + b - 2, C[1]);
+  for (let k = -a + 3; k <= a - 3; k += 3) w.box(X + k, 3, Z - b + 3, X + k, 3, Z + b - 3, C[2]);
+  w.box(X + a + 2, 0, Z - 2, X + a + 5, 0, Z - 2, C[1]).box(X - a - 4, 0, Z + 2, X - a - 2, 0, Z + 2, C[1]);
 }
 /** a wooden bucket: staves, two iron hoops, water, a handle; tipped = lying on its side with a spill */
 export function bucket(w: W, x: number, z: number, wood: Col, iron: Col, water = 0x3a5a7a, tipped = false) {
@@ -337,9 +347,10 @@ export function gibbet(w: W, x: number, z: number, armX: number, wood: Col, wood
 }
 
 // ------------------------------------------------------------------ floors
-/** paint a floor rectangle cell by cell: f returns [colour, recessed (0 = floor level, 1 = one cell down)] or null for a hole */
+/** paint a floor rectangle cell by cell: f returns [colour, recessed (0 = floor level, 1 = a joint: left open)] or null for a hole */
 export function floorPaint(w: W, r: Rect, f: (x: number, z: number) => [Col, number] | null) {
-  for (let x = M(r.x0); x < M(r.x1); x++) for (let z = M(r.z0); z < M(r.z1); z++) { const q = f(x, z); if (q) w.set(x, q[1] ? -2 : -1, z, q[0]); }
+  // a recessed cell is left as a gap: the dark ground plane a cell further down shows through (bevelled tile edges, no hidden faces)
+  for (let x = M(r.x0); x < M(r.x1); x++) for (let z = M(r.z0); z < M(r.z1); z++) { const q = f(x, z); if (q && !q[1]) w.set(x, -1, z, q[0]); }
 }
 /** staggered flagstones on the absolute cell grid: [colour, recessed] */
 export function flag(x: number, z: number, sx: number, sz: number, cols: Col[], grout: Col, seed = 1, ox = 0, oz = 0): [Col, number] {
@@ -655,4 +666,115 @@ export function skeletonSit(w: W, x: number, z: number, look: Look, bone = BONE)
   skullF(f, uc, 9, -1, bone, 0x1a1418);
   f.box(uc - 2, 0, -9, uc - 1, 1, -1, bone).box(uc + 1, 0, -9, uc + 2, 1, -1, bone).box(uc - 2, 2, -9, uc - 1, 3, -9, bone).box(uc + 1, 2, -9, uc + 2, 3, -9, bone);
   f.box(uc - 4, 2, 1, uc - 3, 7, 1, bone).box(uc + 3, 2, 1, uc + 4, 7, 1, bone);
+}
+
+
+// ------------------------------------------------------------------ decay: cracks, spalled facing, seeps, roots, lifted slabs, the vault
+/** a crack running down a wall face: one cell wide and one deep, in vertical runs of 5-10 cells joined by 2-3 cell sideways jogs (no
+ *  diagonals); dark inside */
+export function crack(f: Face, u: number, vTop: number, vBot: number, seed = 1, dark = 0x0c0a10, amp = 2) {
+  let x = u, v = vTop, i = 0;
+  while (v > vBot) {
+    const run = 5 + Math.floor(hash(i, seed, 1) * 6), v1 = Math.max(vBot, v - run);
+    f.box(x, v1, 0, x, v, 0, null).box(x, v1, 1, x, v, 1, dark);
+    if (v1 <= vBot) break;
+    const sgn = x > u ? -1 : x < u ? 1 : hash(i, seed, 2) < 0.5 ? -1 : 1, jog = sgn * (amp - 1 + Math.floor(hash(i, seed, 3) * 2)), x1 = x + jog;
+    f.box(Math.min(x, x1), v1, 0, Math.max(x, x1), v1, 0, null).box(Math.min(x, x1), v1, 1, Math.max(x, x1), v1, 1, dark);
+    x = x1; v = v1 - 1; i++;
+  }
+}
+/** facing fallen off a wall: the face layer is gone over a union of rects, showing the rough core (darker, coursed every 4 cells) */
+export function spall(f: Face, rects: Array<[number, number, number, number]>, core: Col, coreJ: Col) {
+  for (const [a, b, c, d] of rects) {
+    f.box(a, b, 0, c, d, 0, null).box(a, b, 1, c, d, 1, core);
+    for (let v = b + 1; v <= d; v += 4) f.box(a, v, 1, c, v, 1, coreJ);
+    for (let v = b + 1, r = 0; v <= d; v += 4, r++) for (let k = a + (r & 1 ? 3 : 0); k <= c; k += 6) f.box(k, v, 1, k, Math.min(d, v + 3), 1, coreJ);
+  }
+}
+/** a water stain down a wall face: a flush dark streak, narrow at the top and wider at its wet foot */
+export function seep(f: Face, u: number, vTop: number, vBot: number, col: Col, colD: Col) {
+  const mid = Math.round((vTop + vBot) / 2);
+  f.box(u, mid, 0, u + 1, vTop, 0, col).box(u - 1, vBot, 0, u + 2, mid, 0, col).box(u, vBot, 0, u + 1, vBot + 3, 0, colD);
+}
+/** a root that came in at the top of a wall and crawls down its face in runs and sideways jogs, then out across the floor */
+export function rootCrawl(f: Face, u: number, vTop: number, out: number, b: Bark, seed = 1, th = 2) {
+  let x = u, v = vTop, i = 0; const e = th - 1;
+  f.box(x - 1, v - 2, -2, x + 2, v + 1, -1, b.dark);
+  while (v > 3) {
+    const run = 9 + Math.floor(hash(i, seed, 4) * 8), v1 = Math.max(2, v - run);
+    f.box(x, v1, -1 - e, x + e, v, -1, b.bark).box(x, v1, -1 - e, x, v, -1 - e, b.dark);
+    if (v1 <= 2) break;
+    const sgn = x > u + 1 ? -1 : x < u - 1 ? 1 : hash(i, seed, 5) < 0.5 ? -1 : 1, jog = sgn * (3 + Math.floor(hash(i, seed, 6) * 2)), x1 = x + jog;
+    f.box(Math.min(x, x1), v1 - e, -1 - e, Math.max(x, x1) + e, v1, -1, b.bark);
+    x = x1; v = v1 - 2; i++;
+  }
+  f.box(x - 1, 0, -1 - e, x + e + 1, 2, -1, b.bark).box(x, 0, -1 - e - out, x + e + 1, 1, -1 - e, b.bark).box(x, 1, -1 - e - out, x + e + 1, 1, -1 - e, b.dark);
+  return x;
+}
+/** floor slabs heaved up by a root: each slab in two wide steps (one half a cell higher), the root showing along their edge (metres) */
+export function heave(w: W, x: number, z: number, n: number, alongX: boolean, slab: Col, slabL: Col, b: Bark) {
+  const X = M(x), Z = M(z);
+  for (let i = 0; i < n; i++) {
+    const o = i * 12, [x0, z0] = alongX ? [X + o, Z - 5] : [X - 5, Z + o], [x1, z1] = alongX ? [x0 + 10, Z + 5] : [X + 5, z0 + 10];
+    const half = alongX ? [x0, z0, x0 + 4, z1] : [x0, z0, x1, z0 + 4];
+    w.box(x0, 0, z0, x1, 0, z1, slab).box(half[0], 1, half[1], half[2], 1, half[3], slabL);
+  }
+  const L = n * 12;
+  if (alongX) w.box(X, 0, Z + 6, X + L, 1, Z + 8, b.bark).box(X, 2, Z + 7, X + L, 2, Z + 7, b.dark);
+  else w.box(X + 6, 0, Z, X + 8, 1, Z + L, b.bark).box(X + 7, 2, Z, X + 7, 2, Z + L, b.dark);
+}
+/** fallen vault stones: big dressed blocks (a trim edge on each), lying in two tiers, plus smaller rubble (metres) */
+export function vaultFall(w: W, x: number, z: number, s: Stone, seed = 1) {
+  const X = M(x), Z = M(z);
+  const B: Array<[number, number, number, number, number, number]> = [[-12, -6, 10, 7, 0, 7], [0, -9, 12, 6, 0, 6], [-4, 2, 9, 9, 0, 5], [6, 3, 7, 6, 0, 8], [-8, -3, 9, 6, 7, 5], [2, -5, 8, 5, 6, 4]];
+  B.forEach(([dx, dz, sx, sz, y0, h], i) => {
+    const a = X + dx, b = Z + dz, c = i % 3 === 0 ? s.pil : i % 3 === 1 ? s.a : s.trim;
+    w.box(a, y0, b, a + sx - 1, y0 + h - 1, b + sz - 1, c).box(a, y0 + h - 1, b, a + sx - 1, y0 + h - 1, b, s.trimL);
+  });
+  rubble(w, x + 0.9, z + 0.9, [s.a, s.pil, s.base], seed, 0.55);
+}
+/** A corbelled stone vault over a room, for the cutaway layer: tiers stepping in from both side walls to a flat crown, a shell t cells
+ *  thick (closed where tiers rise), transverse ribs every ribEvery cells, a moss / earth skin on top, and jagged holes knocked through. */
+export function corbelVault(cw: W, o: { x0: number; x1: number; z0: number; z1: number; y: number; tiers: Array<[number, number]>; crown: number; t?: number; stone: Col; under: Col; rib: Col; top: Col; topAlt?: Col; ribEvery?: number; holes?: Array<[number, number, number, number]>; ends?: Array<[number, number]>; endCol?: Col }) {
+  const t = o.t ?? 3, RE = o.ribEvery ?? 46;
+  const h = (x: number) => { const ins = Math.min(x - o.x0, o.x1 - x); for (const [e, hh] of o.tiers) if (ins < e) return o.y + hh; return o.y + o.crown; };
+  const inHole = (x: number, z: number) => (o.holes ?? []).some(([a, b, c, d]) => x >= a && x <= c && z >= b && z <= d);
+  for (let x = o.x0; x <= o.x1; x++) {
+    const hx = h(x), hi = Math.max(h(x - 1 < o.x0 ? x : x - 1), hx, h(x + 1 > o.x1 ? x : x + 1)) + t - 1;
+    for (let z = o.z0; z <= o.z1; z++) {
+      if (inHole(x, z)) continue;
+      const rib = ((z - o.z0) % RE) < 3, lo = rib ? hx - 2 : hx;
+      if (hi - 1 > lo) cw.box(x, lo + 1, z, x, hi - 1, z, o.stone);
+      cw.set(x, lo, z, rib ? o.rib : o.under).set(x, hi, z, o.topAlt != null && ((z - o.z0) % 18 === 0 || h(x) !== h(x + 1) || h(x) !== h(x - 1)) ? o.topAlt : o.top);   // roof slabs: dark joints every 18 rows and along each tier's edge
+    }
+  }
+  // end walls (the lunettes over the front and back walls) closing the vault's profile: [z0, z1] cell ranges
+  for (const [za, zb] of o.ends ?? []) for (let x = o.x0; x <= o.x1; x++) cw.box(x, o.y, za, x, h(x) + t - 1, zb, o.endCol ?? o.stone);
+  // the broken edges of the holes: a darker raw ring one cell in
+  for (const [a, b, c, d] of o.holes ?? []) for (let x = a - 1; x <= c + 1; x++) for (let z = b - 1; z <= d + 1; z++) {
+    if (inHole(x, z) || x < o.x0 || x > o.x1 || z < o.z0 || z > o.z1) continue;
+    if (inHole(x + 1, z) || inHole(x - 1, z) || inHole(x, z + 1) || inHole(x, z - 1)) { const hx = h(x); cw.box(x, hx, z, x, hx + t - 1, z, o.rib); }
+  }
+}
+
+/** a stool knocked over: seat on edge, legs sticking out sideways (metres) */
+export function stoolTipped(w: W, x: number, z: number, wood: Col, woodD: Col) { const X = M(x), Z = M(z); w.box(X, 0, Z - 2, X, 4, Z + 2, wood); for (const [j, y] of [[-2, 0], [2, 0], [-2, 4], [2, 4]]) w.box(X + 1, y, Z + j, X + 6, y, Z + j, woodD); }
+/** a crate broken open: three walls standing, the fourth and the lid gone, one plank on the floor beside it (metres) */
+export function brokenCrate(w: W, x: number, z: number, s: number, wood: Col, woodD: Col) {
+  const X = M(x), Z = M(z);
+  w.box(X - s, 0, Z - s, X + s, 0, Z + s, woodD).box(X - s, 1, Z - s, X - s, 2 * s, Z + s, wood).box(X - s, 1, Z - s, X + s, 2 * s, Z - s, wood).box(X + s, 1, Z - s, X + s, s, Z + s, wood);
+  w.box(X - s, 2 * s, Z - s, X + s, 2 * s, Z - s, woodD).box(X - s, 1, Z - s, X - s, 2 * s, Z - s, woodD);
+  w.box(X - s + 1, 0, Z + s + 2, X + s + 3, 0, Z + s + 3, wood);
+}
+
+/** a breach in the top of a wall: the wall above each step's height is gone between its u bounds (wide steps, widest at the top); the
+ *  broken surfaces show rough core. steps: [u0, u1, v] from the bottom of the gap up */
+export function breach(f: Face, steps: Array<[number, number, number]>, H: number, t: number, core: Col) {
+  for (const [a, b, v] of steps) f.box(a, v, -4, b, H + 2, t - 1, null);
+  steps.forEach(([a, b, v], i) => {
+    const prev = steps[i - 1], vTop = i + 1 < steps.length ? steps[i + 1][2] - 1 : H;
+    if (!prev) f.box(a, v - 1, 0, b, v - 1, t - 1, core);
+    else { if (a < prev[0]) f.box(a, v - 1, 0, prev[0] - 1, v - 1, t - 1, core); if (b > prev[1]) f.box(prev[1] + 1, v - 1, 0, b, v - 1, t - 1, core); }
+    f.box(a - 1, v, 0, a - 1, vTop, t - 1, core).box(b + 1, v, 0, b + 1, vTop, t - 1, core);
+  });
 }

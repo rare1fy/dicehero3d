@@ -75,20 +75,23 @@ export interface WallOpt {
   rails?: Array<[number, number, number]>;
   /** cap beam colour, laid where the wall stands at its full height (h >= full); broken stretches get a rubble top instead */
   top?: number; full?: number; rubble?: number;
+  /** first row to build (cells): a wall continued in the cutaway layer starts above the part kept in the world */
+  from?: number;
 }
 export function buildWall(R: Run, a0: number, a1: number, h: (a: number) => number, o: WallOpt) {
   const t = o.t ?? 5, pl = o.plinth ?? 6, pw = o.postW ?? 3, full = o.full ?? 1e9;
   const isPost = (a: number) => (o.posts ?? []).some(p => a >= p && a < p + pw);
   for (let a = a0; a <= a1; a++) {
     const H = h(a), post = isPost(a), broken = H < full, top = broken && o.rubble != null ? H - 2 : H;
-    for (let y = -2; y <= H; y++) {
+    const y0 = o.from ?? -2;
+    for (let y = y0; y <= H; y++) {
       let c = y <= pl ? o.cPlinth : post ? (o.cPost ?? TIM) : o.body(a, y);
       if (y > top && y > pl) c = o.rubble!;
       R.box(a, 0, y, a, t - 1, y, c);
     }
-    R.box(a, -1, -2, a, -1, Math.min(pl, H) - 1, o.cPlinth); if (H >= pl) R.put(a, -1, pl, o.cCap ?? o.cPlinth);
-    if (post && top > pl + 1) R.box(a, -1, pl + 1, a, -1, top, o.cPost ?? TIM);
-    for (const [ry, rh, rc] of o.rails ?? []) if (ry + rh - 1 <= top) R.box(a, -1, ry, a, -1, ry + rh - 1, rc);
+    if (y0 <= pl) { R.box(a, -1, y0, a, -1, Math.min(pl, H) - 1, o.cPlinth); if (H >= pl) R.put(a, -1, pl, o.cCap ?? o.cPlinth); }
+    if (post && top > pl + 1) R.box(a, -1, Math.max(pl + 1, y0), a, -1, top, o.cPost ?? TIM);
+    for (const [ry, rh, rc] of o.rails ?? []) if (ry + rh - 1 <= top && ry >= y0) R.box(a, -1, ry, a, -1, ry + rh - 1, rc);
     if (o.top != null && !broken) R.box(a, -1, H + 1, a, t, H + 2, o.top);
   }
 }
@@ -165,7 +168,7 @@ export function setts(w: W, r: CRect, cols: number[], grout: number, s = 5) {
 }
 /** a rug flush with the floor: dark edge lines bounding a border band with a dashed motif row, an inner frame line, corner squares, a
  *  stepped-lozenge medallion (three nested rectangles), fringed short ends */
-export function rug(w: W, r: CRect, c: { field: number; band: number; edge: number; motif: number; fringe?: number }, o: { worn?: boolean } = {}) {
+export function rug(w: W, r: CRect, c: { field: number; band: number; edge: number; motif: number; fringe?: number }, o: { worn?: boolean; skip?: (x: number, z: number) => boolean } = {}) {
   const { X0, X1, Z0, Z1 } = r, cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2, m = Math.min(X1 - X0, Z1 - Z0) / 2 - 10;
   for (let x = X0; x <= X1; x++) for (let z = Z0; z <= Z1; z++) {
     const ex = Math.min(x - X0, X1 - x), ez = Math.min(z - Z0, Z1 - z), e = Math.min(ex, ez), u = Math.abs(x - cx), v = Math.abs(z - cz);
@@ -178,15 +181,16 @@ export function rug(w: W, r: CRect, c: { field: number; band: number; edge: numb
     else if (u <= m * 0.16 && v <= m * 0.16) col = c.edge;
     else if ((u <= m * 0.62 && v <= m * 0.22) || (u <= m * 0.42 && v <= m * 0.42) || (u <= m * 0.22 && v <= m * 0.62)) col = (u <= m * 0.62 - 3 && v <= m * 0.22 - 3) || (u <= m * 0.42 - 3 && v <= m * 0.42 - 3) || (u <= m * 0.22 - 3 && v <= m * 0.62 - 3) ? c.band : c.edge;
     if (o.worn && e > 4 && hash(x >> 3, z >> 3, 41) < 0.07) col = shade(col, 0.8);
+    if (o.skip?.(x, z)) continue;
     w.set(x, -1, z, col);
   }
-  if (c.fringe != null) for (let x = X0 + 1; x <= X1 - 1; x += 2) { w.set(x, -1, Z0 - 1, c.fringe); w.set(x, -1, Z1 + 1, c.fringe); }
+  if (c.fringe != null) for (let x = X0 + 1; x <= X1 - 1; x += 2) { if (!o.skip?.(x, Z0)) w.set(x, -1, Z0 - 1, c.fringe); if (!o.skip?.(x, Z1)) w.set(x, -1, Z1 + 1, c.fringe); }
 }
 
 // ------------------------------------------------------------------ small things (world cells)
-export function candleStick(w: W, X: number, y0: number, Z: number, h = 3, metal = BRASS): P3 {
+export function candleStick(w: W, X: number, y0: number, Z: number, h = 3, metal = BRASS, lit = true): P3 {
   w.box(X - 1, y0, Z - 1, X + 1, y0, Z + 1, metal).box(X, y0 + 1, Z, X, y0 + 2, Z, metal).box(X - 1, y0 + 3, Z, X + 1, y0 + 3, Z, metal);
-  w.box(X, y0 + 4, Z, X, y0 + 3 + h, Z, WAX).set(X, y0 + 4 + h, Z, FLM, 1);
+  w.box(X, y0 + 4, Z, X, y0 + 3 + h, Z, WAX); if (lit) w.set(X, y0 + 4 + h, Z, FLM, 1); else w.set(X, y0 + 4 + h, Z, 0x2a2420);
   return [(X + 0.5) * CELL, (y0 + 4.6 + h) * CELL, (Z + 0.5) * CELL];
 }
 /** a cluster of three bare candles of different heights */
@@ -349,22 +353,22 @@ export function woodStack(w: W, x: number, z: number, r: number, cols: number, r
   }
   b(-a - 2, 0, -1, -a - 1, rows * 3 + 1, 0, WD_D); b(a + 2, 0, -1, a + 3, rows * 3 + 1, 0, WD_D);
 }
-export function hangLantern(w: W, X: number, yTop: number, Z: number, len: number, glowC = LANT): P3 {
+export function hangLantern(w: W, X: number, yTop: number, Z: number, len: number, glowC = LANT, lit = true): P3 {
   const y1 = yTop - len;
   w.box(X, y1 + 1, Z, X, yTop, Z, IRN);
   w.box(X - 1, y1, Z - 1, X + 1, y1, Z + 1, IRN).box(X - 2, y1 - 1, Z - 2, X + 2, y1 - 1, Z + 2, IRN);
-  w.box(X - 2, y1 - 5, Z - 2, X + 2, y1 - 2, Z + 2, glowC, 1);
+  w.box(X - 2, y1 - 5, Z - 2, X + 2, y1 - 2, Z + 2, lit ? glowC : 0x24222a, lit ? 1 : 0); if (!lit) w.box(X - 1, y1 - 4, Z + 2, X + 1, y1 - 3, Z + 2, null);
   for (const [i, j] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) w.box(X + i, y1 - 5, Z + j, X + i, y1 - 2, Z + j, IRN);
   w.box(X - 2, y1 - 6, Z - 2, X + 2, y1 - 6, Z + 2, IRN).set(X, y1 - 7, Z, IRN);
   return [(X + 0.5) * CELL, (y1 - 3.5) * CELL, (Z + 0.5) * CELL];
 }
 /** iron ring chandelier on a chain: a square ring with cross arms, eight candles */
-export function chandelier(w: W, X: number, yTop: number, Z: number, len: number, hs = 6): P3 {
+export function chandelier(w: W, X: number, yTop: number, Z: number, len: number, hs = 6, lit = true): P3 {
   const y = yTop - len;
   w.box(X, y + 1, Z, X, yTop, Z, IRN);
   w.box(X - hs, y, Z - hs, X + hs, y, Z - hs, IRN).box(X - hs, y, Z + hs, X + hs, y, Z + hs, IRN).box(X - hs, y, Z - hs, X - hs, y, Z + hs, IRN).box(X + hs, y, Z - hs, X + hs, y, Z + hs, IRN);
   w.box(X - hs, y + 1, Z, X + hs, y + 1, Z, IRN).box(X, y + 1, Z - hs, X, y + 1, Z + hs, IRN).box(X - 1, y - 1, Z - 1, X + 1, y + 1, Z + 1, IRN_L);
-  for (const [i, j] of [[-hs, -hs], [hs, -hs], [-hs, hs], [hs, hs], [0, -hs], [0, hs], [-hs, 0], [hs, 0]]) w.box(X + i, y + 1, Z + j, X + i, y + 2, Z + j, WAX).set(X + i, y + 3, Z + j, FLM, 1);
+  for (const [i, j] of [[-hs, -hs], [hs, -hs], [-hs, hs], [hs, hs], [0, -hs], [0, hs], [-hs, 0], [hs, 0]]) { w.box(X + i, y + 1, Z + j, X + i, y + 2 - (lit ? 0 : (i + j) & 1), Z + j, WAX); if (lit) w.set(X + i, y + 3, Z + j, FLM, 1); }
   return [(X + 0.5) * CELL, (y + 2) * CELL, (Z + 0.5) * CELL];
 }
 /** herb bundles hanging from a pole (world cells along x at height y): strings and bundles in colour groups of three */
@@ -379,7 +383,7 @@ export function herbs(w: W, X0: number, X1: number, y: number, Z: number, seed: 
 // ------------------------------------------------------------------ landmarks
 /** the cottage fireplace on a back wall: stone breast with a stepped lintel and keystone, raised hearth, logs and a stepped flame,
  *  mantel shelf on corbels, chimney narrowing in two stages above, a little painting on the breast */
-export function fireplace(R: Run, ac: number, top: number): { fire: P3; mantelY: number } {
+export function fireplace(R: Run, ac: number, top: number, o: { low?: boolean; bare?: boolean } = {}): { fire: P3; mantelY: number } {
   const P = 12, br = (a: number, y: number) => brick(a, y, ST, MORT, 7, 4), brD = (a: number, y: number) => brick(a, y, ST_D, ST_DD, 7, 4);
   for (let a = ac - 22; a <= ac + 22; a++) for (let y = -2; y <= 21; y++) R.box(a, -P, y, a, -1, y, br(a, y));
   R.box(ac - 20, -P - 6, 0, ac + 20, -P - 1, 1, ST_L); R.box(ac - 20, -P - 6, 0, ac + 20, -P - 6, 1, ST); R.box(ac - 20, -P - 6, 1, ac + 20, -P - 6, 1, ST_L);
@@ -393,7 +397,8 @@ export function fireplace(R: Run, ac: number, top: number): { fire: P3; mantelY:
   R.box(ac - 9, -10, 2, ac + 9, -9, 3, LOG); R.box(ac - 9, -10, 2, ac - 9, -9, 3, LOG_END); R.box(ac + 9, -10, 2, ac + 9, -9, 3, LOG_END);
   R.box(ac - 8, -6, 2, ac + 8, -5, 3, LOG); R.box(ac - 8, -6, 2, ac - 8, -5, 3, LOG_END); R.box(ac + 8, -6, 2, ac + 8, -5, 3, LOG_END);
   R.box(ac - 8, -8, 2, ac + 8, -7, 3, EMBER, 1);
-  R.box(ac - 7, -9, 4, ac + 7, -6, 6, FLM2, 1); R.box(ac - 5, -9, 7, ac + 5, -6, 9, FLM, 1); R.box(ac - 2, -8, 10, ac + 2, -7, 12, FLM3, 1);
+  if (o.low) { R.box(ac - 4, -9, 4, ac + 4, -7, 5, FLM2, 1); R.box(ac - 2, -9, 6, ac + 1, -8, 7, FLM, 1); R.box(ac - 6, -10, 2, ac - 2, -9, 3, 0x2a2420); }
+  else { R.box(ac - 7, -9, 4, ac + 7, -6, 6, FLM2, 1); R.box(ac - 5, -9, 7, ac + 5, -6, 9, FLM, 1); R.box(ac - 2, -8, 10, ac + 2, -7, 12, FLM3, 1); }
   // mantel on corbels
   R.box(ac - 26, -P - 2, 22, ac + 26, -1, 23, TIM); R.box(ac - 26, -P - 2, 22, ac + 26, -P - 2, 22, TIM_D);
   for (const s of [-1, 1]) R.box(ac + s * 21, -P - 1, 17, ac + s * 24, -P - 1, 21, TIM_D);
@@ -403,7 +408,8 @@ export function fireplace(R: Run, ac: number, top: number): { fire: P3; mantelY:
   for (let a = ac - 12; a <= ac + 12; a++) for (let y = 47; y <= top + 9; y++) R.box(a, -6, y, a, -1, y, br(a, y));
   R.box(ac - 14, -8, top + 10, ac + 14, 1, top + 11, ST_L); R.box(ac - 10, -5, top + 12, ac + 10, 0, top + 12, ST_D);
   // a small painting on the breast: a night landscape in three bands, a pale moon
-  R.box(ac - 8, -9, 28, ac + 8, -9, 39, TIM_D); R.box(ac - 7, -9, 29, ac + 7, -9, 38, 0x2a3a5c); R.box(ac - 7, -9, 29, ac + 7, -9, 31, 0x2e4a2e); R.box(ac - 7, -9, 32, ac - 1, -9, 33, 0x3a5a36); R.box(ac + 3, -9, 35, ac + 4, -9, 36, 0xe8e0c0);
+  if (o.bare) { for (let a = ac - 8; a <= ac + 8; a++) for (let y = 28; y <= 39; y++) R.put(a, -8, y, brick(a, y, 0x6c6a76, 0x4e4c58, 7, 4)); R.put(ac, -9, 38, IRN); }   // where the painting hung: cleaner stone, a nail
+  else { R.box(ac - 8, -9, 28, ac + 8, -9, 39, TIM_D); R.box(ac - 7, -9, 29, ac + 7, -9, 38, 0x2a3a5c); R.box(ac - 7, -9, 29, ac + 7, -9, 31, 0x2e4a2e); R.box(ac - 7, -9, 32, ac - 1, -9, 33, 0x3a5a36); R.box(ac + 3, -9, 35, ac + 4, -9, 36, 0xe8e0c0); }
   return { fire: R.m(ac, -8, 7), mantelY: 24 };
 }
 /** a banner hanging on a wall face: rod with finials, cloth with side trim, an emblem, a stepped swallow-tail */
@@ -534,90 +540,191 @@ export function well(w: W, x: number, z: number): P3 {
   w.box(X - 17, 34, Z, X - 12, 34, Z, IRN);
   return hangLantern(w, X - 16, 33, Z, 1);
 }
-/** a house front facing +z with its body behind: stone plinth, timber frame over plaster, door with steps and a lantern, glowing windows
- *  with shutters and flower boxes, roof in wide steps (ridge along x = eaves to the front, or a stepped gable to the front), chimney.
- *  Returns light positions (door lantern). Coordinates in cells; zf = the facade's front cell row. */
-export function house(w: W, X0: number, X1: number, zf: number, o: { depth: number; H: number; gable?: boolean; door: number; wins: number[]; upWin?: boolean; chimney?: number; plaster?: number; tim?: number; roof?: [number, number, number]; sign?: number; seed?: number; glowC?: number }): P3[] {
-  const D = o.depth, H = o.H, pl = o.plaster ?? PLAS, tm = o.tim ?? TIM, [rf, rfD, rfL] = o.roof ?? [SLATE, SLATE_D, SLATE_L], lights: P3[] = [];
+export type WinState = 'lit' | 'dark' | 'boarded';
+/** dark glass: dull panes behind the bars, one quadrant smashed (black) */
+export const darkPanes = (_hw: number, ht: number, bar = TIM_D, broken = 1) => (u: number, v: number): [number, number] | null => {
+  if (u === 0 || v === ht >> 1) return [bar, 0];
+  const q = (u < 0 ? 0 : 1) + (v < ht >> 1 ? 0 : 2);
+  return [q === broken ? 0x08070a : 0x1a1c26, 0];
+};
+/** boarded up from inside: horizontal planks three blocks tall with a dark gap between, two battens, one plank missing */
+export const boardedUp = (hw: number, _ht: number, seed = 1) => (u: number, v: number): [number, number] | null => {
+  const row = Math.floor(v / 4);
+  if (v % 4 === 3 || (row === 1 + (seed % 2) && u > 0)) return [0x0c0a0e, 0];
+  if (Math.abs(u) === hw - 2) return [0x3a332c, 0];
+  return [row & 1 ? 0x5a5046 : 0x4c443b, 0];
+};
+/** a house front facing +z with its body behind, left to rot: stone plinth, a timber frame over grey plaster (peeling where `peel`
+ *  says), the door open, fallen or shut, windows dark / boarded / (rarely) lit, dead flower boxes, a shutter hanging or fallen,
+ *  roof in wide steps with holes knocked through, chimney. Returns light positions (a lit door lamp, if any). Cells; zf = facade row. */
+export interface HouseOpt {
+  depth: number; H: number; gable?: boolean; door: number; doorState?: 'open' | 'fallen' | 'shut'; doorLamp?: boolean;
+  wins: number[]; winState?: WinState[]; upWin?: WinState; chimney?: number; plaster?: number; tim?: number; roof?: [number, number, number];
+  sign?: number; glowC?: number; peel?: Array<[number, number, number, number]>; roofHoles?: Array<[number, number, number, number]>;
+}
+export function house(w: W, X0: number, X1: number, zf: number, o: HouseOpt): P3[] {
+  const D = o.depth, H = o.H, pl = o.plaster ?? 0x7c766c, tm = o.tim ?? 0x3a322c, [rf, rfD, rfL] = o.roof ?? [0x40424e, 0x2c2e38, 0x50525e], lights: P3[] = [];
+  const peel = (a: number, y: number) => (o.peel ?? []).some(([a0, y0, a1, y1]) => a >= a0 && a <= a1 && y >= y0 && y <= y1);
   w.box(X0, -2, zf - D, X1, H, zf, pl);
   const F = new Run(w, 'x', zf, -1), posts: number[] = [];
   for (let a = X0; a <= X1 - 2; a += 26) posts.push(a); posts.push(X1 - 2);
-  buildWall(F, X0, X1, () => H, { t: 4, plinth: 6, cPlinth: ST_D, cCap: ST, body: (_a, y) => (y < 18 ? PLAS_D : pl), posts, cPost: tm, rails: [[7, 2, tm], [26, 2, tm]] });
+  buildWall(F, X0, X1, () => H, { t: 4, plinth: 6, cPlinth: ST_D, cCap: ST, body: (a, y) => (peel(a, y) ? brick(a, y, 0x5a4e48, 0x3a322e, 6, 3) : y < 18 ? shade(pl, 0.86) : pl), posts, cPost: tm, rails: [[7, 2, tm], [26, 2, tm]] });
   for (const x of [X0, X1]) w.box(x, -2, zf - D, x, 6, zf, ST_D);
-  // door: casing, plank leaf with straps, a lintel, two steps, a lantern on a bracket
-  const dc = o.door; opening(F, dc, 0, 6, 30, { t: 4, frame: tm, lintel: TIM_D });
-  F.box(dc - 6, -1, 0, dc + 6, 3, 3, ST_L); F.box(dc - 6, 2, 4, dc + 6, 2, 29, WD); for (let a = dc - 6; a <= dc + 6; a += 3) F.box(a, 2, 4, a, 2, 29, WD_D);
-  F.box(dc - 6, 1, 8, dc + 6, 1, 9, IRN); F.box(dc - 6, 1, 23, dc + 6, 1, 24, IRN); F.put(dc + 4, 1, 16, BRASS);
-  F.box(dc - 9, -7, 0, dc + 9, -4, 1, ST); F.box(dc - 8, -3, 0, dc + 8, -2, 3, ST_L); F.box(dc - 9, -7, 1, dc + 9, -7, 1, ST_L);
-  F.box(dc + 10, -1, 26, dc + 10, -4, 26, IRN); lights.push(hangLantern(w, dc + 10, 25, zf + 4, 1));
-  // windows: glowing panes, mullions, casing, sill, a flower box, two open shutters
-  for (const wc of o.wins) {
-    opening(F, wc, 13, 7, 14, { t: 4, frame: tm, sill: ST_L, glass: panes(7, 14, o.glowC ?? 0xd08a40, 1, TIM_D), glassD: 2 });
-    F.box(wc - 8, -4, 8, wc + 8, -1, 10, WD_D); F.box(wc - 7, -4, 8, wc + 7, -4, 8, WD);
-    for (let a = wc - 7; a <= wc + 7; a++) { const k = Math.floor((a - wc + 7) / 3); F.box(a, -4, 11, a, -3, 11 + (k & 1), [0xc84a4a, 0xe8c85a, 0xd8d0f0][k % 3]); F.box(a, -4, 11, a, -3, 11, k & 1 ? 0x3e6a2e : 0x4a7a36); }
-    for (const s of [-1, 1]) { F.box(wc + s * 9, -1, 13, wc + s * 15, -1, 26, WD); for (let a = 9; a <= 15; a += 2) F.box(wc + s * a, -1, 13, wc + s * a, -1, 26, WD_D); F.box(wc + s * 9, -1, 16, wc + s * 15, -1, 16, WD_D); F.box(wc + s * 9, -1, 23, wc + s * 15, -1, 23, WD_D); }
+  // door: casing, lintel, steps; the leaf shut, swung open into the dark, or fallen flat on the steps
+  const dc = o.door, ds = o.doorState ?? 'shut'; opening(F, dc, 0, 6, 30, { t: 4, frame: tm, lintel: TIM_D });
+  F.box(dc - 6, -1, 0, dc + 6, 3, 3, ST_L); F.box(dc - 9, -7, 0, dc + 9, -4, 1, ST); F.box(dc - 8, -3, 0, dc + 8, -2, 3, ST_L); F.box(dc - 9, -7, 1, dc + 9, -7, 1, ST_L);
+  const leaf = (fn: (i: number, y: number, c: number) => void) => { for (let i = 0; i <= 12; i++) for (let y = 4; y <= 29; y++) fn(i, y, y === 8 || y === 9 || y === 23 || y === 24 ? 0x4a3226 : i % 3 === 0 ? 0x3a3028 : 0x4c4036); };
+  if (ds === 'shut') leaf((i, y, c) => F.put(dc - 6 + i, 2, y, c));
+  else {
+    F.box(dc - 6, 2, 4, dc + 6, 6, 29, null); F.box(dc - 6, 7, 4, dc + 6, 7, 29, 0x0a080c);                        // the dark inside
+    if (ds === 'open') leaf((i, y, c) => { if (i <= 5) F.put(dc + 6, 2 + i, y, c); });
+    else leaf((i, y, c) => { if ((y & 1) === 0) F.put(dc - 6 + i, -4 - ((y - 4) >> 1), 4, c); });                  // flat on the steps
   }
+  if (o.doorLamp) { F.box(dc + 10, -1, 26, dc + 10, -4, 26, IRN); lights.push(hangLantern(w, dc + 10, 25, zf + 4, 1, 0xc07a38)); }
+  else F.box(dc + 10, -1, 26, dc + 10, -3, 26, 0x5a3a26);                                                          // a rusted bracket, the lamp gone
+  // windows
+  o.wins.forEach((wc, i) => {
+    const st = o.winState?.[i] ?? 'dark';
+    opening(F, wc, 13, 7, 14, { t: 4, frame: tm, sill: ST_L, glassD: 2, glass: st === 'lit' ? panes(7, 14, o.glowC ?? 0xb87a3c, 1, TIM_D) : st === 'boarded' ? boardedUp(7, 14, i) : darkPanes(7, 14, TIM_D, i % 4) });
+    F.box(wc - 8, -4, 8, wc + 8, -1, 10, 0x3a3029); F.box(wc - 7, -4, 10, wc + 7, -2, 10, 0x221a16);             // a dead flower box
+    for (let a = wc - 6; a <= wc + 6; a += 3) F.box(a, -3, 11, a, -3, 12 + (a & 1), 0x6a5a3a);
+    // shutters: one still hanging, the other dropped a hinge (lower and pulled out), or lying under the window
+    F.box(wc - 15, -1, 13, wc - 9, -1, 26, 0x4a4036); for (let a = 9; a <= 15; a += 2) F.box(wc - a, -1, 13, wc - a, -1, 26, 0x3a322a);
+    if (i % 2 === 0) { F.box(wc + 9, -2, 9, wc + 15, -2, 22, 0x4a4036); F.box(wc + 9, -2, 15, wc + 15, -2, 15, 0x3a322a); }
+    else F.box(wc + 8, -9, 0, wc + 14, -3, 0, 0x4a4036);
+  });
   // roof
+  const hole = (x: number, z: number) => (o.roofHoles ?? []).some(([x0, z0, x1, z1]) => x >= x0 && x <= x1 && z >= z0 && z <= z1);
   if (!o.gable) {
     for (let k = 0; ; k++) {
       const y = H + 1 + k * 3, zfront = zf + 4 - k * 5; if (zfront < zf - (D >> 1)) break;
-      w.box(X0 - 3, y, zf - D + 2, X1 + 3, y + 2, zfront, rf); w.box(X0 - 3, y, zfront, X1 + 3, y, zfront, rfD); w.box(X0 - 3, y + 2, zfront - 1, X1 + 3, y + 2, zfront, rfL);
-      w.box(X0 - 3, y, zf - D + 2, X0 - 3, y + 2, zfront, TIM_D); w.box(X1 + 3, y, zf - D + 2, X1 + 3, y + 2, zfront, TIM_D);
+      for (let x = X0 - 3; x <= X1 + 3; x++) for (let z = zf - D + 2; z <= zfront; z++) {
+        if (hole(x, z) && k > 0 && z <= zf - 2) { if ((x & 7) === 0) w.set(x, y, z, TIM_D); continue; }
+        const end = x === X0 - 3 || x === X1 + 3, c = end ? TIM_D : z === zfront ? rfD : rf;
+        w.box(x, y, z, x, y + 2, z, c); if (z >= zfront - 1 && !end && z !== zfront) w.set(x, y + 2, z, rfL);
+      }
     }
+    for (const [x0, z0, x1, z1] of o.roofHoles ?? []) w.box(x0, H, Math.max(z0, zf - D), x1, H, Math.min(z1, zf - 1), 0x141016);
   } else {
     const cx = (X0 + X1) >> 1, hw0 = ((X1 - X0) >> 1) + 3;
     for (let k = 0; ; k++) {
       const y = H + 1 + k * 4, hw = hw0 - k * 7; if (hw < 3) { w.box(cx - 3, y, zf - D, cx + 3, y + 1, zf + 3, TIM_D); break; }
-      w.box(cx - hw, y, zf - D - 2, cx + hw, y + 3, zf + 3, rf); w.box(cx - hw, y, zf + 3, cx + hw, y + 3, zf + 3, TIM_D); w.box(cx - hw, y + 3, zf - D - 2, cx - hw, y + 3, zf + 2, rfL); w.box(cx + hw, y + 3, zf - D - 2, cx + hw, y + 3, zf + 2, rfL);
+      for (let x = cx - hw; x <= cx + hw; x++) for (let z = zf - D - 2; z <= zf + 3; z++) { if (hole(x, z) && z < zf - 3) continue; w.box(x, y, z, x, y + 3, z, z === zf + 3 ? TIM_D : (x === cx - hw || x === cx + hw) ? rfL : rf); }
       if (hw > 6) { w.box(cx - hw + 3, y, zf - 1, cx + hw - 3, y + 3, zf + 2, pl); w.box(cx - hw + 3, y, zf + 2, cx + hw - 3, y, zf + 2, tm); }
     }
-    if (o.upWin) { const y = H + 4; F.box(cx - 4, -3, y, cx + 4, -2, y + 9, null); F.box(cx - 5, -3, y - 1, cx + 5, -3, y + 10, tm); F.box(cx - 4, -3, y, cx + 4, -3, y + 9, o.glowC ?? 0xd08a40, 1); F.box(cx, -3, y, cx, -3, y + 9, TIM_D); F.box(cx - 4, -3, y + 5, cx + 4, -3, y + 5, TIM_D); F.box(cx - 6, -4, y - 2, cx + 6, -2, y - 2, ST_L); }
+    if (o.upWin) { const y = H + 4, lit = o.upWin === 'lit'; F.box(cx - 4, -3, y, cx + 4, -2, y + 9, null); F.box(cx - 5, -3, y - 1, cx + 5, -3, y + 10, tm); F.box(cx - 4, -3, y, cx + 4, -3, y + 9, lit ? (o.glowC ?? 0xb87a3c) : 0x16141c, lit ? 1 : 0); F.box(cx, -3, y, cx, -3, y + 9, TIM_D); F.box(cx - 4, -3, y + 5, cx + 4, -3, y + 5, TIM_D); F.box(cx - 6, -4, y - 2, cx + 6, -2, y - 2, ST_L); }
   }
-  if (o.chimney != null) { const cx = o.chimney, z0 = zf - (D >> 1) - 4; w.box(cx - 4, H, z0 - 4, cx + 4, H + 34, z0 + 4, ST_D); for (let y = H; y <= H + 34; y += 4) w.box(cx - 4, y, z0 + 4, cx + 4, y, z0 + 4, ST_DD); w.box(cx - 5, H + 35, z0 - 5, cx + 5, H + 36, z0 + 5, ST_L); }
-  if (o.sign != null) { const sa = o.sign; F.box(sa, -1, 32, sa, -9, 32, IRN); F.box(sa - 1, -9, 30, sa + 1, -9, 31, IRN); F.box(sa - 4, -9, 22, sa + 4, -9, 29, WD_L); F.box(sa - 4, -9, 22, sa + 4, -9, 22, WD_D); F.box(sa - 2, -10, 24, sa + 1, -10, 27, 0xd8c8a0); F.box(sa + 2, -10, 25, sa + 2, -10, 26, 0xd8c8a0); }
+  if (o.chimney != null) { const cx = o.chimney, z0 = zf - (D >> 1) - 4; w.box(cx - 4, H, z0 - 4, cx + 4, H + 30, z0 + 4, ST_D); for (let y = H; y <= H + 30; y += 4) w.box(cx - 4, y, z0 + 4, cx + 4, y, z0 + 4, ST_DD); w.box(cx - 5, H + 31, z0 - 5, cx + 5, H + 32, z0 + 5, ST); w.box(cx - 5, H + 31, z0 - 5, cx - 1, H + 32, z0 - 1, null); }
+  if (o.sign != null) { const sa = o.sign; F.box(sa, -1, 32, sa, -9, 32, 0x5a3a26); F.box(sa + 1, -9, 22, sa + 4, -9, 31, 0x4c4036); F.box(sa + 1, -10, 24, sa + 3, -10, 27, 0x6a6050); F.box(sa - 1, -9, 30, sa - 1, -9, 31, 0x5a3a26); }   // the sign hangs by one chain
   return lights;
 }
-/** market stall facing local +z: counter with produce crates, four posts, a striped awning stepping down to the front with a hanging
- *  valance, a sign board */
+/** market stall left to rot, facing local +z: counter, four posts, the awning faded and torn (stripes missing, the front course sagged a
+ *  step), the valance in shreds, crates of spoiled produce, one crate knocked off */
 export function stall(w: W, x: number, z: number, r: number, a = 15): P3 {
-  const X = M(x), Z = M(z), b = loc(w, X, Z, r), RED = 0x8a2e2e, CRM = 0xd2c4a2;
-  b(-a, 0, -3, a, 11, 4, WD_D); b(-a - 1, 12, -4, a + 1, 12, 6, WD_L); for (let i = -a + 2; i <= a - 2; i += 6) b(i, 2, 5, i + 3, 10, 5, WD);
-  for (const [i, j, h] of [[-a - 1, -8, 36], [a, -8, 36], [-a - 1, 6, 30], [a, 6, 30]]) b(i, 0, j, i + 1, h, j + 1, TIM);
-  const tiers: Array<[number, number, number]> = [[37, -10, -3], [34, -3, 3], [31, 3, 9]];
-  for (const [y, z0, z1] of tiers) for (let i = -a - 3; i <= a + 3; i++) { const c = Math.floor((i + a + 3) / 3) & 1 ? CRM : RED; b(i, y, z0, i, y + 1, z1, c); }
-  for (let i = -a - 3; i <= a + 3; i++) { const k = Math.floor((i + a + 3) / 3); b(i, 28 - (k & 1), 9, i, 30, 9, k & 1 ? CRM : RED); }
-  // goods: crates of apples / cabbages / pumpkins on the counter, a basket of bread
-  b(-5, 36, -2, 5, 41, -2, WD_L); b(-4, 37, -1, 4, 40, -1, RED);
-  const goods: Array<[number, number]> = [[-10, 0xb8322a], [-3, 0x6a8a3a], [4, 0xd87a2a], [10, 0xb8322a]];
-  for (const [gx, gc] of goods) { b(gx - 3, 13, -2, gx + 3, 16, 3, WD_L); b(gx - 3, 16, -2, gx + 3, 16, 3, WD_D); for (let i = -2; i <= 2; i += 2) for (let j = -1; j <= 2; j += 2) b(gx + i, 17, j, gx + i, 17, j, gc); b(gx - 2, 17, -1, gx + 2, 17, 2, gc); b(gx - 1, 18, 0, gx + 1, 18, 1, gc); }
+  const X = M(x), Z = M(z), b = loc(w, X, Z, r), RED = 0x56383a, CRM = 0x7e786a;
+  b(-a, 0, -3, a, 11, 4, 0x3e3029); b(-a - 1, 12, -4, a + 1, 12, 6, 0x5a4a3a); for (let i = -a + 2; i <= a - 2; i += 6) b(i, 2, 5, i + 3, 10, 5, 0x4a3c30);
+  b(-a + 8, 12, -4, -a + 13, 12, 6, null);                                                                            // a board gone from the top
+  for (const [i, j, h] of [[-a - 1, -8, 36], [a, -8, 36], [-a - 1, 6, 30], [a, 6, 27]]) b(i, 0, j, i + 1, h, j + 1, 0x3a322c);
+  const tiers: Array<[number, number, number]> = [[37, -10, -3], [34, -3, 3], [28, 3, 9]];
+  tiers.forEach(([y, z0, z1], t) => { for (let i = -a - 3; i <= a + 3; i++) { const g = Math.floor((i + a + 3) / 3), dy = t === 2 && i > 0 ? 2 : 0; if ((t === 1 && (g === 2 || g === 3)) || (t === 2 && g >= 8)) continue; b(i, y - dy, z0, i, y + 1 - dy, z1, g & 1 ? CRM : RED); } });
+  for (let i = -a - 3; i <= a + 3; i++) { const g = Math.floor((i + a + 3) / 3); if (g % 3 === 1 || g >= 8) continue; b(i, 24 - (g & 1) * 2, 9, i, 27, 9, g & 1 ? CRM : RED); }
+  const goods: Array<[number, number]> = [[-10, 0x4a3a2c], [-3, 0x3e4630], [4, 0x5a4428]];
+  for (const [gx, gc] of goods) { b(gx - 3, 13, -2, gx + 3, 16, 3, 0x5a4a3a); b(gx - 3, 16, -2, gx + 3, 16, 3, 0x3e3029); b(gx - 2, 17, -1, gx + 2, 17, 2, gc); b(gx - 1, 18, 0, gx, 18, 1, shade(gc, 0.8)); }
+  b(8, 0, 8, 14, 6, 13, 0x5a4a3a); b(9, 1, 13, 13, 5, 13, 0x2a2018); b(9, 0, 14, 12, 0, 16, 0x4a3a2c);              // the knocked-off crate, spilled
   return locM(X, Z, r, 0, 30, 4);
 }
 export function noticeBoard(w: W, x: number, z: number, r: number) {
   const b = loc(w, M(x), M(z), r);
-  for (const s of [-1, 1]) b(s * 11 - 1, -2, -1, s * 11, 30, 0, TIM); b(-12, 31, -3, 12, 31, 2, SLATE_D); b(-10, 32, -2, 10, 32, 1, SLATE);
-  b(-10, 14, 0, 10, 28, 0, WD_L); b(-10, 14, 1, 10, 14, 1, WD_D); b(-10, 28, 1, 10, 28, 1, WD_D);
-  const notes: Array<[number, number, number, number]> = [[-9, 18, 4, 5], [-4, 20, 3, 6], [0, 17, 4, 4], [5, 19, 4, 6], [-8, 25, 3, 2], [1, 23, 5, 3]];
-  for (const [nx, ny, nw, nh] of notes) { b(nx, ny, 1, nx + nw - 1, ny + nh - 1, 1, LINEN); b(nx, ny + nh - 2, 1, nx + nw - 2, ny + nh - 2, 1, 0x8a7e66); b(nx + (nw >> 1), ny + nh - 1, 2, nx + (nw >> 1), ny + nh - 1, 2, IRN); }
+  for (const s of [-1, 1]) b(s * 11 - 1, -2, -1, s * 11, 30, 0, 0x3a322c);
+  b(-12, 31, -3, 2, 31, 2, 0x2c2e38); b(-10, 32, -2, 0, 32, 1, 0x40424e);
+  b(-10, 14, 0, 10, 28, 0, 0x5a5044); b(-10, 19, 0, 10, 19, 0, 0x1a1418); b(-10, 14, 1, 10, 14, 1, 0x3a322c); b(-10, 28, 1, 10, 28, 1, 0x3a322c);
+  const notes: Array<[number, number, number, number]> = [[-9, 20, 4, 5], [0, 22, 4, 3], [5, 21, 4, 6]];
+  for (const [nx, ny, nw, nh] of notes) { b(nx, ny, 1, nx + nw - 1, ny + nh - 1, 1, 0xa8a090); b(nx, ny + nh - 2, 1, nx + nw - 2, ny + nh - 2, 1, 0x6a6458); b(nx + (nw >> 1), ny + nh - 1, 2, nx + (nw >> 1), ny + nh - 1, 2, 0x5a3a26); }
+  b(-4, 25, 1, -2, 27, 1, 0xa8a090); b(-4, 24, 1, -4, 24, 1, 0xa8a090);                                                // half of a torn notice
 }
-/** hand cart along local z: bed with side boards, two wheels (square rim with cut corners, a spoke cross, iron hub), shafts on a prop */
-export function cart(w: W, x: number, z: number, r: number) {
-  const b = loc(w, M(x), M(z), r), hw = 9, hl = 15;
-  b(-hw, 8, -hl, hw, 9, hl, WD); for (let i = -hl; i <= hl; i += 6) b(-hw, 8, i, hw, 8, i, WD_D);
-  b(-hw, 10, -hl, -hw, 14, hl, WD_L); b(hw, 10, -hl, hw, 14, hl, WD_L); b(-hw, 10, -hl, hw, 14, -hl, WD_L); b(-hw, 12, -hl, -hw, 12, hl, WD_D); b(hw, 12, -hl, hw, 12, hl, WD_D);
-  for (const s of [-1, 1]) {
-    const wx = s * (hw + 2);
-    for (let i = -7; i <= 7; i++) for (let j = -7; j <= 7; j++) { const e = Math.max(Math.abs(i), Math.abs(j)); if (Math.abs(i) + Math.abs(j) > 11) continue; if (e >= 6 || Math.abs(i) + Math.abs(j) >= 10) b(wx, 7 + j, i, wx, 7 + j, i, e >= 7 || Math.abs(i) + Math.abs(j) >= 11 ? IRN : WD_D); else if (i === 0 || j === 0) b(wx, 7 + j, i, wx, 7 + j, i, WD_D); }
-    b(wx - s, 6, -1, wx, 8, 1, IRN_L);
+/** hand cart, abandoned: one wheel off and lying flat beside it, the bed dropped a step on that side, the shafts on the ground */
+export function cart(w: W, x: number, z: number, r: number, broken = true) {
+  const b = loc(w, M(x), M(z), r), hw = 9, hl = 15, W1 = 0x4c4036, W2 = 0x3a322a;
+  for (const side of [-1, 1]) {
+    const drop = broken && side > 0 ? 4 : 0, x0 = side < 0 ? -hw : 1, x1 = side < 0 ? 0 : hw;
+    b(x0, 8 - drop, -hl, x1, 9 - drop, hl, W1); for (let i = -hl; i <= hl; i += 6) b(x0, 8 - drop, i, x1, 8 - drop, i, W2);
+    b(side * hw, 10 - drop, -hl, side * hw, 14 - drop, hl, 0x5a4e40); b(side * hw, 12 - drop, -hl, side * hw, 12 - drop, hl, W2); b(x0, 10 - drop, -hl, x1, 14 - drop, -hl, 0x5a4e40);
   }
-  b(-hw - 1, 7, -1, hw + 1, 7, 0, IRN);
-  for (const s of [-1, 1]) b(s * 6, 5, hl + 1, s * 6, 6, hl + 14, WD_D); b(-6, 4, hl + 12, 6, 4, hl + 12, WD_D); b(-2, 0, hl + 11, 2, 3, hl + 13, WD_D);
+  b(1, 6, -hl, 4, 10, -hl, null);                                                                                    // a board out of the tailgate
+  const wheel = (fn: (i: number, j: number, c: number) => void) => { for (let i = -7; i <= 7; i++) for (let j = -7; j <= 7; j++) { const e = Math.max(Math.abs(i), Math.abs(j)), m = Math.abs(i) + Math.abs(j); if (m > 11) continue; if (e >= 6 || m >= 10) fn(i, j, e >= 7 || m >= 11 ? 0x4a2e22 : W2); else if (i === 0 || j === 0) fn(i, j, W2); } };
+  wheel((i, j, c) => b(-(hw + 2), 7 + j, i, -(hw + 2), 7 + j, i, c)); b(-hw - 2, 6, -1, -hw - 1, 8, 1, 0x5a3a26);
+  if (broken) wheel((i, j, c) => b(hw + 11 + i, 0, j + 4, hw + 11 + i, 0, j + 4, c)); else wheel((i, j, c) => b(hw + 2, 7 + j, i, hw + 2, 7 + j, i, c));
+  b(-hw - 1, 7, -1, 0, 7, 0, 0x4a2e22);
+  for (const s of [-1, 1]) b(s * 6, 0, hl + 1, s * 6, 1, hl + 14, W2);
+  b(-6, 0, hl + 12, 6, 0, hl + 12, W2);
 }
-export function lampPost(w: W, x: number, z: number, armDir: 'x' | '-x' | 'z' | '-z'): P3 {
+/** a crow (static): black body, head with a grey beak and a pale eye, tail, legs; perched with its feet on y */
+export function crow(w: W, X: number, y: number, Z: number, r = 0) {
+  const b = loc(w, X, Z, r), K = 0x18161e, K2 = 0x26242e;
+  b(0, y, 0, 0, y, 0, 0x3a3030); b(0, y, -2, 0, y, -2, 0x3a3030);
+  b(-1, y + 1, -3, 1, y + 3, 1, K); b(-2, y + 2, -3, -2, y + 3, 0, K2); b(2, y + 2, -3, 2, y + 3, 0, K2);
+  b(-1, y + 3, 1, 1, y + 5, 3, K); b(0, y + 4, 4, 0, y + 4, 5, 0x6a6258); b(-1, y + 5, 2, -1, y + 5, 2, 0xc8b878); b(1, y + 5, 2, 1, y + 5, 2, 0xc8b878);
+  b(-1, y + 2, -6, 1, y + 2, -4, K);
+}
+/** gable roof for the cutaway layer: ridge along `axis`, tile courses as wide steps (dark step faces, a lit lip), trusses (tie beam, king
+ *  post, queen posts, collar), purlins and stepped rafters under the tiles, holes knocked through (rafters left across some of them),
+ *  gable walls at both ends. a = along the ridge, b = across it; all in cells. */
+export interface RoofOpt {
+  axis: 'x' | 'z'; a0: number; a1: number; b0: number; b1: number; E: number; run?: number; rise?: number; over?: number;
+  tiles: [number, number, number]; moss?: number; wood: number; woodD: number; trusses?: number[]; rafterEvery?: number;
+  holes?: Array<[number, number, number, number]>; gableT?: number; gable?: (b: number, y: number) => number;
+}
+export function roof(w: W, o: RoofOpt) {
+  const run = o.run ?? 8, rise = o.rise ?? 4, over = o.over ?? 4, bc = (o.b0 + o.b1 + 1) / 2, half = (o.b1 - o.b0 + 1) / 2 + over;
+  const set = (a: number, y: number, b: number, c: number | null) => { if (o.axis === 'x') w.set(a, y, b, c); else w.set(b, y, a, c); };
+  const box = (a0: number, y0: number, b0: number, a1: number, y1: number, b1: number, c: number | null) => { if (o.axis === 'x') w.box(a0, y0, b0, a1, y1, b1, c); else w.box(b0, y0, a0, b1, y1, a1, c); };
+  const inHole = (a: number, b: number) => (o.holes ?? []).some(([h0, k0, h1, k1]) => a >= h0 && a <= h1 && b >= k0 && b <= k1);
+  const dist = (b: number) => half - Math.abs(b + 0.5 - bc), tier = (b: number) => Math.floor(dist(b) / run), top = (b: number) => o.E + (tier(b) + 1) * rise;
+  const B0 = Math.round(bc - half), B1 = Math.round(bc + half) - 1, A0 = o.a0 - over, A1 = o.a1 + over, [tA, tEdge, tLip] = o.tiles, tB = shade(tA, 0.9);
+  const under = (b: number) => (dist(b) - tier(b) * run < 1 ? top(b) - rise - 1 : top(b) - 2);
+  for (let b = B0; b <= B1; b++) {
+    if (dist(b) < 0) continue;
+    const k = tier(b), T = top(b), edge = dist(b) - k * run < 1, inner = dist(b) - k * run >= run - 1;
+    for (let a = A0; a <= A1; a++) {
+      const hole = inHole(a, b), r = o.rafterEvery ?? 12, ra = ((a - A0) % r + r) % r;
+      if (!hole) {
+        const mossy = o.moss != null && hash(Math.floor((a + 512) / 22), k, 17) < 0.2;
+        if (edge) { box(a, T - rise, b, a, T - 1, b, tEdge); set(a, T, b, tLip); } else box(a, T - 1, b, a, T, b, mossy ? o.moss! : k & 1 ? tB : tA);
+      }
+      if (ra < 2 && (!hole || Math.floor((a - A0) / r) % 2 === 0)) set(a, under(b), b, o.wood);                                       // rafters
+      if (inner && k % 2 === 0 && (!hole || ((a >> 3) & 1))) box(a, under(b) - 3, b, a, under(b) - 1, b, o.woodD);                    // purlins
+    }
+  }
+  const Tm = top(Math.floor(bc)); box(A0, Tm + 1, Math.floor(bc) - 1, A1, Tm + 2, Math.ceil(bc), tEdge);
+  for (const p of o.trusses ?? []) {
+    box(p - 1, o.E - 1, o.b0 + (o.gableT ?? 5) + 1, p + 1, o.E + 1, o.b1 - (o.gableT ?? 5) - 1, o.woodD);
+    box(p - 1, o.E + 1, Math.floor(bc) - 1, p + 1, Tm - 3, Math.ceil(bc), o.woodD);
+    const q = Math.round(half * 0.5), bq0 = Math.round(bc - q), bq1 = Math.round(bc + q) - 1, yq = Math.min(under(bq0), under(bq1)) - 1;
+    box(p - 1, o.E + 1, bq0 - 1, p + 1, yq, bq0 + 1, o.woodD); box(p - 1, o.E + 1, bq1 - 1, p + 1, yq, bq1 + 1, o.woodD);
+    box(p - 1, yq - 2, bq0, p + 1, yq, bq1, o.wood);
+  }
+  if (o.gableT && o.gable) for (const [g0, g1] of [[o.a0, o.a0 + o.gableT - 1], [o.a1 - o.gableT + 1, o.a1]]) for (let b = o.b0; b <= o.b1; b++) for (let y = o.E; y <= under(b); y++) box(g0, y, b, g1, y, b, o.gable(b, y));
+}
+/** a floor broken through: two overlapping rectangles of boards gone (cells), dark earth below, the broken board ends lighter */
+export function floorHole(w: W, X0: number, Z0: number, X1: number, Z1: number) {
+  const inH = (x: number, z: number) => (x >= X0 && x <= X1 && z >= Z0 + 3 && z <= Z1) || (x >= X0 + 4 && x <= X1 - 3 && z >= Z0 && z <= Z1 + 3);
+  for (let x = X0 - 1; x <= X1 + 1; x++) for (let z = Z0 - 1; z <= Z1 + 4; z++) {
+    if (inH(x, z)) { w.set(x, -1, z, null).set(x, -2, z, 0x1a1612); continue; }
+    if (inH(x + 1, z) || inH(x - 1, z) || inH(x, z + 1) || inH(x, z - 1)) w.set(x, -1, z, 0x7a5a3e);
+  }
+}
+/** roof slates fallen in a heap: three stepped slabs, a rafter piece across them */
+export function slateHeap(w: W, x: number, z: number, s: number, c: [number, number, number] = [SLATE_D, SLATE, SLATE_L], along: 'x' | 'z' = 'x') {
+  const X = M(x), Z = M(z);
+  w.box(X - s, 0, Z - s + 1, X + s, 0, Z + s - 1, c[0]).box(X - s + 2, 1, Z - s + 2, X + s - 1, 1, Z + s - 2, c[1]).box(X - 1, 2, Z - 2, X + 2, 2, Z + 1, c[2]);
+  if (along === 'x') w.box(X - s - 4, 2, Z, X + s + 3, 3, Z + 1, 0x3e2e24); else w.box(X, 2, Z - s - 4, X + 1, 3, Z + s + 3, 0x3e2e24);
+}
+export function lampPost(w: W, x: number, z: number, armDir: 'x' | '-x' | 'z' | '-z', lit = true): P3 {
   const X = M(x), Z = M(z), [dx, dz] = armDir === 'x' ? [1, 0] : armDir === '-x' ? [-1, 0] : armDir === 'z' ? [0, 1] : [0, -1];
   w.box(X - 3, -2, Z - 3, X + 3, 2, Z + 3, ST).box(X - 2, 3, Z - 2, X + 2, 4, Z + 2, ST_L).box(X - 1, 5, Z - 1, X, 38, Z, IRN).box(X - 2, 39, Z - 2, X + 1, 39, Z + 1, IRN_L).set(X, 40, Z, IRN_L);
   for (let k = 1; k <= 7; k++) w.set(X + dx * k - (dx < 0 ? 1 : 0), 36, Z + dz * k - (dz < 0 ? 1 : 0), IRN);
   w.set(X + dx * 2 - (dx < 0 ? 1 : 0), 35, Z + dz * 2 - (dz < 0 ? 1 : 0), IRN).set(X + dx * 2 - (dx < 0 ? 1 : 0), 34, Z + dz * 2 - (dz < 0 ? 1 : 0), IRN);
-  return hangLantern(w, X + dx * 6, 35, Z + dz * 6, 2);
+  return hangLantern(w, X + dx * 6, 35, Z + dz * 6, 2, 0xd08a40, lit);
 }
 /** low picket fence along x or z: posts every 9 with a capped top, two rails, pickets every other block */
 export function picket(w: W, x0: number, z0: number, len: number, along: 'x' | 'z', h = 11, c = WD_D, c2 = WD) {
