@@ -18,6 +18,7 @@ import { simThrow, playThrow, FIELD } from './dice/throw';
 import { presentQuat } from './dice/faces';
 import { DIE } from './dice/signature';
 import { Fishman } from './actors/fishman';
+import { Hero } from './actors/hero';
 import { Lich } from './actors/lich';
 import { Ghoul } from './actors/ghoul';
 import type { Actor } from './actors/actor';
@@ -59,8 +60,9 @@ export class BattleShow {
   private chain: Promise<void> = Promise.resolve(); private slide: { to: boolean } | null = null; private botOn = false; private seed: number; private rewardModels: THREE.Group[] = [];
   private bossUid = -1; private lastHeroHp = 0;
 
-  constructor(private platform: Platform, private env: Env, model: { scene: THREE.Group; clips: THREE.AnimationClip[] }, seed?: number) {
-    this.hero = new Fishman(model);
+  constructor(private platform: Platform, private env: Env, model: { scene: THREE.Group; clips: THREE.AnimationClip[] } | null, seed?: number) {
+    // the Blender fishman; if the model failed to load, the procedural stand-in keeps the game playable
+    this.hero = model ? new Fishman(model) : (new Hero() as unknown as Fishman);
     this.seed = seed ?? ((Date.now() % 100000) | 0);
     throwHooks.impact = (d, v) => { cue('clack', Math.min(1, v / 9)); if (v > 3) fxSmoke(V3(d.root.position.x, 0.06, d.root.position.z), 0x6a6878, 2, { s: 0.2, alpha: 0.3, up: 0.4 }); };
     throwHooks.landed = d => d.fx('land');

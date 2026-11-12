@@ -41,8 +41,9 @@ dh.add({
 dh.install();
 
 const hash = typeof location !== 'undefined' ? location.hash.slice(1) : '';   // artifact links only pass a plain #name
-loadFishman().then(model => {
+loadFishman().catch(e => { platform.log('[boot] model load failed, using the stand-in hero: ' + ((e && e.stack) || e)); return null; }).then(model => {
   if (flags.view === 'actors' || hash === 'actors' || hash === 'fishman') {
+    if (!model) throw new Error('fishman model failed to load');
     G.__actors = actorGallery(hash === 'fishman' ? 'hero' : platform.query('shot'), model);
     gfx.start(() => {}, () => { frames++; });
   } else {

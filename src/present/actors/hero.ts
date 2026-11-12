@@ -112,6 +112,7 @@ export class Hero extends Actor {
   cheer() { return this.play(new Action('cheer', 1.6, 0.3)); }
   bleed() { return this.play(new Action('bleed', 0.6, 0.35)); }
   fall() { this.dead = true; return this.play(new Action('fall', 1.2, 0.6)); }
+  setRunning(_on: boolean) { /* procedural fallback hero has no run cycle */ }
 
   protected pose(dt: number) {
     const b = this.bones, t = this.t, a = this.act, k = a ? a.k : 0, n = a?.name;

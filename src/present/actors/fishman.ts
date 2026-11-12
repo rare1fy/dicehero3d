@@ -12,7 +12,13 @@ import modelUrl from '../../assets/models/fishman.glb?url';
 let cached: { scene: THREE.Group; clips: THREE.AnimationClip[] } | null = null;
 export async function loadFishman() {
   if (cached) return cached;
-  const buf = await (await fetch(modelUrl)).arrayBuffer();
+  // the single-file build inlines the model as a data: URL; decode it directly — the artifact sandbox blocks fetch()
+  let buf: ArrayBuffer;
+  if (modelUrl.startsWith('data:')) {
+    const bin = atob(modelUrl.slice(modelUrl.indexOf(',') + 1)), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    buf = u8.buffer;
+  } else buf = await (await fetch(modelUrl)).arrayBuffer();
   const gltf = await new Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>((res, rej) => new GLTFLoader().parse(buf, '', g => res(g as never), rej));
   cached = { scene: gltf.scene, clips: gltf.animations };
   return cached;
