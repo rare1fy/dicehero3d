@@ -1,24 +1,26 @@
 // ?view=actors — a turntable of the three characters on the arena, cycling their actions (for screenshots and tuning).
 import { V3, onUpdate } from '../engine/world';
-import { CAM } from '../engine/gfx';
+import { shot as dirShot, staticShot } from '../director';
 import { clock } from '../engine/clock';
-import { Hero } from './hero';
+import { Fishman } from './fishman';
+import type * as THREE from 'three';
 import { Lich } from './lich';
 import { Ghoul } from './ghoul';
 
-export function actorGallery(shot: string | null) {
-  const hero = new Hero(), lich = new Lich(), ghoul = new Ghoul();
+export function actorGallery(shot: string | null, model: { scene: THREE.Group; clips: THREE.AnimationClip[] }) {
+  const hero = new Fishman(model), lich = new Lich(), ghoul = new Ghoul();
   hero.place(V3(-1.6, 0, 1.2), 0.35); lich.place(V3(0.6, 0.55, -5.4), 0.1); ghoul.place(V3(1.8, 0, 1.0), -0.4);
+  if (shot === 'hero') { hero.place(V3(0, 0, 1.6), 0); lich.root.visible = false; ghoul.root.visible = false; }
   const all = [hero, lich, ghoul];
-  onUpdate(dt => all.forEach(a => a.update(dt)));
+  onUpdate(dt => { if (shot === 'hero') hero.yaw = Math.sin(clock.time * 0.35) * 1.2; all.forEach(a => a.update(dt)); });
   const frames: Record<string, { base: [number, number, number]; look: [number, number, number]; fov: number }> = {
     all: { base: [0, 5.5, 11], look: [0, 1.6, -1.5], fov: 40 },
-    hero: { base: [-0.4, 2.4, 5.0], look: [-1.6, 1.1, 1.2], fov: 38 },
+    hero: { base: [0, 2.0, 7.4], look: [0, 1.15, 1.6], fov: 40 },
     lich: { base: [0.6, 3.2, 1.2], look: [0.6, 2.6, -5.4], fov: 40 },
     ghoul: { base: [2.6, 1.8, 4.2], look: [1.8, 0.8, 1.0], fov: 38 },
   };
   const f = frames[shot || 'all'] || frames.all;
-  CAM.base.set(...f.base); CAM.look.set(...f.look); CAM.fov = f.fov;
+  dirShot('gallery', staticShot(V3(...f.base), V3(...f.look), f.fov), { cut: true });
   let next = 1.5, i = 0;
   onUpdate(() => {
     if (clock.time < next) return; next = clock.time + 1.8; i++;

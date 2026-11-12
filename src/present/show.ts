@@ -17,7 +17,7 @@ import { Die3D, flyDie, throwHooks, DICE3D } from './dice/die3d';
 import { simThrow, playThrow, FIELD } from './dice/throw';
 import { presentQuat } from './dice/faces';
 import { DIE } from './dice/signature';
-import { Hero } from './actors/hero';
+import { Fishman } from './actors/fishman';
 import { Lich } from './actors/lich';
 import { Ghoul } from './actors/ghoul';
 import type { Actor } from './actors/actor';
@@ -54,12 +54,13 @@ const quatFor = (base: THREE.Vector3, look: THREE.Vector3) => { const o = new TH
 
 export class BattleShow {
   b!: Battle; dice = new Map<number, Die3D>(); sel: number[] = []; busy = true; stage: 'title' | 'intro' | 'battle' | 'reward' | 'over' = 'title';
-  hero = new Hero(); lich = new Lich(); foes = new Map<number, Actor>(); lanes = new Map<number, number>();
+  hero: Fishman; lich = new Lich(); foes = new Map<number, Actor>(); lanes = new Map<number, number>();
   hud = new Hud(); relics = new RelicBar(); counter = new Counter(() => this.hero.weapon().add(V3(0.2, 0.9, 0)));
   private chain: Promise<void> = Promise.resolve(); private slide: { to: boolean } | null = null; private botOn = false; private seed: number; private rewardModels: THREE.Group[] = [];
   private bossUid = -1; private lastHeroHp = 0;
 
-  constructor(private platform: Platform, private env: Env, seed?: number) {
+  constructor(private platform: Platform, private env: Env, model: { scene: THREE.Group; clips: THREE.AnimationClip[] }, seed?: number) {
+    this.hero = new Fishman(model);
     this.seed = seed ?? ((Date.now() % 100000) | 0);
     throwHooks.impact = (d, v) => { cue('clack', Math.min(1, v / 9)); if (v > 3) fxSmoke(V3(d.root.position.x, 0.06, d.root.position.z), 0x6a6878, 2, { s: 0.2, alpha: 0.3, up: 0.4 }); };
     throwHooks.landed = d => d.fx('land');
@@ -85,7 +86,7 @@ export class BattleShow {
     this.b = new Battle(sliceSetup(this.seed));
     this.hero.place(HERO_POS.clone().add(V3(0, 0, 4)), Math.PI); this.hero.root.visible = true; this.hero.lowHp = 0; this.hero.dead = false; this.hero.act = null;
     shot('walk', staticShot(V3(-3.5, 4.5, 11.5), V3(-1.4, 1.2, 4.2), 40), { speed: 1.2 });
-    const from = this.hero.home.clone(); await animP(1.6, k => { this.hero.home.lerpVectors(from, HERO_POS, ease.inOut(k)); this.hero.off.y = Math.abs(Math.sin(k * Math.PI * 6)) * 0.08; });
+    const from = this.hero.home.clone(); this.hero.setRunning(true); await animP(1.6, k => { this.hero.home.lerpVectors(from, HERO_POS, k); }); this.hero.setRunning(false);
     this.hero.faceToward(LICH_POS); await wait(0.2);
     // the lich rises from its altar
     shot('bossClose', SHOTS.bossClose, { speed: 1.6 }); await wait(0.6);
@@ -293,7 +294,6 @@ export class BattleShow {
       popText(`${st.label} ${st.txt}`, this.hero.weapon().add(V3(1.3, 0.2, 0)), { color: '#ffd8a0', size: 0.24, life: 0.9, rise: 0.4 }); cue('count', 0); await wait(0.22);
     }
     this.counter.set(out.damage, 1.9, { size: 0.95 }); cue('count', 1); shake(0.08);
-    if (out.armor > 0) popText(`护甲 +${out.armor}`, this.hero.chest().add(V3(-0.6, 0.4, 0)), { gradient: ['#e0f4ff', '#5aaaff'], size: 0.36, life: 1.0 });
     fadeOut(title, 0.3);
     await wait(0.3);
     // strike

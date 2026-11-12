@@ -10,6 +10,7 @@ import { buildEnv } from './present/look/env';
 import { BattleShow, SHOTS } from './present/show';
 import { Vector3 } from 'three';
 import { actorGallery } from './present/actors/gallery';
+import { loadFishman } from './present/actors/fishman';
 import './present/director';
 import './audio/audio';
 
@@ -39,12 +40,15 @@ dh.add({
 });
 dh.install();
 
-if (flags.view === 'actors') {
-  G.__actors = actorGallery(platform.query('shot'));
-  gfx.start(() => {}, () => { frames++; });
-} else {
-  show = new BattleShow(platform, env, flags.seed ?? undefined);
-  gfx.start(() => {}, () => { show!.relics.render(gfx.renderer); show!.hud.render(gfx.renderer); frames++; });
-  show.start();
-}
-dh.ready();
+const hash = typeof location !== 'undefined' ? location.hash.slice(1) : '';   // artifact links only pass a plain #name
+loadFishman().then(model => {
+  if (flags.view === 'actors' || hash === 'actors' || hash === 'fishman') {
+    G.__actors = actorGallery(hash === 'fishman' ? 'hero' : platform.query('shot'), model);
+    gfx.start(() => {}, () => { frames++; });
+  } else {
+    show = new BattleShow(platform, env, model, flags.seed ?? undefined);
+    gfx.start(() => {}, () => { show!.relics.render(gfx.renderer); show!.hud.render(gfx.renderer); frames++; });
+    show.start();
+  }
+  dh.ready();
+}).catch(e => { platform.log('[boot] ' + ((e && e.stack) || e)); dh.fail(e); });
