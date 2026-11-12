@@ -85,36 +85,7 @@ export function rockRing(w: W, r: Rect, h: number, cols: number[], o: { front?: 
 }
 
 // ------------------------------------------------------------------ props (x, z in metres at the base; sizes in blocks unless noted)
-export function deadTree(w: W, x: number, z: number, h: number, bark: number, dark: number, o: { seed?: number; leaves?: number; leavesTop?: number } = {}) {
-  const X = M(x), Z = M(z), T = M(h * 0.5), t3 = Math.round(T / 3), s = o.seed ?? 1;
-  w.box(X - 3, -2, Z - 3, X + 3, t3, Z + 3, bark).box(X - 2, t3 + 1, Z - 2, X + 2, 2 * t3, Z + 2, bark).box(X - 1, 2 * t3 + 1, Z - 1, X + 1, T + M(h * 0.12), Z + 1, bark);
-  w.box(X - 6, -2, Z - 1, X + 6, -1, Z + 1, dark).box(X - 1, -2, Z - 6, X + 1, -1, Z + 6, dark);
-  const arms: Array<[number, number, number]> = [[1, 0, T - 4], [-1, 0, T - 9], [0, 1, T + 1], [0, -1, T - 6]];
-  for (const [dx, dz, y] of arms) {
-    const len = M(h * (0.13 + hash(s, y) * 0.08)), rise = M(h * (0.12 + hash(s, y, 2) * 0.08)), ex = X + dx * len, ez = Z + dz * len;
-    w.box(Math.min(X, ex), y, Math.min(Z, ez), Math.max(X, ex), y + 1, Math.max(Z, ez), bark).box(ex, y, ez, ex + (dz ? 1 : 0), y + rise, ez + (dx ? 1 : 0), dark);
-    if (o.leaves != null) { w.box(ex - 4, y + rise - 1, ez - 4, ex + 4, y + rise + 3, ez + 4, o.leaves); w.box(ex - 3, y + rise + 4, ez - 3, ex + 3, y + rise + 4, ez + 3, o.leavesTop ?? o.leaves); }
-  }
-}
-/** a dark pine-ish tree: trunk + three stacked foliage tiers */
-export function pine(w: W, x: number, z: number, h: number, trunk: number, leaf: number, leafTop: number) {
-  const X = M(x), Z = M(z), H = M(h), base = Math.round(H * 0.25);
-  w.box(X - 1, -2, Z - 1, X + 1, base, Z + 1, trunk);
-  const tiers = [[9, 0.25, 0.5], [7, 0.45, 0.7], [4, 0.65, 0.88], [2, 0.84, 1]];
-  for (const [r, a, b] of tiers) w.box(X - r, Math.round(H * a), Z - r, X + r, Math.round(H * b), Z + r, leaf);
-  w.box(X - 1, H + 1, Z - 1, X + 1, H + 2, Z + 1, leafTop);
-}
-export function stump(w: W, x: number, z: number, r: number, h: number, bark: number, top: number) { const X = M(x), Z = M(z); w.box(X - r, -2, Z - r, X + r, h - 1, Z + r, bark).box(X - r + 1, h - 1, Z - r + 1, X + r - 1, h - 1, Z + r - 1, top); }
-export function log(w: W, x: number, z: number, len: number, alongX: boolean, bark: number, end: number) {
-  const X = M(x), Z = M(z), L = M(len) >> 1;
-  if (alongX) { w.box(X - L, 0, Z - 3, X + L, 5, Z + 3, bark).box(X - L, 1, Z - 2, X - L, 4, Z + 2, end).box(X + L, 1, Z - 2, X + L, 4, Z + 2, end); }
-  else { w.box(X - 3, 0, Z - L, X + 3, 5, Z + L, bark).box(X - 2, 1, Z - L, X + 2, 4, Z - L, end).box(X - 2, 1, Z + L, X + 2, 4, Z + L, end); }
-}
 export function rock(w: W, x: number, z: number, s: number, h: number, c: number, top?: number) { const X = M(x), Z = M(z); w.box(X - s, -2, Z - s, X + s, h, Z + s, c).box(X - s + 2, h + 1, Z - s + 2, X + s - 3, h + 2, Z + s - 2, top ?? c); }
-export function mushroom(w: W, x: number, z: number, s: number, stem: number, cap: number, glow = 0) {
-  const X = M(x), Z = M(z), H = s * 2;
-  w.box(X - (s >> 1), 0, Z - (s >> 1), X + (s >> 1), H, Z + (s >> 1), stem).box(X - s, H + 1, Z - s, X + s, H + 2, Z + s, cap, glow).box(X - s + 1, H + 3, Z - s + 1, X + s - 1, H + 3, Z + s - 1, cap, glow);
-}
 export function crate(w: W, x: number, z: number, s: number, c: number, band: number) { const X = M(x), Z = M(z); w.box(X - s, 0, Z - s, X + s, 2 * s, Z + s, c).box(X - s, 2 * s, Z - s, X + s, 2 * s, Z + s, band).box(X - s, 0, Z - s, X - s, 2 * s, Z - s, band).box(X + s, 0, Z + s, X + s, 2 * s, Z + s, band); }
 export function barrel(w: W, x: number, z: number, c: number, hoop: number) { const X = M(x), Z = M(z); w.box(X - 3, 0, Z - 3, X + 3, 11, Z + 3, c).box(X - 3, 2, Z - 3, X + 3, 2, Z + 3, hoop).box(X - 3, 9, Z - 3, X + 3, 9, Z + 3, hoop).box(X - 2, 12, Z - 2, X + 2, 12, Z + 2, c); }
 export function table(w: W, x: number, z: number, lx: number, lz: number, c: number, leg: number) { const X = M(x), Z = M(z), a = M(lx) >> 1, b = M(lz) >> 1; w.box(X - a, 10, Z - b, X + a, 11, Z + b, c); for (const [i, j] of [[-a + 1, -b + 1], [a - 1, -b + 1], [-a + 1, b - 1], [a - 1, b - 1]]) w.box(X + i, 0, Z + j, X + i, 9, Z + j, leg); }

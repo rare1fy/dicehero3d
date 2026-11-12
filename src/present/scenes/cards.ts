@@ -77,8 +77,21 @@ function paintAtlas() {
 }
 
 // ------------------------------------------------------------------ card kinds
-type Kind = 'cross' | 'wall' | 'decal';
+export type Kind = 'cross' | 'wall' | 'decal';
 interface Def { spr: string; kind: Kind; w: number; h: number; sway?: number; glow?: number }
+/** card kinds registered by scene files, each with its own small pixel canvas (w × h texels, one texel = one block) */
+const extra = new Map<string, { w: number; h: number; paint: (g: CanvasRenderingContext2D) => void; tex?: THREE.Texture }>();
+/** register a new card kind painted in code. kind: 'cross' (standing crossed quads, base at y), 'wall' (hangs down from y, faces
+ *  +z before ry), 'decal' (flat on the floor). glow > 0 = unlit and bright. Call at module level; repeated names are ignored. */
+export function addCardKind(name: string, d: { kind: Kind; w: number; h: number; sway?: number; glow?: number }, paint: (g: CanvasRenderingContext2D) => void) {
+  if (CARD[name]) return;
+  extra.set(name, { w: d.w, h: d.h, paint }); CARD[name] = { spr: name, ...d };
+}
+function texOf(d: Def) {
+  const e = extra.get(d.spr); if (!e) return paintAtlas();
+  if (!e.tex) { e.tex = canvasTex(e.w, e.h, e.paint, { nearest: true }); e.tex.colorSpace = THREE.SRGBColorSpace; }
+  return e.tex;
+}
 export const CARD: Record<string, Def> = {
   grass: { spr: 'grass', kind: 'cross', w: 16, h: 16, sway: 0.06 }, tallgrass: { spr: 'tallgrass', kind: 'cross', w: 16, h: 16, sway: 0.1 }, fern: { spr: 'fern', kind: 'cross', w: 16, h: 16, sway: 0.06 },
   flowers: { spr: 'flowers', kind: 'cross', w: 16, h: 16, sway: 0.07 }, weeds: { spr: 'weeds', kind: 'cross', w: 16, h: 16, sway: 0.08 }, shroom: { spr: 'shroom', kind: 'cross', w: 16, h: 16, glow: 1.5 },
@@ -87,7 +100,7 @@ export const CARD: Record<string, Def> = {
   litter: { spr: 'litter', kind: 'decal', w: 32, h: 32 }, mossdecal: { spr: 'mossdecal', kind: 'decal', w: 32, h: 32 }, crack: { spr: 'crack', kind: 'decal', w: 32, h: 32 }, bones: { spr: 'bonesdecal', kind: 'decal', w: 32, h: 32 }, puddle: { spr: 'puddle', kind: 'decal', w: 32, h: 32, glow: 0.7 }, pebbles: { spr: 'pebbles', kind: 'decal', w: 32, h: 32 }, leaf: { spr: 'leaf', kind: 'cross', w: 16, h: 16, sway: 0.04 },
 };
 function cardGeo(d: Def) {
-  const [ax, ay, aw, ah] = SPR[d.spr], u0 = ax / 128, u1 = (ax + aw) / 128, v1 = 1 - ay / 128, v0 = 1 - (ay + ah) / 128, W = d.w * CELL, H = d.h * CELL;
+  const own = extra.has(d.spr), [ax, ay, aw, ah] = own ? [0, 0, 128, 128] : SPR[d.spr], u0 = ax / 128, u1 = (ax + aw) / 128, v1 = 1 - ay / 128, v0 = 1 - (ay + ah) / 128, W = d.w * CELL, H = d.h * CELL;
   const plane = () => { const g = new THREE.PlaneGeometry(W, H); const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) ? u1 : u0, uv.getY(i) ? v1 : v0); return g; };
   let g: THREE.BufferGeometry;
   if (d.kind === 'cross') { const a = plane(), b = plane(); b.rotateY(Math.PI / 2); a.translate(0, H / 2, 0); b.translate(0, H / 2, 0); g = mergeTwo(a, b); }
@@ -105,7 +118,7 @@ function mergeTwo(a: THREE.BufferGeometry, b: THREE.BufferGeometry) {
 const swayU = { uTime: { value: 0 } };
 onUpdate((_dt, rdt) => { swayU.uTime.value += rdt; });
 function cardMat(d: Def) {
-  const tex = paintAtlas(), H = d.h * CELL;
+  const tex = texOf(d), H = d.h * CELL;
   if (d.glow) return new THREE.MeshBasicMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide, color: new THREE.Color(d.glow, d.glow, d.glow), toneMapped: false });
   const m = new THREE.MeshLambertMaterial({ map: tex, alphaTest: 0.5, side: THREE.DoubleSide });
   const s = d.sway ?? 0;
