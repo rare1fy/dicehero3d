@@ -12,6 +12,18 @@ export interface Platform extends PxPlatform {
   vibrate(level: VibeLevel): void;
 }
 
+/** An offscreen 2D canvas for procedural textures: browser element, mini-game canvas, or OffscreenCanvas (worker sandbox). */
+export function makeCanvas(w: number, h: number): any {
+  let c: any;
+  const mini = typeof tt !== 'undefined' && tt && tt.createCanvas ? tt : typeof wx !== 'undefined' && wx && wx.createCanvas ? wx : null;
+  if (mini && G.canvas) c = mini.createCanvas();   // the first mini-game canvas is the screen; later ones are offscreen
+  else if (typeof document !== 'undefined' && document.createElement) c = document.createElement('canvas');
+  else if (typeof OffscreenCanvas !== 'undefined') c = new OffscreenCanvas(w, h);
+  else throw new Error('no 2D canvas available');
+  c.width = w; c.height = h;
+  return c;
+}
+
 export function initPlatform(): Platform {
   const p = createPlatform() as Platform;
   const mini = p.name === 'wx' ? wx : p.name === 'tt' ? tt : null;
