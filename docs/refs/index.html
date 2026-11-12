@@ -1,0 +1,409 @@
+<title>六面史诗参考对照</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700;900&display=swap">
+<style>
+/* Layout: one reading column for text; clip galleries break out to a wider grid. Each section = one reference set the user must confirm. */
+:root {
+  --bg: #eef0f3; --surface: #ffffff; --ink: #1a1d23; --muted: #596170; --line: #d6dae1;
+  --brass: #8f6212; --brass-soft: #f3e7cf; --teal: #1d6a73; --teal-soft: #d8eef0; --rust: #a23d27; --rust-soft: #f6e1db;
+  --screen: #0d0f13;
+  --f-display: "Noto Serif SC", "Songti SC", "SimSun", serif;
+  --f-body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --f-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121419; --surface: #1a1d24; --ink: #e7e9ed; --muted: #9ba3b0; --line: #2b3039;
+  --brass: #d9a94e; --brass-soft: #3a2f19; --teal: #63b9c2; --teal-soft: #17343a; --rust: #e8826a; --rust-soft: #3f2219; --screen: #07080a; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121419; --surface: #1a1d24; --ink: #e7e9ed; --muted: #9ba3b0; --line: #2b3039;
+  --brass: #d9a94e; --brass-soft: #3a2f19; --teal: #63b9c2; --teal-soft: #17343a; --rust: #e8826a; --rust-soft: #3f2219; --screen: #07080a; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.7;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 72px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 56px; }
+.col { max-width: 760px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.3; margin: 0; }
+h1 { font-size: clamp(28px, 4.4vw, 40px); font-weight: 900; letter-spacing: 0.02em; }
+h2 { font-size: 24px; font-weight: 900; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--teal); }
+code, .path { font-family: var(--f-mono); font-size: 0.86em; }
+.eyebrow { font-size: 12px; letter-spacing: 0.12em; color: var(--muted); font-weight: 500; }
+.lede { color: var(--muted); max-width: 66ch; }
+.stack { display: grid; gap: 14px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 10px; border-radius: 3px; white-space: nowrap; }
+.chip.v5 { background: var(--brass-soft); color: var(--brass); }
+.chip.v6 { background: var(--teal-soft); color: var(--teal); }
+.chip.fix { background: var(--rust-soft); color: var(--rust); }
+.chip.new { background: var(--line); color: var(--ink); }
+
+/* header */
+header.top { display: grid; gap: 16px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 500; }
+
+/* confirmation list */
+.confirm { display: grid; gap: 0; border-top: 2px solid var(--ink); }
+.q { display: grid; grid-template-columns: 2.4em 1fr; gap: 4px 12px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.q .n { font-family: var(--f-mono); font-weight: 600; color: var(--brass); font-size: 18px; line-height: 1.5; }
+.q .body { display: grid; gap: 6px; min-width: 0; }
+.q .ask { font-weight: 500; }
+.q .plan { color: var(--muted); font-size: 14px; }
+.q .plan b { color: var(--ink); font-weight: 500; }
+.q .see { font-size: 13px; }
+
+.callout { background: var(--brass-soft); border-left: 3px solid var(--brass); border-radius: 4px; padding: 16px 18px; display: grid; gap: 12px; }
+.callout p { max-width: 66ch; }
+.callout .thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.callout .thumbs a { display: grid; gap: 4px; color: var(--ink); text-decoration: none; font-size: 13px; min-width: 0; }
+.callout .thumbs img { width: 100%; height: auto; border-radius: 3px; background: var(--screen); display: block; }
+.callout .thumbs a:hover span, .callout .thumbs a:focus-visible span { text-decoration: underline; }
+.chip.ok { background: var(--teal-soft); color: var(--teal); }
+.chip.wait { background: var(--rust-soft); color: var(--rust); }
+
+/* sections */
+section.set { display: grid; gap: 22px; }
+.set-head { display: grid; gap: 10px; }
+.set-head .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.notes { display: grid; gap: 6px; font-size: 14px; color: var(--muted); padding-left: 1.2em; margin: 0; }
+.notes li::marker { color: var(--brass); }
+.notes b { color: var(--ink); font-weight: 500; }
+
+.clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 22px 18px; align-items: start; }
+.clips.wide { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+figure.clip { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.screen { background: var(--screen); border-radius: 4px; overflow: hidden; display: grid; place-items: center; }
+.screen video, .screen img { display: block; width: 100%; max-width: 100%; height: auto; max-height: 74vh; object-fit: contain; }
+figcaption { display: grid; gap: 4px; min-width: 0; }
+.cap-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cid { font-family: var(--f-mono); font-weight: 600; color: var(--brass); }
+.set.v6 .cid { color: var(--teal); }
+.cap-title { font-weight: 700; }
+.cap-text { font-size: 13.5px; color: var(--muted); }
+.speeds { display: flex; gap: 6px; flex-wrap: wrap; }
+.speeds button { font: 600 12px var(--f-mono); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 3px; padding: 3px 9px; cursor: pointer; }
+.speeds button[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
+.speeds button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* plan */
+.plan-grid { display: grid; gap: 0; border-top: 2px solid var(--ink); }
+.mod { display: grid; grid-template-columns: minmax(150px, 210px) 1fr; gap: 6px 24px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.mod .name { display: grid; gap: 6px; align-content: start; }
+.mod .name h3 { font-size: 16px; }
+.mod dl { margin: 0; display: grid; grid-template-columns: 5.5em 1fr; gap: 6px 14px; font-size: 14px; min-width: 0; }
+.mod dt { color: var(--muted); font-size: 13px; padding-top: 1px; }
+.mod dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.chip.lock { background: var(--brass-soft); color: var(--brass); }
+.chip.base { background: var(--teal-soft); color: var(--teal); }
+.chip.redo { background: var(--rust-soft); color: var(--rust); }
+.dropped { font-size: 14px; color: var(--muted); }
+.dropped b { color: var(--ink); font-weight: 500; }
+pre.tree { font: 13px/1.6 var(--f-mono); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; overflow-x: auto; margin: 0; }
+ol.steps { margin: 0; padding-left: 1.4em; display: grid; gap: 8px; font-size: 14.5px; }
+ol.steps li::marker { font-family: var(--f-mono); color: var(--brass); font-weight: 600; }
+ol.steps b { font-weight: 700; }
+.foot { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+@media (max-width: 640px) {
+  .mod { grid-template-columns: 1fr; }
+  .mod dl { grid-template-columns: 1fr; gap: 2px; }
+  .mod dt { padding-top: 8px; }
+  .clips, .clips.wide { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="top col">
+  <p class="eyebrow">六面史诗 3D · 阶段 1 · 第 1 步（已确认 · 2026-11-12）</p>
+  <h1>参考对照与迁移计划</h1>
+  <p class="lede">阶段 1 要把 v5 的骰子和遗物、v6 第 2 轮的战斗反馈和推进感迁进正式工程。下面是你对 10 件事的答复，已经写进 CLAUDE.md 的定稿表；只剩第 1 条等你看过 A 组后确认。第 2 步（搭工程）已开始。</p>
+  <div class="meta">
+    <span><b>v5</b> 构建 <code>_ref/px3d/demos/dicehero3d.html</code></span>
+    <span><b>v6 第 2 轮</b> 构建 <code>_ref/px3d/demos/dicehero6.html</code></span>
+    <span>录制：2026-11-12，30fps 原速，无声</span>
+  </div>
+</header>
+
+<section class="col stack" id="confirm">
+  <h2>你的答复（已写进定稿表）</h2>
+  <div class="callout">
+    <p><b>第 1 条还等你确认：A 组在哪儿看。</b>就是这一页往下第一组片子「A 组 · 骰子」，也就是旧链接 9Mp6… 里最后那一版（v5）的骰子。下面三张是这三段片子的画面，点一下跳过去播放。如果视频播不出来，本机文件在 <code>GameProtos\dicehero3d\docs\refs\clips\</code>（<code>v5_throw.webm</code> 等），拖进 Chrome 就能放。</p>
+    <div class="thumbs">
+      <a href="#dice"><img src="posters/v5_throw.jpg" alt="A1：骰子翻滚着落在英雄面前" loading="lazy"><span>A1 投掷</span></a>
+      <a href="#dice"><img src="posters/v5_select_reroll.jpg" alt="A2：选中的两颗骰子浮起发光，顶部显示伤害预览" loading="lazy"><span>A2 选中和重投</span></a>
+      <a href="#dice"><img src="posters/v5_play_relic.jpg" alt="A3：骰子升成一排，对称打击立体字砸下" loading="lazy"><span>A3 出牌结算</span></a>
+    </div>
+    <p>它只影响第 4 步迁骰子，第 2、3 步（搭工程、迁规则）不受影响，先往下做。</p>
+  </div>
+  <div class="confirm">
+    <div class="q"><span class="n">1</span><div class="body"><p class="ask">「v5 的骰子」是不是 A 组这一套 <span class="chip wait">待你看</span></p>
+      <p class="plan">见上面。</p></div></div>
+    <div class="q"><span class="n">2</span><div class="body"><p class="ask">落点 <span class="chip ok">定</span></p>
+      <p class="plan">保留 v5 的投掷手感，落点放大到整片战场前沿。<b>新增：敌人攻击时骰子要让开，攻击完再回到原位。</b></p></div></div>
+    <div class="q"><span class="n">3</span><div class="body"><p class="ask">选骰 <span class="chip ok">定</span></p>
+      <p class="plan">v5 的点选和长按看效果卡，加 v6 的按住滑过多选。</p></div></div>
+    <div class="q"><span class="n">4</span><div class="body"><p class="ask">遗物位置 <span class="chip ok">定</span></p>
+      <p class="plan">你记得的是「一个模型飞过去」，位置不限。<b>定为漂浮在 UI 层</b>：遗物模型单独一层渲染，不会被场景挡住；触发和飞行演出照 v5。</p></div></div>
+    <div class="q"><span class="n">5</span><div class="body"><p class="ask">场景内操作物件 <span class="chip ok">改</span></p>
+      <p class="plan"><b>不做骰杯、印章、沙漏这类具象物件</b>，重投、出牌、结束回合用实体按钮（有厚度、按下有手感）。骰子队列不用容器，骰子漂浮着排队。</p></div></div>
+    <div class="q"><span class="n">6</span><div class="body"><p class="ask">额外 4 颗骰子 <span class="chip ok">定</span></p>
+      <p class="plan">怒火、泰坦之拳、旋风斩、斩杀。</p></div></div>
+    <div class="q"><span class="n">7</span><div class="body"><p class="ask">开局 3 个遗物 <span class="chip ok">定</span></p>
+      <p class="plan">猩红圣杯、怒火燎原、点数统计器。</p></div></div>
+    <div class="q"><span class="n">8</span><div class="body"><p class="ask">巫妖召唤食尸鬼 <span class="chip ok">定</span></p>
+      <p class="plan">照原数据保留。</p></div></div>
+    <div class="q"><span class="n">9</span><div class="body"><p class="ask">Boss 语音 <span class="chip ok">定</span></p>
+      <p class="plan"><b>Breeze 锁定音色中文版</b>，带巫妖音效处理：<code>voice/out_roles_v1/wav/fx/breeze/locked/lich_c1_*_zh.wav</code>。</p></div></div>
+    <div class="q"><span class="n">10</span><div class="body"><p class="ask">玩家角色 <span class="chip ok">新增</span></p>
+      <p class="plan"><b>试做鱼人。</b>职业机制仍是嗜血狂战，外形是鱼人狂战士，原创造型。3 个画面方向各出一版。</p></div></div>
+  </div>
+</section>
+
+<section class="set v5" id="dice">
+  <div class="set-head col">
+    <div class="row"><span class="chip v5">v5 · 定稿</span><span class="eyebrow">A 组</span></div>
+    <h2>骰子：外形、投掷、选中、出牌、重投</h2>
+    <ul class="notes">
+      <li>桌面尺寸录制，只裁中间那一块；v5 在手机竖屏下骰子只有约 25px，见 A5。</li>
+      <li>片子里的骰杯、印章、骰子库、弃骰托盘<b>不迁</b>（答复 5），换成实体按钮和漂浮的骰子队列。</li>
+      <li><b>v5 自身的问题，迁移时修掉：</b>出牌时骰子升起后显示的面不是实际点数。A3 里选的是一对 5，升起后显示 4 和 6；B1 里选的是一对 3，升起后显示 5 和横躺的 3。</li>
+    </ul>
+  </div>
+  <div class="clips">
+    <figure class="clip"><div class="screen"><video src="clips/v5_throw.webm" poster="posters/v5_throw.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">A1</span><span class="cap-title">投掷</span></div>
+      <p class="cap-text">进战斗：敌人登场，骰子从左下的骰子库飞出，翻滚着落在英雄面前的符文圈里，每颗骰子下面挂着点数牌。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v5_select_reroll.webm" poster="posters/v5_select_reroll.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">A2</span><span class="cap-title">选中和重投</span></div>
+      <p class="cap-text">点选两颗：浮起、发光、冒火花，顶部出现牌型和伤害预览。点骰杯重投：旧骰子扫进右下的弃骰托盘，新骰子从骰子库飞出再投。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v5_play_relic.webm" poster="posters/v5_play_relic.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">A3</span><span class="cap-title">出牌结算</span></div>
+      <p class="cap-text">点印章出牌：骰子升成一排面向镜头，「对称打击」立体字砸下，点数逐颗飞进武器累加，遗物依次加成，然后切越肩镜头，骰子砸向敌人，打出 42，用过的骰子弹回弃骰托盘。</p><div class="speeds"></div></figcaption></figure>
+  </div>
+  <div class="clips wide">
+    <figure class="clip"><div class="screen"><img src="shots/v5_dice_closeup.png" alt="v5 战斗中三颗狂战骰子的特写：怒火是黑铁配橙色数字，铁壁是银色铆钉，血之渴望是深红色" loading="lazy"></div>
+      <figcaption><div class="cap-top"><span class="cid">A4</span><span class="cap-title">狂战骰子特写</span></div>
+      <p class="cap-text">上：怒火（黑铁、橙色发光数字）。左：铁壁（钢、铆钉）。右：血之渴望（血琥珀、尖刺）。点阵数字，每颗骰子底下挂点数和特效标记。</p></figcaption></figure>
+    <figure class="clip"><div class="screen"><img src="shots/v5_phone_hand.png" alt="v5 在手机竖屏下的战斗画面，骰子很小，英雄血条牌压在骰子上" loading="lazy"></div>
+      <figcaption><div class="cap-top"><span class="cid">A5</span><span class="cap-title">v5 在手机竖屏下</span><span class="chip fix">要改</span></div>
+      <p class="cap-text">412 宽的手机上骰子很小，英雄头顶的血条牌压在骰子上。正式工程的镜头要保证骰子点数一眼可读。</p></figcaption></figure>
+    <figure class="clip"><div class="screen"><img src="shots/v6_dice_handrow.png" alt="v6 第 2 轮的骰子：大方块配数字，选中的骰子排到屏幕下方的手牌行" loading="lazy"></div>
+      <figcaption><div class="cap-top"><span class="cid">A6</span><span class="cap-title">对照：v6 第 2 轮的骰子</span><span class="chip v6">不采用</span></div>
+      <p class="cap-text">你说 v5 的骰子比这一版好。v6 的骰子是纯色方块，选中后排到屏幕下方的手牌行。只取它的「按住滑过多选」和「满场投掷」两点，见确认 2、3。</p></figcaption></figure>
+  </div>
+</section>
+
+<section class="set v5" id="relic">
+  <div class="set-head col">
+    <div class="row"><span class="chip v5">v5 · 定稿</span><span class="eyebrow">B 组</span></div>
+    <h2>遗物：令牌、触发、飞向目的地</h2>
+    <ul class="notes">
+      <li>这几段都带了 3 个遗物：<b>磨刀石</b>（出 ≤ 2 颗时 +12 伤害，飞向武器）、<b>猩红圣杯</b>（按损失血量加倍率，飞向武器）、<b>点数统计器</b>（+3 护甲，飞向英雄）。</li>
+      <li>B1、B2 是 2 倍清晰度的局部特写，B3 是全画面慢放，令牌在英雄左侧、骰子库上方。</li>
+    </ul>
+  </div>
+  <div class="clips wide">
+    <figure class="clip"><div class="screen"><video src="clips/v5_relic_close.webm" poster="posters/v5_relic_close.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">B1</span><span class="cap-title">遗物触发特写 · 原速</span></div>
+      <p class="cap-text">点数飞进武器之后，三个遗物依次触发：令牌跳起，弹出发光的立体复制品和名字标签，沿弧线拖着金色尾迹飞向武器或英雄，落点出光圈。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v5_relic_close_slow.webm" poster="posters/v5_relic_close_slow.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">B2</span><span class="cap-title">遗物触发特写 · 0.4 倍</span></div>
+      <p class="cap-text">同一段演出用游戏内慢放录的，方便看清弹出、飞行和落点。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v5_relic_slow.webm" poster="posters/v5_relic_slow.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">B3</span><span class="cap-title">全画面 · 0.33 倍</span></div>
+      <p class="cap-text">看令牌在场景里的位置，以及遗物飞行和牌型、计数器的先后关系。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><img src="shots/v5_relic_tokens.png" alt="v5 的遗物令牌特写，体素圆台上是遗物的像素图案，摆在骰子库上方" loading="lazy"></div>
+      <figcaption><div class="cap-top"><span class="cid">B4</span><span class="cap-title">遗物令牌</span></div>
+      <p class="cap-text">体素圆台，顶上是遗物自己的像素图案，叠在骰子库上方。</p></figcaption></figure>
+  </div>
+</section>
+
+<section class="set v6" id="feedback">
+  <div class="set-head col">
+    <div class="row"><span class="chip v6">v6 第 2 轮 · 基线</span><span class="eyebrow">C 组</span></div>
+    <h2>战斗反馈：攻击、施法、受击、状态、击杀</h2>
+    <ul class="notes">
+      <li>为了直接对上这场 Boss 战，我把 v6 的第一场战斗换成了枯骨巫妖（用的是 v6 自己的巫妖模型和登场演出），手机竖屏 2 倍清晰度录制。</li>
+      <li>你认可的是这一版的顿帧、闪白、击退、伤害数字、立体字砸出再碎裂、元素命中特效和状态在身上的表现。已知问题：护盾和数字碎裂时挤成一团。</li>
+    </ul>
+  </div>
+  <div class="clips">
+    <figure class="clip"><div class="screen"><video src="clips/v6_attack.webm" poster="posters/v6_attack.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">C1</span><span class="cap-title">攻击和命中</span></div>
+      <p class="cap-text">按住滑过两颗 5 选中，拖到巫妖身上松手出牌：骰子升起，「对称打击」立体字和 ×1.8，狂战冲上去砍，巫妖闪白、出光圈和伤害数字。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v6_enemy_turn.webm" poster="posters/v6_enemy_turn.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">C2</span><span class="cap-title">敌方回合：巫妖施法</span></div>
+      <p class="cap-text">巫妖出招施法，打到狂战身上，狂战受击闪光、头上挂出「灼烧」；接着新回合的骰子满场投出，这就是确认 2 说的满场投掷。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v6_attack_lowhp.webm" poster="posters/v6_attack_lowhp.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">C3</span><span class="cap-title">打进残血和第二阶段</span></div>
+      <p class="cap-text">一对 6 把巫妖打到 40% 以下，它喊出残血台词；下一回合换成残血招式：狂战挂上灼烧，诅咒往骰袋里塞进一颗诅咒骰子。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v6_kill.webm" poster="posters/v6_kill.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">C4</span><span class="cap-title">击杀</span></div>
+      <p class="cap-text">最后一击：巫妖头上爆出「击碎！」，碎成紫色碎块散落，胜利横幅，随后首领遗物摆上石台。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><img src="shots/v6_status.png" alt="v6 第 2 轮里状态效果挂在人物身上的样子" loading="lazy"></div>
+      <figcaption><div class="cap-top"><span class="cid">C5</span><span class="cap-title">状态挂在身上</span></div>
+      <p class="cap-text">巫妖身上挂了灼烧和中毒，整个身体被毒色覆盖；狂战身上挂了虚弱和易伤，信息牌下方显示层数。</p></figcaption></figure>
+  </div>
+</section>
+
+<section class="set v6" id="world">
+  <div class="set-head col">
+    <div class="row"><span class="chip v6">v6 第 2 轮 · 基线</span><span class="eyebrow">D 组</span></div>
+    <h2>推进：全景地图、俯冲进战场、战后拉回</h2>
+    <ul class="notes">
+      <li>你的意见：这是推进感最强的一版，<b>镜头要再往上拉，更全览</b>。正式工程只做起点到 Boss 的一小段，线性推进。</li>
+    </ul>
+  </div>
+  <div class="clips">
+    <figure class="clip"><div class="screen"><video src="clips/v6_title_class_map.webm" poster="posters/v6_title_class_map.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">D1</span><span class="cap-title">标题 → 选职业 → 全景</span></div>
+      <p class="cap-text">点开始后，三个英雄站在场景里。点狂战，它走上前，下方出信息牌；再点出发，英雄站上起点，镜头升到全景。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v6_walk_swoop_boss.webm" poster="posters/v6_walk_swoop_boss.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">D2</span><span class="cap-title">走过去 → 俯冲 → Boss 登场</span></div>
+      <p class="cap-text">点节点，英雄沿路走过去，镜头从全景俯冲进空地；战前准备在场景里摆三个遗物，跳过后巫妖从地下升起，名字横幅和登场台词。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><video src="clips/v6_reward_exit.webm" poster="posters/v6_reward_exit.jpg" controls loop muted playsinline preload="none"></video></div>
+      <figcaption><div class="cap-top"><span class="cid">D3</span><span class="cap-title">战后领奖 → 拉回全景</span></div>
+      <p class="cap-text">首领遗物和战利品骰子摆在空地的石台上，选中领取（这里是机器人代点，所以很快），然后镜头升回全景地图。</p><div class="speeds"></div></figcaption></figure>
+    <figure class="clip"><div class="screen"><img src="shots/v6_map_overview.png" alt="v6 第 2 轮的全景地图，森林里一条路通向远处" loading="lazy"></div>
+      <figcaption><div class="cap-top"><span class="cid">D4</span><span class="cap-title">全景地图</span></div>
+      <p class="cap-text">现在的全景高度。正式工程要更高、看得更全。</p></figcaption></figure>
+  </div>
+</section>
+
+<section class="stack" id="plan">
+  <div class="col stack">
+    <p class="eyebrow">迁移计划</p>
+    <h2>哪个模块从哪里来</h2>
+    <p class="lede">状态沿用 CLAUDE.md 定稿表：定稿 = 照搬机制和节奏，不改设计；基线 = 以它为起点加强；重做 = 新做。源码都在 <code>_ref/px3d/</code> 下：v5 是 <code>dh3d_src/</code>，v6 第 2 轮是 <code>dh3d6_src/</code>。同样的内容也写在 <code>docs/迁移计划_阶段1.md</code>。</p>
+  </div>
+  <div class="plan-grid">
+    <div class="mod"><div class="name"><h3>规则和数值</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>2D 原版 <code>src/logic/</code>、<code>src/data/</code>；3D 版 <code>03_rules.js</code>（v5 和 v6 完全相同）、v6 <code>04p_piles.js</code>、<code>dh6_tools/piles_test.mjs</code></dd>
+      <dt>迁什么</dt><dd>牌型判定、原版 4 阶段伤害结算、重投代价和血怒、狂战被动（收割、过充）、遗物、敌人 AI 和阶段切换、召唤、状态结算、奖励池、骰袋 / 弃骰 / 手牌的纯函数操作、机器人选牌</dd>
+      <dt>要改</dt><dd>数值以 2D 原版为准。带上 3D 版修过的 bug（purify 和 removeJunk 一致、冥想不误删骰子）。规则层只输出战斗事件，不碰 three 和 DOM</dd>
+      <dt>放到</dt><dd><code>src/core/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>骰子外形与辨识度</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>02e_dice.js</code>（材质家族、点阵数字、贴图、dieFx）、<code>02s_dicesig.js</code>（每颗骰子的轮廓件、数字风格、待机 / 落地 / 触发特效）</dd>
+      <dt>迁什么</dt><dd>「一颗一个辨识点」：轮廓件（尖刺、铆钉、边框、箍带）、材质、数字样式、待机和触发特效</dd>
+      <dt>要改</dt><dd>材质和数字字体跟随画面方向；去掉 v5 残留的小倒角；修骰面朝向错误，并用 v6 <code>07_qa.js</code> 的 faceCheck 做自动检查</dd>
+      <dt>放到</dt><dd><code>src/present/dice/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>投掷与落地</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>02_world.js</code> 的预模拟投掷（simOne / simThrow / assignFaces / playThrow：cannon-es 预演后回放，落地朝上的面就是点数），<code>04_battle.js</code> 的 drawPhase / throwDice / sweepOut</dd>
+      <dt>迁什么</dt><dd>预模拟回放、翻滚节奏、落地灰尘 / 光圈 / 音效</dd>
+      <dt>要改</dt><dd>落点放大到整片战场前沿；敌人攻击时骰子让开，攻击完回原位；保证不穿模、不卡住</dd>
+      <dt>放到</dt><dd><code>src/present/dice/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>选骰、预览、效果卡</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>04_battle.js</code>（toggleSelect、可组牌型的蓝光提示、updatePreview）、<code>04h_hud.js</code>（hudPreview、relicWill）；v6 <code>06_boot.js</code> 的按住滑动多选</dd>
+      <dt>迁什么</dt><dd>浮起 + 发光 + 火花 + 音效；牌型和伤害预览；即将触发的遗物提示；长按看效果卡</dd>
+      <dt>要改</dt><dd>预览从 DOM 改成 pxui；伤害拆解照 2D 原版的出牌预期卡（<code>docs/godot-port/08</code> 第 4 节）</dd>
+      <dt>放到</dt><dd><code>src/present/dice/</code>、<code>src/ui/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>出牌结算演出</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>04_battle.js</code> 的 presentHand、launchAttack；<code>02x_text3d.js</code>（t3Slam / t3Fly / t3Counter / t3Stamp / t3Shatter）</dd>
+      <dt>迁什么</dt><dd>骰子升成一排 → 牌型立体字砸下（按档位升级光圈、闪光、震屏、慢放）→ 点数飞进武器计数器 → 倍率和遗物依次加入 → 骰子砸向敌人 → 弹回弃骰托盘</dd>
+      <dt>要改</dt><dd>节奏对齐 2D 原版结算时序：0.6s 牌型 → 每颗 0.28s → 倍率 0.5s → 每条效果 0.35s → 伤害三档卡肉和震屏。重复演出可加速</dd>
+      <dt>放到</dt><dd><code>src/present/stage/</code>（演出队列）</dd></dl></div>
+    <div class="mod"><div class="name"><h3>重投</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>04_battle.js</code> doReroll、<code>04h_hud.js</code> 骰杯</dd>
+      <dt>迁什么</dt><dd>卖血时红色暗角、血滴火花、血怒层数；旧骰飞进弃骰队列，新骰从骰袋队列飞出再投</dd>
+      <dt>要改</dt><dd>骰杯换成实体按钮；检查衔接，不能卡顿</dd>
+      <dt>放到</dt><dd><code>src/present/dice/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>骰子队列</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>04q_queue.js</code>（QUEUE.toss、drawFromBagA 的飞行）</dd>
+      <dt>迁什么</dt><dd>骰袋和弃骰里的骰子真的飞进飞出</dd>
+      <dt>要改</dt><dd>不用骰子库格子和弃骰托盘，骰子漂浮着排队；也不用 v6 的顶栏计数</dd>
+      <dt>放到</dt><dd><code>src/present/dice/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>遗物</h3><span><span class="chip lock">定稿</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v5 <code>04h_hud.js</code>（rebuildRelics / relicToken、触发跳动）、<code>02u_vtable.js</code>（vToken）、<code>02_world.js</code>（makeRelicModel）、<code>04_battle.js</code> 528–545 行 relicPop</dd>
+      <dt>迁什么</dt><dd>令牌 → 跳动 → 弹出发光复制品和名字标签 → 0.36s 弧线飞行和金色尾迹 → 落点光圈；按效果飞向武器 / 英雄 / 钱堆；战后在场景里三选一</dd>
+      <dt>要改</dt><dd>令牌改成漂浮在 UI 层的 3D 小模型；标签从 DOM 改成 3D 文字</dd>
+      <dt>放到</dt><dd><code>src/present/relics/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>战斗反馈</h3><span><span class="chip base">基线</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v6 <code>04_battle.js</code>（hitEnemy、playerTakeHit、enemyAct / windUp / lungeAt / castOrb / casterSkill、resolveDeaths、enemyDeathFx）、<code>02f_status.js</code>（状态着色器、各元素命中特效）、<code>02v_vox2.js</code> 的 shatterRig、<code>02x_text3d.js</code>；顿帧、trauma 震屏、闪白、慢放、光脉冲在 <code>kit_dh6.js</code></dd>
+      <dt>迁什么</dt><dd>顿帧、闪白、击退、伤害数字、立体字砸出再碎裂、元素命中特效、状态实体表现、碎块死亡</dd>
+      <dt>要改</dt><dd>按表现力清单加强：分级顿帧、方向受击、冲击帧、贴花、手机震动；结算文字排先后，护盾和数字不再挤成一团</dd>
+      <dt>放到</dt><dd><code>src/present/fx/</code>、<code>src/present/stage/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>探索与推进</h3><span><span class="chip base">基线</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v6 <code>02g_world.js</code>（整章一个世界、节点空地、灯光池、环境生命）、<code>05_meta.js</code>（openMap、travelTo、swoopIn、场景内选择 CHOICE、afterBattle）、<code>02c_hero.js</code> 的镜头架</dd>
+      <dt>迁什么</dt><dd>全景 → 点节点 → 英雄真的走过去 → 无缝俯冲进战场；战后在场景里选奖励 → 镜头升回全景</dd>
+      <dt>要改</dt><dd>镜头更高、更全览；只做起点到 Boss 的一小段，线性推进</dd>
+      <dt>放到</dt><dd><code>src/present/world/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>镜头</h3><span><span class="chip redo">重做</span></span></div><dl>
+      <dt>参考</dt><dd>v6 <code>02c_hero.js</code>（战斗镜头 40° / fov 24，setShot / camMove 的无缝过渡）</dd>
+      <dt>做什么</dt><dd>镜头导演：开场全景、Boss 登场特写、玩家回合看骰子、结算跟着效果走、敌方回合压迫、击杀慢动作、胜利环绕；trauma 震屏；读骰子和血量时绝不挡</dd>
+      <dt>放到</dt><dd><code>src/present/director/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>角色、场景</h3><span><span class="chip redo">重做</span></span></div><dl>
+      <dt>参考</dt><dd>尺寸参考 v6 第 2 轮（412 宽：英雄约 116px、Boss 约 173px），造型和场景自由发挥</dd>
+      <dt>做什么</dt><dd>每个画面方向各做一套鱼人狂战（答复 10）、巫妖、食尸鬼和一个 Boss 战场景。动作：待机呼吸、准备、蓄力、攻击、施法、按方向受击、格挡、残血、死亡、胜利。场景有高差、路径、道具、远景层次和环境生命，Boss 战更暗，带边缘光和雾</dd>
+      <dt>放到</dt><dd><code>src/present/looks/&lt;方向&gt;/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>UI</h3><span><span class="chip base">基线</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>pxui <code>demos/dicehero-ui</code>（13 个状态）；v6 <code>04h_hud.js</code> 的人物信息牌</dd>
+      <dt>要改</dt><dd>DOM 全部换成 pxui；重投、出牌、结束回合是实体按钮；按 <code>pxui/AGENTS.md</code> 用 merge 提案改布局；视觉跟随画面方向</dd>
+      <dt>放到</dt><dd><code>src/ui/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>音频</h3><span><span class="chip base">基线</span></span></div><dl>
+      <dt>从哪里迁</dt><dd><code>sfx/out_dicehero_v1</code>（10 类各 5 个变体）、原版 BGM 三首、v5 <code>00_head.js</code> 的合成音层、巫妖语音（Breeze 锁定音色中文版）</dd>
+      <dt>要改</dt><dd>随机音高音量、按演出帧对齐、分层、语音时压低其他声音、限幅、残血加滤波。缺的音效用 sfx 流水线补：骨裂、诅咒、灼烧、施法蓄力、Boss 咆哮、护盾、遗物叮声、牌型揭示、心跳</dd>
+      <dt>放到</dt><dd><code>src/audio/</code></dd></dl></div>
+    <div class="mod"><div class="name"><h3>调试与自测</h3><span><span class="chip new">迁移</span></span></div><dl>
+      <dt>从哪里迁</dt><dd>v6 <code>07_qa.js</code>（骰面朝向检查、闪烁检测、亮度统计、draw call 拆分）、<code>window.__dh6</code></dd>
+      <dt>要改</dt><dd>改名 <code>window.__dh</code>；录屏用这次新写的 <code>tools/cap.mjs</code>，虚拟时钟逐帧录制，GPU 忙时也是准确的原速</dd>
+      <dt>放到</dt><dd><code>src/debug/</code>、<code>tools/</code></dd></dl></div>
+  </div>
+  <p class="dropped col"><b>明确不迁：</b>v5 的 KayKit 小人（3.8MB 数据）、软泥雕塑角色、落崖关式棋盘、v6 的方块道具、两版的体素人物造型（只保留碎块死亡的算法）、DOM 和 CSS 写的像素 UI、v6 的手牌行和顶栏计数器。它们要么属于要重做的板块，要么被 pxui 取代。</p>
+</section>
+
+<section class="col stack" id="structure">
+  <h2>工程结构</h2>
+<pre class="tree">dicehero3d/
+  src/
+    core/            纯规则：数据、牌型、结算、遗物、敌人 AI、骰堆、机器人；只输出战斗事件
+    present/
+      stage/         演出队列：每个效果都有 蓄力 → 命中 → 余韵
+      director/      镜头导演
+      dice/ relics/ fx/ text3d/ world/
+      looks/A|B|C/   外观包：渲染光影、角色、场景、骰子材质、特效配色、UI 主题
+    ui/              pxui 布局和绑定
+    audio/ platform/ debug/
+  tests/             规则单测、骰堆用例（迁自 piles_test.mjs）、机器人整场自动打
+  tools/             cap.mjs 录屏截图、sheet.py 拼图、构建脚本</pre>
+  <p class="lede">Vite + TypeScript；three 和 pxui 用同一个固定版本（0.162.0），cannon-es 0.20.0，全部打包，不走 CDN。开关：<code>?look=A|B|C</code> 切画面方向；每项表现强化单独一个开关（如 <code>?cam=director|v6</code>），对比确认后再转正。</p>
+</section>
+
+<section class="col stack" id="order">
+  <h2>接下来的顺序</h2>
+  <ol class="steps">
+    <li><b>参考对照和本计划</b>：已确认（2026-11-12），第 1 条待你看过 A 组。</li>
+    <li><b>搭工程</b>（进行中）：初始化 git，接 pxui 运行时和 platform 层；出浏览器单文件构建，小游戏构建先保证能编译。</li>
+    <li><b>迁规则层</b>：单测带上 piles 用例，机器人打完整场巫妖战、零报错。</li>
+    <li><b>迁定稿模块</b>：骰子、遗物、战斗反馈、结算文字、状态特效。先用一套中性的临时外观跑通，再和这一页的片子逐项对比，不能有退步。</li>
+    <li><b>画面方向</b>：同一场战斗做 3 个差异明显的外观包，同一时刻、同一镜头并排给你挑。</li>
+    <li><b>镜头导演、演出队列、音频</b>：每项强化都放在开关后面。</li>
+    <li><b>自测后给你看</b>：三个尺寸截图、关键时刻录屏、逐条核对历史问题清单、查 draw call / 帧率 / 包体，更新到同一个私有链接，CLAUDE.md 登记并打 tag。</li>
+  </ol>
+</section>
+
+<p class="foot col">录制说明：本机 GPU 这段时间被一个 Python 计算任务占满（应该是语音生成），游戏实时帧率在 15–60fps 之间波动。所以这些片子是用虚拟时钟逐帧录的：游戏每帧固定走 1/60 秒，录完按原速回放，节奏和你在流畅机器上看到的一样。片子都没有声音。</p>
+
+</div>
+
+<script>
+(() => {
+  const rates = [0.25, 0.5, 1];
+  document.querySelectorAll('figure.clip').forEach(fig => {
+    const v = fig.querySelector('video'), box = fig.querySelector('.speeds');
+    if (!v || !box) return;
+    const btns = rates.map(r => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = r + '×'; b.setAttribute('aria-pressed', r === 1 ? 'true' : 'false');
+      b.setAttribute('aria-label', '以 ' + r + ' 倍速播放');
+      b.addEventListener('click', () => { v.playbackRate = r; btns.forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); if (v.paused) v.play().catch(() => {}); });
+      box.appendChild(b); return b;
+    });
+    v.addEventListener('ratechange', () => btns.forEach(x => x.setAttribute('aria-pressed', +x.textContent.replace('×', '') === v.playbackRate ? 'true' : 'false')));
+  });
+})();
+</script>

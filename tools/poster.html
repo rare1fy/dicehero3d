@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>poster grabber</title>
+<!-- Grabs frames from webm clips for <video poster>. Serve the project root over http (canvas taints on file://), then drive with cap.mjs:
+     node tools/cap.mjs "http://127.0.0.1:8765/tools/poster.html?base=../docs/refs/clips/&clips=a,b&t=0.3,0.6" <out> '[{"waitFor":"window.__done","ms":60000},{"json":"window.__out","file":"posters.json"}]'
+     window.__out = { clip: [jpegDataURL per t] }  (t is a fraction of the clip's duration) -->
+<body style="margin:0;background:#111">
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const base = q.get('base') || '../docs/refs/clips/';
+  const clips = (q.get('clips') || '').split(',').filter(Boolean);
+  const ts = (q.get('t') || '0.5').split(',').map(Number);
+  const out = {};
+  const seek = (v, t) => new Promise(res => { v.addEventListener('seeked', res, { once: true }); v.currentTime = t; });
+  for (const c of clips) {
+    const v = document.createElement('video'); v.muted = true; v.preload = 'auto'; v.src = URL.createObjectURL(await (await fetch(base + c + '.webm')).blob());   // blob: so seeking works even when the server ignores Range
+    await new Promise((res, rej) => { v.addEventListener('loadeddata', res, { once: true }); v.addEventListener('error', () => rej(new Error(c)), { once: true }); });
+    const d = isFinite(v.duration) ? v.duration : 5;
+    const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight; const g = cv.getContext('2d');
+    out[c] = [];
+    for (const f of ts) { await seek(v, Math.min(d - 0.05, f * d)); g.drawImage(v, 0, 0); out[c].push(cv.toDataURL('image/jpeg', 0.82)); }
+  }
+  window.__out = out; window.__done = true;
+})().catch(e => { window.__out = { error: String(e) }; window.__done = true; });
+</script>

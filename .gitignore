@@ -1,0 +1,8 @@
+node_modules/
+dist/
+out/
+# reference archives and recordings: large, read-only, kept on disk only
+_ref/
+docs/refs/clips/
+*.log
+.vite/
