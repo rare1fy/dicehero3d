@@ -65,7 +65,7 @@ class Bar {
   setVisible(v: boolean) { for (const m of [this.bg.mesh, this.ghost.mesh, this.fill.mesh, this.hi.mesh, this.armor.mesh, this.label.mesh, this.marker?.mesh]) if (m) m.visible = v; this.bg.visible = v; this.label.visible = v; }
 }
 
-export interface ButtonState { label: string; sub?: string; enabled: boolean; tone: 'primary' | 'teal' | 'stone' }
+export interface ButtonState { label: string; sub?: string; enabled: boolean; tone: 'primary' | 'teal' | 'stone'; key?: string }
 class Button {
   pane: Pane; state: ButtonState = { label: '', enabled: true, tone: 'stone' }; press = 0; onTap: () => void = () => {}; r: Rect = { x: 0, y: 0, w: 100, h: 60 };
   constructor(private hud: Hud) { this.pane = new Pane(hud, 20); }
@@ -83,6 +83,7 @@ class Button {
       roundRect(g, 4 * k, 3 * k, W - 8 * k, (H - d) * 0.42, 9 * k); g.fillStyle = 'rgba(255,255,255,0.14)'; g.fill();
       const main: Span[] = [{ t: s.label }], st: TextStyle = { size: s.sub ? 19 : 21, color: s.enabled ? '#fffaf0' : '#8a8690', stroke: 'rgba(20,8,4,0.9)', strokeW: 4, weight: 900 };
       const m = measure(main, st); drawSpans(g, main, st, W / 2 - (m.w * k) / 2, (s.sub ? (H - d) * 0.52 : (H - d) * 0.64) , k);
+      if (s.key) { const ks: TextStyle = { size: 10, color: s.enabled ? '#fff2d0' : '#77737c', weight: 800 }, kt: Span[] = [{ t: s.key }], km = measure(kt, ks); roundRect(g, W - (km.w + 14) * k, 5 * k, (km.w + 10) * k, 16 * k, 5 * k); g.fillStyle = 'rgba(0,0,0,0.45)'; g.fill(); drawSpans(g, kt, ks, W - (km.w + 9) * k, 17 * k, k); }
       if (s.sub) { const sub: Span[] = [{ t: s.sub }], ss: TextStyle = { size: 12, color: s.enabled ? tones[2] : '#77737c', weight: 700, stroke: 'rgba(0,0,0,0.7)', strokeW: 3 }; const m2 = measure(sub, ss); drawSpans(g, sub, ss, W / 2 - (m2.w * k) / 2, (H - d) * 0.86, k); }
     });
     this.pane.at(r.x, r.y);
@@ -122,6 +123,8 @@ export class Hud {
   uiOn = false;
   /** column: the phone-width strip the HUD lays out in (centred on desktop) */
   col = { x: 0, w: 1 };
+  /** landscape: console / landscape-mobile arrangement (boss bar top-centre, hero bottom-left, action cluster bottom-right) */
+  landscape = false;
   constructor() {
     this.boss = { name: new Pane(this, 15), bar: new Bar(this, '#b8283a', { marker: 0.4 }), status: new Pane(this, 15), on: false };
     this.hero = { bar: new Bar(this, '#d83a30'), info: new Pane(this, 15) };
@@ -132,6 +135,8 @@ export class Hud {
   resize(w: number, h: number, dpr: number, safeTop = 0, safeBottom = 0) {
     this.w = w; this.h = h; this.dpr = Math.min(2, dpr); this.safeTop = safeTop; this.safeBottom = safeBottom;
     this.cam.left = 0; this.cam.right = w; this.cam.top = 0; this.cam.bottom = -h; this.cam.updateProjectionMatrix();
+    this.landscape = w / Math.max(1, h) > 1.15;
+    if (this.landscape) { this.layoutLandscape(); return; }
     this.col.w = Math.min(w, 460); this.col.x = (w - this.col.w) / 2;
     const c = this.col, top = 10 + safeTop, bot = h - 12 - safeBottom;
     this.boss.bar.layout({ x: c.x + 24, y: top + 30, w: c.w - 48, h: 14 });
@@ -142,19 +147,34 @@ export class Hud {
     this.hero.bar.layout({ x: c.x + 16, y: bot - 66 - 52, w: c.w * 0.46, h: 14 });
     this.repaintStatic();
   }
+  private layoutLandscape() {
+    const w = this.w, h = this.h, top = 12 + this.safeTop, bot = h - 16 - this.safeBottom, R = w - 20, L = 20;
+    const bw = Math.min(640, w * 0.46); this.col = { x: (w - bw) / 2, w: bw };
+    this.boss.bar.layout({ x: this.col.x, y: top + 30, w: bw, h: 16 });
+    const pw = Math.min(170, w * 0.13), ph = 86, sw = Math.min(124, w * 0.1), sh = 64;
+    this.buttons.play.layout({ x: R - pw, y: bot - ph, w: pw, h: ph });
+    this.buttons.reroll.layout({ x: R - pw - 14 - sw, y: bot - sh, w: sw, h: sh });
+    this.buttons.end.layout({ x: R - pw, y: bot - ph - 14 - 54, w: pw, h: 54 });
+    this.hero.bar.layout({ x: L + 4, y: bot - 30, w: Math.min(340, w * 0.25), h: 18 });
+    this.repaintStatic();
+  }
+  /** the bottom-centre slot of the hand preview in landscape */
+  private previewRect() { const W = Math.min(560, this.w * 0.42); return { x: (this.w - W) / 2, y: this.h - 16 - this.safeBottom - 62, w: W }; }
   private bossName = ''; private bossTitle = '';
   setBoss(on: boolean, name = '', title = '') { this.boss.on = on; this.bossName = name; this.bossTitle = title; this.repaintStatic(); }
   private repaintStatic() {
     const c = this.col, top = 10 + this.safeTop;
     const sp: Span[] = [{ t: this.bossName, c: '#f6e6c8', s: 18 }, { t: this.bossTitle ? '  ' + this.bossTitle : '', c: '#a898c0', s: 12, w: 700 }];
-    this.boss.name.paint(JSON.stringify(sp) + c.w, c.w - 48, 26, (g, k) => drawSpans(g, sp, { stroke: 'rgba(0,0,0,0.9)', strokeW: 4, shadow: '#000' }, 0, 21 * k, k));
-    this.boss.name.at(c.x + 24, top);
+    const inset = this.landscape ? 0 : 24, sw = c.w - inset * 2;
+    if (this.landscape) { const m = measure(sp, {}); this.boss.name.paint(JSON.stringify(sp) + c.w + 'L', sw, 26, (g, k) => drawSpans(g, sp, { stroke: 'rgba(0,0,0,0.9)', strokeW: 4, shadow: '#000' }, ((sw - m.w) / 2) * k, 21 * k, k)); }
+    else this.boss.name.paint(JSON.stringify(sp) + c.w, sw, 26, (g, k) => drawSpans(g, sp, { stroke: 'rgba(0,0,0,0.9)', strokeW: 4, shadow: '#000' }, 0, 21 * k, k));
+    this.boss.name.at(c.x + inset, top);
   }
   setBossBar(hp: number, max: number, armor: number, status: string) {
     this.boss.bar.set(hp, max, armor);
-    const c = this.col, sp: Span[] = [{ t: status, c: '#d8c8f0' }];
-    this.boss.status.paint('s' + status + c.w, c.w - 48, 18, (g, k) => drawSpans(g, sp, { size: 12, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }, 0, 13 * k, k));
-    this.boss.status.at(c.x + 24, 10 + this.safeTop + 48);
+    const c = this.col, sp: Span[] = [{ t: status, c: '#d8c8f0' }], inset = this.landscape ? 0 : 24, sw = c.w - inset * 2, m = measure(sp, { size: 12 });
+    this.boss.status.paint('s' + status + c.w + (this.landscape ? 'L' : ''), sw, 18, (g, k) => drawSpans(g, sp, { size: 12, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }, this.landscape ? ((sw - m.w) / 2) * k : 0, 13 * k, k));
+    this.boss.status.at(c.x + inset, (this.landscape ? 12 : 10) + this.safeTop + (this.landscape ? 52 : 48));
   }
   setHero(hp: number, max: number, armor: number, lines: Span[]) {
     this.hero.bar.set(hp, max, armor);
@@ -166,23 +186,23 @@ export class Hud {
     const sp: Span[] = [{ t: '骰袋 ', c: '#a898c0' }, { t: String(bag), c: '#f4e8d0' }, { t: '   弃骰 ', c: '#a898c0' }, { t: String(disc), c: '#f4e8d0' }];
     const r = this.hero.bar.r;
     this.piles.paint(JSON.stringify(sp), 140, 20, (g, k) => drawSpans(g, sp, { size: 12, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }, 0, 14 * k, k));
-    this.piles.at(this.col.x + this.col.w - 150, r.y - 4);
+    if (this.landscape) this.piles.at(r.x + r.w + 18, r.y - 2); else this.piles.at(this.col.x + this.col.w - 150, r.y - 4);
   }
   setPreview(lines: Span[][] | null) {
     if (!lines) { this.preview.alpha = Math.max(0, this.preview.alpha); this.previewOn = false; return; }
     this.previewOn = true;
-    const c = this.col, W = c.w - 40;
+    const c = this.col, pr = this.previewRect(), W = this.landscape ? pr.w : c.w - 40;
     this.preview.paint(JSON.stringify(lines) + W, W, 58, (g, k) => {
       roundRect(g, 0, 0, W * k, 58 * k, 12 * k); const gr = g.createLinearGradient(0, 0, 0, 58 * k); gr.addColorStop(0, 'rgba(26,18,40,0.88)'); gr.addColorStop(1, 'rgba(12,8,20,0.88)'); g.fillStyle = gr; g.fill(); g.lineWidth = 1.5 * k; g.strokeStyle = '#b8964e'; g.stroke();
       lines.forEach((ln, i) => { const st: TextStyle = { size: i ? 13 : 20, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }; const m = measure(ln, st); drawSpans(g, ln, st, (W * k) / 2 - (m.w * k) / 2, (i ? 49 : 26) * k, k); });
     });
-    this.preview.at(c.x + 20, this.buttons.play.r.y - 66 - 40);
+    if (this.landscape) this.preview.at(pr.x, pr.y); else this.preview.at(c.x + 20, this.buttons.play.r.y - 66 - 40);
   }
   private previewOn = false;
   setHint(text: string) {
     const sp: Span[] = [{ t: text, c: '#c8bce0' }], m = measure(sp, { size: 12 });
     this.hint.paint('h' + text, m.w + 8, 18, (g, k) => drawSpans(g, sp, { size: 12, stroke: 'rgba(0,0,0,0.9)', strokeW: 3 }, 4 * k, 13 * k, k));
-    this.hint.at(this.w / 2 - this.hint.w / 2, this.buttons.play.r.y - 22);
+    if (this.landscape) this.hint.at(this.w / 2 - this.hint.w / 2, this.previewRect().y - 22); else this.hint.at(this.w / 2 - this.hint.w / 2, this.buttons.play.r.y - 22);
   }
   /** Big centred title with an optional subtitle; slams in, holds, fades. */
   showBanner(title: string, sub = '', hold = 1.2, color: [string, string] = ['#fff2c0', '#e8a040'], yFrac = 0.36) {
@@ -201,7 +221,7 @@ export class Hud {
   subtitle(text: string, life = 2.5, who = '枯骨巫妖') {
     const sp: Span[] = [{ t: who + '  ', c: '#7affb0', s: 13 }, { t: text, c: '#f4ecdc' }], st: TextStyle = { size: 16, stroke: 'rgba(0,0,0,0.95)', strokeW: 4, weight: 700 }, m = measure(sp, st), W = Math.min(this.w - 16, m.w + 40);
     this.subtitleP.paint('st' + text, W, 40, (g, k) => { const gr = g.createLinearGradient(0, 0, W * k, 0); gr.addColorStop(0, 'rgba(6,4,12,0)'); gr.addColorStop(0.15, 'rgba(6,4,12,0.78)'); gr.addColorStop(0.85, 'rgba(6,4,12,0.78)'); gr.addColorStop(1, 'rgba(6,4,12,0)'); g.fillStyle = gr; g.fillRect(0, 0, W * k, 40 * k); drawSpans(g, sp, st, ((W - m.w) / 2) * k, 27 * k, k); });
-    this.subtitleP.at(this.w / 2 - this.subtitleP.w / 2, this.h * 0.6);
+    this.subtitleP.at(this.w / 2 - this.subtitleP.w / 2, this.landscape ? this.h - this.safeBottom - 128 : this.h * 0.6);
     const p = this.subtitleP, seq = ++this.subSeq; anim(0.2, k => { if (seq === this.subSeq) p.alpha = k; }, undefined, { real: true }); setTimeoutReal(life, () => anim(0.4, k => { if (seq === this.subSeq) p.alpha = 1 - k; }, undefined, { real: true }));
   }
   toast(text: string, life = 1.2) {

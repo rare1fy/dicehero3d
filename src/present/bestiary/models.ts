@@ -39,66 +39,91 @@ function claws(v: V, A: Anchors, side: 1 | -1, c: Col, n = 3, len = 2) {
 
 // ================================================================== classes
 function warrior(): V {
-  const v = newChar(), SK = 0xe8a878, SKD = 0xc07c52;
-  const A = biped(v, { skin: SK, legs: 0x5a4636, boots: P.LEATH_D, hips: 0x8a2a2a, belt: P.LEATH_D, torsoW: 10, chestW: 12, torsoH: 7, torsoD: 6, headW: 10, headH: 8, headD: 8, armW: 4, upper: 4, fore: 3, hand: 3, legW: 4, legGap: 1 });
-  // kilt flaps, buckle, one strap down the chest
-  v.part('hips').box(-2, A.hipY - 3, 3, 1, A.hipY - 1, 3, 0x6a1e1e).box(-2, A.hipY - 3, -4, 1, A.hipY - 1, -4, 0x6a1e1e).box(-1, A.hipY + 1, 3, 0, A.hipY + 1, 3, P.GOLD);
-  v.part('chest').box(2, A.torsoY0 + 3, 2, 3, A.torsoY1, 2, P.LEATH).box(2, A.torsoY0 + 3, -3, 3, A.torsoY1, -3, P.LEATH);
-  v.part('spine').box(2, A.torsoY0, 2, 3, A.torsoY0 + 2, 2, P.LEATH);
-  v.part('chest').box(-4, A.torsoY1 - 1, 2, -2, A.torsoY1 - 1, 2, SKD);
-  // fur mantle + horn on the left shoulder, iron cap on the right, bracers
-  v.part('shL').box(5, A.shoulderY - 1, -3, 10, A.shoulderY + 1, 2, 0xe8dcc0).box(8, A.shoulderY + 2, -1, 8, A.shoulderY + 4, -1, P.BONE);
-  v.part('shR').box(-10, A.shoulderY, -2, -6, A.shoulderY + 1, 1, P.IRON_D);
-  for (const s2 of ['foreL', 'foreR']) v.part(s2).box(s2 === 'foreL' ? 6 : -10, A.handY + 3, -2, s2 === 'foreL' ? 9 : -7, A.handY + 4, 1, P.IRON_D);
-  // face: two fierce eyes, woad band, nose, ears
-  eyes(v, A, { y: 3, w: 2, h: 3, gap: 2, brow: 0xb8300e, angry: true });
-  v.part('head').symBox(3, A.headY0 + 3, A.faceZ, 4, A.headY0 + 4, A.faceZ, 0x2a3c8a)
-    .box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 3, A.faceZ + 1, SKD).symBox(5, A.headY0 + 3, 0, 5, A.headY0 + 4, 1, SK);
-  v.paint(c => (c.y >= A.headY0 + 6 && Math.abs(c.x + 0.5) > 2.5 && c.z < A.faceZ) ? SKD : null, 'head');
-  // jaw: a squared auburn beard with one braid
-  v.part('jaw').box(-4, A.headY0, A.faceZ, 3, A.headY0 + 1, A.faceZ + 1, 0x8a3418).box(-3, A.headY0 - 3, A.faceZ, 2, A.headY0 - 1, A.faceZ + 1, 0x8a3418)
-    .box(-1, A.headY0 - 6, A.faceZ + 1, 0, A.headY0 - 4, A.faceZ + 1, 0x5e2010).box(-1, A.headY0 - 5, A.faceZ + 2, 0, A.headY0 - 5, A.faceZ + 2, P.GOLD)
-    .box(-1, A.headY0 + 1, A.faceZ + 1, 0, A.headY0 + 1, A.faceZ + 1, P.DARK).symBox(4, A.headY0, A.faceZ - 2, 4, A.headY0 + 2, A.faceZ, 0x8a3418);
-  // flame mohawk in three bands
-  v.part('hat').box(-1, A.headY1 + 1, -4, 0, A.headY1 + 2, 3, 0xff5a1e).box(-1, A.headY1 + 3, -3, 0, A.headY1 + 3, 2, 0xff8a2a).box(-1, A.headY1 + 4, -2, 0, A.headY1 + 4, 1, 0xffc23a);
-  axe(v, A, { len: 20, blade: 7 });
+  // 嗜血狂战 — a dwarf in heavy plate: horned great-helm open at the face, a braided ginger beard over the breastplate, huge
+  // pauldrons, a red tabard, gauntlets and sabatons, a two-handed axe
+  const v = newChar(), SK = 0xe0a07a, SKD = 0xb87a56, ST = 0x848c9a, STD = 0x4a505c, STL = 0xaab2c0, GOLD = 0xd8a838, RED = 0xa82626, REDD = 0x6e1818, BEARD = 0xa8522a, BEARD_D = 0x76361a;
+  const A = biped(v, { skin: SK, legs: STD, boots: STD, hips: RED, torso: ST, chest: ST, belt: P.LEATH_D, sleeve: STD, fore_: ST, hands: STD, legH: 5, legW: 4, legD: 4, legGap: 1, hipH: 2, torsoH: 7, torsoW: 12, chestW: 14, torsoD: 8, headW: 10, headH: 8, headD: 8, armW: 4, upper: 4, fore: 3, hand: 3 });
+  // tabard down the front and back, gold trim on the breastplate, belt buckle
+  v.part('hips').box(-2, 0, 4, 1, A.hipY + 1, 4, RED).box(-2, 0, 4, 1, 0, 4, GOLD).box(-2, 1, -5, 1, A.hipY + 1, -5, REDD);
+  v.part('spine').box(-6, A.torsoY0, 3, 5, A.torsoY0, 3, GOLD).box(-1, A.torsoY0, 4, 0, A.torsoY0 + 1, 4, GOLD);
+  v.part('chest').box(-7, A.torsoY1, -4, 6, A.torsoY1, 3, STL).box(-1, A.torsoY0 + 4, 4, 0, A.torsoY1 - 1, 4, GOLD);
+  // big layered pauldrons with gold rims and a spike
+  for (const [sh, x0, sx] of [['shL', 7, 1], ['shR', -12, -1]] as Array<[string, number, number]>) {
+    v.part(sh).box(x0, A.shoulderY - 2, -4, x0 + 5, A.shoulderY + 1, 3, ST).box(x0, A.shoulderY - 2, -4, x0 + 5, A.shoulderY - 2, 3, GOLD).box(x0 + 1, A.shoulderY + 2, -3, x0 + 4, A.shoulderY + 2, 2, STL)
+      .box(sx > 0 ? x0 + 3 : x0 + 2, A.shoulderY + 3, -1, sx > 0 ? x0 + 3 : x0 + 2, A.shoulderY + 4, 0, STL);
+  }
+  for (const f of ['foreL', 'foreR']) v.part(f).box(f === 'foreL' ? 7 : -12, A.handY + 3, -3, f === 'foreL' ? 11 : -8, A.handY + 4, 2, ST);
+  for (const l of ['footL', 'footR']) v.part(l).box(l === 'footL' ? 1 : -5, 0, 2, l === 'footL' ? 4 : -2, 0, 3, STL);
+  // face: deep-set eyes under a heavy brow, big nose
+  eyes(v, A, { y: 3, w: 2, h: 2, gap: 2, pupil: 0x3a2a1a, brow: BEARD_D, angry: true });
+  v.part('head').box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 3, A.faceZ + 1, SKD).box(-1, A.headY0 + 1, A.faceZ + 1, 0, A.headY0 + 1, A.faceZ + 1, SKD);
+  // horned great-helm: a steel cap down the sides and back, cheek guards, a nasal, gold band, curving horns (straight runs)
+  v.part('hat').box(-6, A.headY1 - 3, -5, 5, A.headY1 + 1, 4, ST).box(-5, A.headY1 + 2, -4, 4, A.headY1 + 2, 3, STL).box(-6, A.headY1 - 3, 4, 5, A.headY1 - 3, 4, GOLD)
+    .box(-6, A.headY0, -5, -6, A.headY1, 1, ST).box(5, A.headY0, -5, 5, A.headY1, 1, ST).box(-6, A.headY0, -5, 5, A.headY1, -5, ST).box(-1, A.headY0 + 4, A.faceZ + 1, 0, A.headY1 - 3, A.faceZ + 1, STL)
+    .box(-9, A.headY1 - 1, -1, -7, A.headY1, 0, P.BONE).box(-9, A.headY1 + 1, -1, -9, A.headY1 + 4, 0, P.BONE).box(6, A.headY1 - 1, -1, 8, A.headY1, 0, P.BONE).box(8, A.headY1 + 1, -1, 8, A.headY1 + 4, 0, P.BONE);
+  // a great braided ginger beard covering the upper breastplate
+  v.part('jaw').box(-5, A.headY0 - 1, A.faceZ, 4, A.headY0 + 1, A.faceZ + 1, BEARD).box(-4, A.headY0 - 5, A.faceZ, 3, A.headY0 - 2, A.faceZ + 1, BEARD)
+    .box(-3, A.headY0 - 9, A.faceZ + 1, -2, A.headY0 - 6, A.faceZ + 1, BEARD_D).box(1, A.headY0 - 9, A.faceZ + 1, 2, A.headY0 - 6, A.faceZ + 1, BEARD_D)
+    .box(-3, A.headY0 - 10, A.faceZ + 1, -2, A.headY0 - 10, A.faceZ + 1, GOLD).box(1, A.headY0 - 10, A.faceZ + 1, 2, A.headY0 - 10, A.faceZ + 1, GOLD)
+    .box(-1, A.headY0, A.faceZ + 2, 0, A.headY0, A.faceZ + 2, 0x3a1a10).symBox(5, A.headY0 - 1, A.faceZ - 3, 5, A.headY0 + 2, A.faceZ, BEARD);
+  axe(v, A, { len: 20, blade: 8, haft: P.WOOD_D, metal: STD, edge: STL });
+  v.part('weapon').box(A.wR[0], A.wR[1] + 2, A.wR[2] + 14, A.wR[0], A.wR[1] + 3, A.wR[2] + 16, GOLD);
   return v;
 }
 
 function mage(): V {
-  const v = newChar(), SK = 0xf2cfa8, ROBE = 0x3a2a96, ROBE_D = 0x261c6a, HAIR = 0xe6ecf8, STAR = 0xfff2b0;
-  const A = biped(v, { skin: SK, robe: { c: ROBE, flare: 3, trim: P.GOLD, hem: ROBE_D }, torso: ROBE, sleeve: ROBE, fore_: ROBE_D, hands: SK, boots: 0x2a2440, belt: P.GOLD_D, torsoW: 8, chestW: 10, torsoH: 7, torsoD: 6, headW: 10, headH: 9, headD: 9, armW: 3, upper: 3, fore: 4, hand: 2 });
-  v.part('hips').paint(c => (c.x === -1 || c.x === 0) && c.z >= 2 && c.y > 2 ? P.GOLD_D : null, 'hips');
-  for (const [x, y] of [[-4, 6], [3, 4], [-3, 2]]) v.part('hips').box(x, y, 4, x + 1, y + 1, 4, STAR);
-  v.part('chest').box(-4, A.torsoY1, -3, 3, A.torsoY1 + 1, 3, ROBE_D).box(-1, A.torsoY1 - 2, 3, 0, A.torsoY1, 3, P.GOLD).box(-1, A.torsoY1 - 1, 4, 0, A.torsoY1 - 1, 4, 0x8af0ff, 1);
-  eyes(v, A, { y: 3, w: 2, h: 3, gap: 2, pupil: 0x7a5aff, brow: 0xb8c4dc });
-  v.part('head').box(-1, A.headY0 + 1, A.faceZ, 0, A.headY0 + 1, A.faceZ, 0xc06a6a)
-    .box(-5, A.headY0 + 6, A.faceZ, 4, A.headY1, A.faceZ, HAIR).symBox(2, A.headY0 + 6, A.faceZ, 3, A.headY0 + 6, A.faceZ, SK)
-    .box(-6, A.headY0 - 4, -5, 5, A.headY1, -4, HAIR).symBox(5, A.headY0 - 2, -4, 5, A.headY1, 3, HAIR);
-  // a tall hat in four tiers, leaning back, gold band, a glowing star badge
-  v.part('hat').box(-8, A.headY1 + 1, -8, 7, A.headY1 + 1, 7, ROBE_D);
-  tiers(v, 0, A.headY1 + 2, 0, [5, 4, 3, 2, 1], 2, i => (i === 0 ? P.GOLD : ROBE), { dz: -0.8 });
-  v.box(-1, A.headY1 + 4, 5, 0, A.headY1 + 5, 5, 0xfff2a0, 1);
-  // star staff: a crescent and a floating star
-  const top = staff(v, A, { len: 20, wood: 0x8a7aa8, back: 6 });
-  v.part('weapon').box(top[0], top[1] - 2, top[2] - 1, top[0], top[1] + 2, top[2] - 1, P.GOLD).box(top[0], top[1] - 3, top[2], top[0], top[1] - 3, top[2] + 1, P.GOLD).box(top[0], top[1] + 3, top[2], top[0], top[1] + 3, top[2] + 1, P.GOLD)
-    .box(top[0] - 1, top[1] - 1, top[2] + 2, top[0] + 1, top[1] + 1, top[2] + 4, 0xbff4ff, 1);
-  v.part('cape').box(-5, A.hipY - 4, -4, 4, A.torsoY1, -4, ROBE_D).box(-3, A.torsoY1 - 4, -5, -2, A.torsoY1 - 3, -5, STAR, 1).box(1, A.torsoY1 - 9, -5, 2, A.torsoY1 - 8, -5, STAR, 1);
+  // 星界魔导 — an old human archmage: a deep violet hooded robe with silver trim, a long white beard to the belt, white hair from
+  // the hood, bushy brows over arcane-lit eyes, a tall staff crowned with a star crystal
+  const v = newChar(), SK = 0xe8c0a0, SKD = 0xc0967a, ROBE = 0x4a2c8e, ROBE_D = 0x2e1a5e, SIL = 0xd8dce8, WHITE = 0xf2f4f8, ARC = 0x8ae8ff;
+  const A = biped(v, { skin: SK, robe: { c: ROBE, flare: 3, trim: SIL, hem: ROBE_D }, torso: ROBE, chest: ROBE, sleeve: ROBE, fore_: ROBE_D, hands: SK, boots: ROBE_D, belt: 0x6a4a2a, legH: 9, hipH: 2, torsoH: 9, torsoW: 10, chestW: 12, torsoD: 6, headW: 8, headH: 9, headD: 8, armW: 3, upper: 4, fore: 5, hand: 2 });
+  v.part('hips').box(-1, 3, 4, 0, A.hipY + 1, 4, SIL);
+  v.part('chest').box(-6, A.torsoY1, -3, 5, A.torsoY1 + 1, 2, ROBE_D);
+  // wide sleeves flaring at the cuff, silver cuffs
+  for (const f of ['foreL', 'foreR']) { const x0 = f === 'foreL' ? 6 : -10; v.part(f).box(x0, A.handY + 2, -2, x0 + 3, A.handY + 4, 2, ROBE).box(x0, A.handY + 2, -2, x0 + 3, A.handY + 2, 2, SIL); }
+  // face: bushy white brows over glowing arcane eyes, a long nose
+  eyes(v, A, { y: 4, w: 2, h: 1, gap: 2, style: 'glow', glow: ARC });
+  v.part('head').symBox(1, A.headY0 + 5, A.faceZ, 3, A.headY0 + 5, A.faceZ + 1, WHITE).box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 4, A.faceZ + 1, SKD);
+  // the hood: up over the head, a point falling back, silver hem framing the face
+  v.part('hat').box(-5, A.headY0 + 2, -5, 4, A.headY1 + 2, -4, ROBE_D).box(-5, A.headY0 + 2, -4, -5, A.headY1 + 2, A.faceZ, ROBE_D).box(4, A.headY0 + 2, -4, 4, A.headY1 + 2, A.faceZ, ROBE_D)
+    .box(-5, A.headY1 + 1, -4, 4, A.headY1 + 2, A.faceZ, ROBE_D).box(-2, A.headY1 + 3, -5, 1, A.headY1 + 4, -2, ROBE_D).box(-1, A.headY1 + 3, -7, 0, A.headY1 + 3, -6, ROBE_D)
+    .box(-5, A.headY1 + 2, A.faceZ, 4, A.headY1 + 2, A.faceZ, SIL).box(-5, A.headY0 + 2, A.faceZ, -5, A.headY1 + 2, A.faceZ, SIL).box(4, A.headY0 + 2, A.faceZ, 4, A.headY1 + 2, A.faceZ, SIL);
+  // white hair from under the hood
+  v.part('head').box(-4, A.headY0 - 3, A.faceZ - 1, -4, A.headY0 + 3, A.faceZ, WHITE).box(3, A.headY0 - 3, A.faceZ - 1, 3, A.headY0 + 3, A.faceZ, WHITE);
+  // a long white beard down to the belt, in two tiers
+  v.part('jaw').box(-3, A.headY0 - 1, A.faceZ, 2, A.headY0 + 2, A.faceZ + 1, WHITE).box(-3, A.headY0 - 6, A.faceZ, 2, A.headY0 - 2, A.faceZ + 1, WHITE)
+    .box(-2, A.headY0 - 11, A.faceZ, 1, A.headY0 - 7, A.faceZ + 1, WHITE).box(-1, A.headY0 - 12, A.faceZ, 0, A.headY0 - 12, A.faceZ, 0xc8ccd8).box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 2, A.faceZ + 1, 0x8a6a5a);
+  // tall staff: silver bands, a crescent cradle and a star crystal
+  const top = staff(v, A, { len: 24, wood: 0x6a4a3a, back: 8 });
+  v.part('weapon').box(top[0], top[1], top[2] - 8, top[0], top[1], top[2] - 8, SIL).box(top[0], top[1] - 3, top[2] - 1, top[0], top[1] + 3, top[2] - 1, SIL)
+    .box(top[0], top[1] - 3, top[2], top[0], top[1] - 3, top[2] + 1, SIL).box(top[0], top[1] + 3, top[2], top[0], top[1] + 3, top[2] + 1, SIL)
+    .box(top[0] - 1, top[1] - 1, top[2] + 1, top[0] + 1, top[1] + 1, top[2] + 3, ARC, 1).box(top[0], top[1] - 2, top[2] + 2, top[0], top[1] + 2, top[2] + 2, 0xe0faff, 1);
+  // a spellbook on a chain at the hip
+  v.part('hips').box(5, A.hipY - 4, -1, 6, A.hipY - 1, 2, 0x5a2a1a).box(5, A.hipY - 3, 3, 6, A.hipY - 2, 3, 0xe0b040);
   return v;
 }
 
 function rogue(): V {
-  const v = newChar(), SK = 0xe8b088, CLOAK = 0x2e7a46, CLOAK_D = 0x1e5030, LEA = 0x4a3a30;
-  const A = biped(v, { skin: SK, legs: 0x2e2e38, boots: 0x22222a, hips: LEA, torso: LEA, chest: 0x3a4a3a, belt: P.LEATH_D, sleeve: CLOAK_D, fore_: LEA, hands: 0x2a2a30, torsoW: 8, chestW: 10, torsoH: 7, torsoD: 6, headW: 8, headH: 8, headD: 8, armW: 3, upper: 3, fore: 4, hand: 2, legW: 3 });
-  v.part('chest').box(-1, A.torsoY0 + 3, 2, 0, A.torsoY1, 2, P.LEATH_D);
-  v.part('hips').box(3, A.hipY, 3, 4, A.hipY + 1, 3, P.LEATH).box(-5, A.hipY, 3, -4, A.hipY + 1, 3, P.LEATH);
-  hoodShell(v, A, CLOAK, { extra: 1, peak: 2 });
-  eyes(v, A, { y: 3, w: 2, h: 2, gap: 2, pupil: 0x2aa860, brow: 0x1e2a24 });
-  v.part('head').box(-4, A.headY0, A.faceZ, 3, A.headY0 + 2, A.faceZ, 0x1e2a24);
-  v.part('chest').box(-5, A.torsoY1, -3, 4, A.torsoY1 + 1, 2, CLOAK);
-  v.part('cape').box(-2, A.hipY - 6, -4, 1, A.torsoY1, -4, CLOAK).box(-2, A.hipY - 9, -5, -1, A.hipY - 6, -5, CLOAK_D);
-  sword(v, A, { len: 7, blade: 0xd8f0e0, guard: P.IRON_D, curve: 2 });
-  sword(v, A, { len: 7, blade: 0xd8f0e0, guard: P.IRON_D, curve: 2, part: 'offhand', at: A.wL });
+  // 影锋刺客 — a night-elf shinobi: dusky violet skin, long swept ears, a silver top-knot, a black mask and hood-wrap with long green
+  // tails, a dark wrapped gi with green sash and arm wraps, split-toe boots, twin short blades held reversed
+  const v = newChar(), SK = 0x8a7ab8, SKD = 0x6a5a98, GI = 0x23232c, GI_L = 0x34343e, GREEN = 0x2ea860, GREEN_D = 0x1e7a46, SILV = 0xdfe6ee, EYE = 0xf0fff8;
+  const A = biped(v, { skin: SK, legs: GI, boots: 0x16161c, hips: GI, torso: GI, chest: GI_L, belt: GREEN, sleeve: GI, fore_: GI_L, hands: 0x16161c, legH: 9, legW: 3, legD: 3, legGap: 1, hipH: 2, torsoH: 8, torsoW: 8, chestW: 10, torsoD: 6, headW: 8, headH: 8, headD: 8, armW: 3, upper: 4, fore: 4, hand: 2 });
+  // crossed lapels, sash with hanging tails, wrapped shins and forearms
+  v.part('chest').box(-1, A.torsoY0 + 4, 3, 0, A.torsoY1, 3, GREEN_D).box(-5, A.torsoY1, -3, 4, A.torsoY1, 2, GI);
+  v.part('hips').box(2, A.hipY - 4, 3, 3, A.hipY + 1, 3, GREEN).box(-4, A.hipY + 1, 3, 3, A.hipY + 1, 3, GREEN_D);
+  for (const l of ['shinL', 'shinR']) v.part(l).box(l === 'shinL' ? 1 : -4, 3, 2, l === 'shinL' ? 3 : -2, 3, 2, GI_L);
+  for (const f of ['foreL', 'foreR']) v.part(f).box(f === 'foreL' ? 5 : -8, A.handY + 3, -1, f === 'foreL' ? 7 : -6, A.handY + 3, 1, GREEN_D);
+  // shoulder guard on the left
+  v.part('shL').box(5, A.shoulderY - 1, -2, 8, A.shoulderY, 1, GI_L).box(5, A.shoulderY, -2, 8, A.shoulderY, 1, GREEN_D);
+  // head: mask over the lower face, glowing elven eyes, long ears swept back, a hood-wrap with long tails, silver top-knot
+  eyes(v, A, { y: 4, w: 2, h: 1, gap: 2, style: 'glow', glow: EYE, brow: SKD });
+  v.part('head').box(-4, A.headY0, A.faceZ, 3, A.headY0 + 3, A.faceZ, GI).box(-4, A.headY0 + 6, A.faceZ, 3, A.headY1, A.faceZ, GI).box(-5, A.headY0 + 6, -5, 4, A.headY1, A.faceZ - 1, GI)
+    .box(-4, A.headY0 + 6, A.faceZ, 3, A.headY0 + 6, A.faceZ, GREEN)
+    .box(-7, A.headY0 + 4, -2, -5, A.headY0 + 5, 0, SK).box(-9, A.headY0 + 6, -4, -8, A.headY0 + 6, -2, SK).box(4, A.headY0 + 4, -2, 6, A.headY0 + 5, 0, SK).box(7, A.headY0 + 6, -4, 8, A.headY0 + 6, -2, SK);
+  v.part('hat').box(-1, A.headY1 + 1, -3, 0, A.headY1 + 3, -2, SILV).box(-1, A.headY1 + 4, -2, 0, A.headY1 + 4, -2, SILV);
+  v.part('cape').box(-1, A.torsoY1 - 4, -4, 0, A.torsoY1 + 4, -4, GREEN).box(1, A.torsoY1 - 2, -5, 2, A.torsoY1 + 4, -5, GREEN_D).box(-1, A.torsoY1 - 9, -5, 0, A.torsoY1 - 5, -5, GREEN);
+  // twin short blades, reverse grip, a green-wrapped hilt
+  sword(v, A, { len: 8, blade: 0xe6f0f6, guard: 0x16161c, grip: GREEN_D });
+  sword(v, A, { len: 8, blade: 0xe6f0f6, guard: 0x16161c, grip: GREEN_D, part: 'offhand', at: A.wL });
   return v;
 }
 
@@ -141,17 +166,37 @@ function spider(): V {
 }
 
 function treant(): V {
-  const v = newChar(), BK = P.BARK, BD = P.BARK_D, VEIN = 0xb05aff;
-  const A = biped(v, { skin: BK, legs: BD, hips: BK, torso: BK, belt: null, legH: 8, legW: 4, legD: 5, legGap: 1, hipH: 2, torsoH: 9, torsoW: 12, chestW: 14, torsoD: 10, headW: 10, headH: 9, headD: 10, armW: 4, upper: 5, fore: 5, hand: 3, round: 1 });
-  v.paint(c => c.c === BK && c.z >= 4 && (c.x === -4 || c.x === 3) ? BD : null);
-  v.part('chest').box(-2, A.torsoY0 + 5, 5, -2, A.torsoY1, 5, VEIN, 1).box(1, A.torsoY0 + 6, 5, 1, A.torsoY1 - 1, 5, VEIN, 1);
-  v.part('head').symBox(1, A.headY0 + 4, A.faceZ, 3, A.headY0 + 6, A.faceZ, P.DARK).symBox(2, A.headY0 + 5, A.faceZ, 2, A.headY0 + 5, A.faceZ, 0xc8ff40, 1)
-    .box(-3, A.headY0 + 1, A.faceZ, 2, A.headY0 + 2, A.faceZ, P.DARK).symBox(1, A.headY0 + 7, A.faceZ, 4, A.headY0 + 7, A.faceZ + 1, BD);
-  // crown: three straight broken branches with tidy leaf blocks
-  v.part('hat').box(-4, A.headY1 + 1, -1, -3, A.headY1 + 6, 0, BD).box(2, A.headY1 + 1, -2, 3, A.headY1 + 8, -1, BD).box(-1, A.headY1 + 1, 2, 0, A.headY1 + 4, 3, BD);
-  bush(v, -7, A.headY1 + 6, -3, 6, 4, 6, P.MOSS_D, 0x6a8a3a); bush(v, 0, A.headY1 + 8, -4, 7, 4, 6, P.MOSS_D, 0x6a8a3a); bush(v, -3, A.headY1 + 4, 1, 4, 3, 4, 0x5a3a6a, 0x8a5aa8);
-  for (const [s2, sx] of [['handL', 1], ['handR', -1]] as Array<[string, number]>) { const x0 = sx > 0 ? A.chestW / 2 : -A.chestW / 2 - 4; v.part(s2).box(x0, A.handY - 3, -1, x0, A.handY - 1, -1, BD).box(x0 + 3, A.handY - 3, -1, x0 + 3, A.handY - 1, -1, BD).box(x0 + 1, A.handY - 2, 1, x0 + 2, A.handY - 1, 1, BD); }
-  v.part('shL').box(7, A.shoulderY - 1, -3, 11, A.shoulderY, 2, P.MOSS); v.part('shR').box(-12, A.shoulderY - 1, -2, -8, A.shoulderY, 1, P.MOSS_D);
+  // 腐化树人 — a withered, evil tree-thing: grey-black dead wood split by sickly violet rot, a hunched trunk with a jagged maw of
+  // splinter teeth and two hollow sockets burning toxic yellow, long thorned branch-arms ending in claw twigs, a crown of bare
+  // broken spikes hung with grey moss, roots for feet
+  const v = newChar(), W = 0x3e3632, WD = 0x272120, WL = 0x5a504a, ROT = 0x9a3ad8, MOSS = 0x6a7058, EYE = 0xd8ff3a;
+  const A = biped(v, { skin: W, legs: WD, boots: WD, hips: W, torso: W, chest: W, belt: null, legH: 8, legW: 4, legD: 5, legGap: 1, hipH: 2, torsoH: 10, torsoW: 12, chestW: 14, torsoD: 10, headW: 12, headH: 10, headD: 10, headZ: 1, armW: 3, upper: 7, fore: 7, hand: 3, round: 1 });
+  // splits in the bark with violet rot showing through, a few lighter dead-wood strips
+  v.paint(c => c.c === W && c.z >= 4 && (c.x === -5 || c.x === 4) ? WD : null);
+  v.part('chest').box(-2, A.torsoY0 + 4, 5, -2, A.torsoY1, 5, ROT, 1).box(2, A.torsoY0 + 6, 5, 2, A.torsoY1 - 1, 5, ROT, 1).box(-6, A.torsoY0 + 5, 2, -6, A.torsoY1, 2, WL);
+  v.part('spine').box(-1, A.torsoY0, 5, -1, A.torsoY0 + 3, 5, ROT, 1);
+  // face: deep hollow sockets with toxic embers, a heavy brow ridge, a jagged maw of splinters
+  v.part('head').symBox(2, A.headY0 + 5, A.faceZ, 4, A.headY0 + 7, A.faceZ, P.DARK).symBox(3, A.headY0 + 6, A.faceZ, 3, A.headY0 + 6, A.faceZ, EYE, 1)
+    .symBox(1, A.headY0 + 8, A.faceZ + 1, 5, A.headY0 + 8, A.faceZ + 1, WD).box(-1, A.headY0 + 7, A.faceZ + 1, 0, A.headY0 + 7, A.faceZ + 1, WD)
+    .box(-4, A.headY0 + 1, A.faceZ, 3, A.headY0 + 3, A.faceZ, P.DARK).box(-4, A.headY0 + 3, A.faceZ, 3, A.headY0 + 3, A.faceZ, P.DARK);
+  for (const x of [-4, -2, 1, 3]) v.part('head').box(x, A.headY0 + 3, A.faceZ, x, A.headY0 + 3, A.faceZ, WL);
+  for (const x of [-3, 0, 2]) v.part('head').box(x, A.headY0 + 1, A.faceZ, x, A.headY0 + 1, A.faceZ, WL);
+  // crown of bare broken spikes, grey moss hanging
+  v.part('hat').box(-5, A.headY1 + 1, -2, -4, A.headY1 + 7, -1, WD).box(-6, A.headY1 + 7, -2, -6, A.headY1 + 9, -1, WD)
+    .box(3, A.headY1 + 1, -3, 4, A.headY1 + 9, -2, WD).box(5, A.headY1 + 9, -3, 5, A.headY1 + 11, -2, WD)
+    .box(-1, A.headY1 + 1, 1, 0, A.headY1 + 5, 2, WD).box(-2, A.headY1 + 5, 1, -2, A.headY1 + 6, 2, WD);
+  v.part('head').box(-6, A.headY0 - 2, -2, -6, A.headY1 - 2, -1, MOSS).box(5, A.headY0, 0, 5, A.headY1 - 3, 1, MOSS);
+  // long branch arms with thorns and claw twigs
+  for (const [arm, fore, hand, sx] of [['armL', 'foreL', 'handL', 1], ['armR', 'foreR', 'handR', -1]] as Array<[string, string, string, number]>) {
+    const x0 = sx > 0 ? A.chestW / 2 : -A.chestW / 2 - 3;
+    v.part(arm).box(sx > 0 ? x0 + 3 : x0 - 1, A.shoulderY - 4, 0, sx > 0 ? x0 + 3 : x0 - 1, A.shoulderY - 4, 0, WD);
+    v.part(fore).box(sx > 0 ? x0 + 3 : x0 - 1, A.handY + 5, 1, sx > 0 ? x0 + 3 : x0 - 1, A.handY + 5, 1, WD);
+    v.part(hand).box(x0, A.handY - 4, 1, x0, A.handY - 1, 1, WD).box(x0 + 2, A.handY - 5, 1, x0 + 2, A.handY - 1, 1, WD).box(x0 + 1, A.handY - 3, -1, x0 + 1, A.handY - 1, -1, WD);
+  }
+  v.part('shL').box(7, A.shoulderY, -2, 9, A.shoulderY + 2, 1, WD).box(8, A.shoulderY + 3, -1, 8, A.shoulderY + 4, -1, WD);
+  v.part('shR').box(-10, A.shoulderY, -2, -8, A.shoulderY + 1, 1, WD);
+  // root feet spreading forward
+  for (const f of ['footL', 'footR']) { const x0 = f === 'footL' ? 1 : -5; v.part(f).box(x0 - 1, 0, 2, x0 - 1, 0, 4, WD).box(x0 + 4, 0, 2, x0 + 4, 0, 4, WD); }
   return v;
 }
 
@@ -305,8 +350,9 @@ function phantomHunter(): V {
   v.part('chest').box(2, A.torsoY0 + 1, -5, 4, A.torsoY1 + 2, -4, P.LEATH_D).box(2, A.torsoY1 + 3, -5, 4, A.torsoY1 + 3, -5, GH, 1);
   // longbow in the left hand: three straight segments per limb
   v.part('offhand'); const [bx, by] = A.wL;
-  v.box(bx, by, -2, bx, by, 2, P.LEATH_D).box(bx, by + 1, -7, bx, by + 1, -3, 0x4a6a74).box(bx, by + 1, 3, bx, by + 1, 7, 0x4a6a74).box(bx, by, -11, bx, by, -8, 0x4a6a74).box(bx, by, 8, bx, by, 11, 0x4a6a74);
-  v.box(bx, by - 1, -10, bx, by - 1, 10, 0xa8c8d0);
+  // limbs bow toward −y (forward once held up), the string runs on the +y side (toward the archer)
+  v.box(bx, by, -2, bx, by, 2, P.LEATH_D).box(bx, by - 1, -7, bx, by - 1, -3, 0x4a6a74).box(bx, by - 1, 3, bx, by - 1, 7, 0x4a6a74).box(bx, by, -11, bx, by, -8, 0x4a6a74).box(bx, by, 8, bx, by, 11, 0x4a6a74);
+  v.box(bx, by + 1, -10, bx, by + 1, 10, 0xa8c8d0);
   return v;
 }
 
@@ -402,9 +448,9 @@ function treeKing(): V {
 }
 
 export const ROSTER: ModelDef[] = [
-  { id: 'warrior', name: '嗜血狂战', group: '职业', role: '铁血征服者', line: '以血换伤，一击致命。嗜血越多，越凶。', kind: 'biped', attack: 'swing', build: warrior },
-  { id: 'mage', name: '星界魔导', group: '职业', role: '星界禁咒师', line: '耐心吟唱2-3回合，攒齐完美手牌一波超载。', kind: 'biped', attack: 'cast', build: mage },
-  { id: 'rogue', name: '影锋刺客', group: '职业', role: '暗影连击者', line: '一回合出牌2次，连击层层加成。', kind: 'biped', attack: 'dual', build: rogue },
+  { id: 'warrior', name: '嗜血狂战', group: '职业', role: '铁血征服者 · 矮人', line: '以血换伤，一击致命。嗜血越多，越凶。', kind: 'biped', attack: 'swing', build: warrior },
+  { id: 'mage', name: '星界魔导', group: '职业', role: '星界禁咒师 · 人类', line: '耐心吟唱2-3回合，攒齐完美手牌一波超载。', kind: 'biped', attack: 'cast', build: mage },
+  { id: 'rogue', name: '影锋刺客', group: '职业', role: '暗影连击者 · 暗夜精灵', line: '一回合出牌2次，连击层层加成。', kind: 'biped', attack: 'dual', build: rogue },
   { id: 'forest_ghoul', name: '食尸鬼', group: '普通', role: '战士型', line: '嘎嘎……新鲜的肉……', kind: 'biped', attack: 'claw', build: ghoul },
   { id: 'forest_spider', name: '剧毒蛛母', group: '普通', role: '游侠型', line: '嘶嘶……陷阱已经布好了……', kind: 'spider', attack: 'strike', build: spider },
   { id: 'forest_treant', name: '腐化树人', group: '普通', role: '守护型', line: '这片……森林……不欢迎你……', kind: 'biped', attack: 'slam', build: treant },

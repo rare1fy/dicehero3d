@@ -12,6 +12,7 @@ import { Vector3 } from 'three';
 import { actorGallery } from './present/actors/gallery';
 import { voxelCast } from './present/actors/voxcast';
 import { bestiaryViewer } from './present/bestiary/viewer';
+import { sceneViewer } from './present/scenes/viewer';
 import { bestiaryCast } from './present/bestiary/battle';
 import { legoCast } from './present/bestiary/lego';
 import { initLegoEnv, legoEnvTex } from './present/look/legokit';
@@ -53,6 +54,11 @@ Promise.resolve().then(() => {
   // the voxel graveyard + the bestiary cast (#classic: the smooth graveyard with the show-04 cast, for comparison)
   const entry0 = (import.meta as unknown as { env: Record<string, string | undefined> }).env.VITE_ENTRY;
   const classic = hash === 'classic', brick = hash === 'brick' || entry0 === 'brick', fig = hash === 'fig' || entry0 === 'fig';
+  if (entry0 === 'scenes' || hash === 'scenes') {   // the scene browser builds its own stages (no default arena)
+    G.__sv = sceneViewer();
+    gfx.start(() => {}, () => { frames++; });
+    dh.ready(); return;
+  }
   if (brick || fig) { initLegoEnv(gfx.renderer); setFigEnv(legoEnvTex()); GRADE.bloomThreshold = 1.15; }   // white plastic should shine, not bloom
   // toy bricks belong in the smooth graveyard; the voxel cast in the voxel one
   env = buildEnv(null, { voxel: !classic && !brick && !fig });

@@ -67,11 +67,64 @@ export class BattleShow {
     this.hud.buttons.reroll.onTap = () => this.act('reroll');
     this.hud.buttons.play.onTap = () => this.act('play');
     this.hud.buttons.end.onTap = () => this.act('end');
-    platform.onPointer(ev => this.pointer(ev.type, ev.x, ev.y));
+    platform.onPointer(ev => { if (ev.type === 'down') this.cursorOn = false; return this.pointer(ev.type, ev.x, ev.y); });
+    this.bindKeys();
     this.lich.root.visible = false; this.hero.place(HERO_POS.clone().add(V3(0, 0, 4)), Math.PI);
     this.resize(); platform.onResize(() => this.resize());
   }
-  resize() { const s = this.platform.canvasSize(), sa = this.platform.safeArea(); this.hud.resize(s.w, s.h, this.platform.dpr(), sa.top, sa.bottom); this.relics.resize(s.w, s.h, this.hud.col, 10 + sa.top); }
+  resize() {
+    const s = this.platform.canvasSize(), sa = this.platform.safeArea(); this.hud.resize(s.w, s.h, this.platform.dpr(), sa.top, sa.bottom);
+    const L = this.hud.landscape;
+    this.relics.resize(s.w, s.h, L ? { x: 0, w: 300 } : this.hud.col, L ? 64 + sa.top : 10 + sa.top);
+    // landscape: a wider, slightly lower battle framing (the HUD sits in the corners, not in a column under the field)
+    SHOTS.battle = L ? staticShot(V3(0.3, 12.8, 14.2), V3(0, -0.6, -2.4), 42) : staticShot(V3(0.6, 12.2, 11.8), V3(-0.1, 0.8, -0.6), 46);
+    SHOTS.enemy = L ? staticShot(V3(1.4, 11.4, 13.0), V3(-0.2, 0.4, -2.8), 40) : staticShot(V3(1.6, 10.0, 10.2), V3(-0.4, 1.2, -0.6), 44);
+    if (this.stage === 'battle' && !this.busy) shot('battle', SHOTS.battle, { speed: 4 });
+  }
+
+  // ------------------------------------------------------------ keyboard and gamepad (console-style): a cursor walks the dice
+  private cursor = -1; private cursorOn = false; private padPrev: boolean[] = []; private padRepeat = 0;
+  private restDice() { return [...this.dice.values()].filter(d => d.mode === 'rest' && d.uid != null).sort((a, b) => a.home.x - b.home.x || a.home.z - b.home.z); }
+  private input(k: 'left' | 'right' | 'toggle' | 'play' | 'reroll' | 'end' | 'target' | 'clear' | 'any') {
+    if (this.stage === 'title') { void this.intro(); return; }
+    if (this.stage === 'intro') { FX.speed = 3; return; }
+    if (this.stage === 'over') { if (k === 'play' || k === 'toggle') this.restart(); return; }
+    if (this.stage === 'reward') {
+      if (k === 'left' || k === 'right') { this.cursor = ((this.cursor < 0 ? 0 : this.cursor) + (k === 'right' ? 1 : this.rewardModels.length - 1)) % Math.max(1, this.rewardModels.length); cue('click'); }
+      else if ((k === 'toggle' || k === 'play') && this.rewardModels.length) void this.pickReward(this.rewardModels[Math.max(0, this.cursor)]);
+      return;
+    }
+    if (this.stage !== 'battle' || this.busy || this.b.s.phase !== 'player') return;
+    const ds = this.restDice();
+    if (k === 'left' || k === 'right') { if (!ds.length) return; this.cursorOn = true; this.cursor = this.cursor < 0 ? 0 : (this.cursor + (k === 'right' ? 1 : ds.length - 1)) % ds.length; cue('click', 0.3); return; }
+    if (k === 'toggle') { if (!ds.length) return; this.cursorOn = true; if (this.cursor < 0) this.cursor = 0; const d = ds[Math.min(this.cursor, ds.length - 1)]; this.setSel(d, !this.sel.includes(d.uid!)); return; }
+    if (k === 'clear') { for (const d of ds) if (this.sel.includes(d.uid!)) this.setSel(d, false); return; }
+    if (k === 'target') { const alive = [...this.foes.keys()].filter(u => { const e = this.b.enemy(u); return e && !e.dead; }); if (!alive.length) return; const i = alive.indexOf(this.b.s.targetUid ?? -1); this.b.s.targetUid = alive[(i + 1) % alive.length]; cue('click'); this.refresh(); return; }
+    if (k === 'play' || k === 'reroll' || k === 'end') this.act(k);
+  }
+  private bindKeys() {
+    if (typeof window === 'undefined' || !window.addEventListener) return;
+    window.addEventListener('keydown', e => {
+      const m: Record<string, Parameters<BattleShow['input']>[0]> = { ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', Enter: 'toggle', ArrowUp: 'toggle', ' ': 'play', r: 'reroll', R: 'reroll', e: 'end', E: 'end', Tab: 'target', Escape: 'clear' };
+      const k = m[e.key]; if (k) { e.preventDefault(); this.input(k); return; }
+      const n = parseInt(e.key, 10); if (n >= 1 && n <= 9 && this.stage === 'battle') { const ds = this.restDice(); if (ds[n - 1]) { this.cursor = n - 1; this.cursorOn = true; this.input('toggle'); } }
+    });
+  }
+  private pollPad(rdt: number) {
+    const gp = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads()[0] : null; if (!gp) return;
+    const pr = gp.buttons.map(b => b.pressed), edge = (i: number) => pr[i] && !this.padPrev[i];
+    if (edge(0)) this.input('toggle'); if (edge(1)) this.input('clear'); if (edge(2)) this.input('reroll'); if (edge(3)) this.input('play');
+    if (edge(4)) this.input('target'); if (edge(5)) this.input('end'); if (edge(9)) this.input('any'); if (edge(14)) this.input('left'); if (edge(15)) this.input('right');
+    const ax = gp.axes[0] ?? 0; this.padRepeat -= rdt;
+    if (Math.abs(ax) > 0.55 && this.padRepeat <= 0) { this.input(ax > 0 ? 'right' : 'left'); this.padRepeat = 0.22; } else if (Math.abs(ax) < 0.3) this.padRepeat = 0;
+    this.padPrev = pr;
+  }
+  /** the die under the cursor rises a little and glows cold blue (selected dice keep their gold) */
+  private drawCursor() {
+    if (!this.cursorOn || this.stage !== 'battle') return;
+    const ds = this.restDice();
+    ds.forEach((d, i) => { const on = i === this.cursor && !this.busy, sel = this.sel.includes(d.uid!); if (sel) return; d.lift = on ? 0.4 : 0; d.glow = on ? 0.7 : 0; if (on) d.glowCol.set(0x7ad8ff); });
+  }
 
   // ------------------------------------------------------------ title and intro
   title() {
@@ -468,9 +521,10 @@ export class BattleShow {
     const b = this.b, can = on && this.stage === 'battle' && !this.busy && b?.s.phase === 'player' && !b.s.result;
     if (this.stage === 'over') { this.hud.buttons.play.set({ label: playLabel, enabled: true, tone: 'primary' }); this.hud.buttons.reroll.set({ label: '重投', enabled: false, tone: 'teal' }); this.hud.buttons.end.set({ label: '结束回合', enabled: false, tone: 'stone' }); return; }
     const cost = b ? b.rerollHpCost() : 0;
-    this.hud.buttons.reroll.set({ label: '重投', sub: cost === 0 ? '免费' : cost < 0 ? '不可' : `生命 -${cost}`, enabled: can && this.sel.length > 0 && cost >= 0, tone: 'teal' });
-    this.hud.buttons.play.set({ label: playLabel, enabled: can && this.sel.length > 0, tone: 'primary' });
-    this.hud.buttons.end.set({ label: '结束回合', enabled: can, tone: 'stone' });
+    const L = this.hud.landscape;
+    this.hud.buttons.reroll.set({ label: '重投', sub: cost === 0 ? '免费' : cost < 0 ? '不可' : `生命 -${cost}`, enabled: can && this.sel.length > 0 && cost >= 0, tone: 'teal', key: L ? 'R · X' : undefined });
+    this.hud.buttons.play.set({ label: playLabel, enabled: can && this.sel.length > 0, tone: 'primary', key: L ? '空格 · Y' : undefined });
+    this.hud.buttons.end.set({ label: '结束回合', enabled: can, tone: 'stone', key: L ? 'E · RB' : undefined });
   }
 
   refresh() {
@@ -501,7 +555,7 @@ export class BattleShow {
       if (pv.skipOnPlay) tags.push({ t: '多选普攻：骰子特效不生效', c: '#a898c0' });
       this.hud.setPreview([[{ t: handDisp(pv.hands as HandResult) + '   ', c: '#ffe0a0' }, { t: '预计伤害 ', c: '#c8bce0', s: 13 }, { t: String(pv.damage), c: '#ffd04a', s: 24 }], tags.length ? tags : [{ t: ' ', c: '#fff' }]]);
     } else this.hud.setPreview(null);
-    this.hud.setHint(this.stage !== 'battle' || s.result ? '' : this.busy ? '' : this.sel.length ? '出牌攻击，或重投选中的骰子' : '点选骰子 · 按住滑过多选');
+    this.hud.setHint(this.stage !== 'battle' || s.result ? '' : this.busy ? '' : this.hud.landscape ? (this.sel.length ? '出牌攻击，或重投选中的骰子 · Tab 换目标' : '点选骰子 · ←→ 移动  回车/A 选骰') : this.sel.length ? '出牌攻击，或重投选中的骰子' : '点选骰子 · 按住滑过多选');
     this.setButtons(true, '出牌');
     // low HP: music closes in, hero pants
     const lowK = Math.max(0, Math.min(1, (0.35 - p.hp / p.maxHp) / 0.25)); this.hero.lowHp = lowK; this.hero.breath = 1 + lowK * 1.5; audio.muffle(lowK * 0.7);
@@ -510,6 +564,7 @@ export class BattleShow {
 
   // ------------------------------------------------------------ frame + input
   private frame(dt: number, rdt: number) {
+    this.pollPad(rdt); this.drawCursor();
     this.hero.update(dt); if (this.lich.root.visible) this.lich.update(dt); for (const a of this.foes.values()) if (a !== this.lich) a.update(dt);
     this.hud.update(rdt); this.relics.update(rdt); this.counter.follow();
     for (const m of this.rewardModels) { m.rotation.y += rdt * 1.2; m.position.y = (m.userData.y ?? 2) + Math.sin(clock.rtime * 2 + m.position.x) * 0.1; }

@@ -67,7 +67,7 @@ function earthTex() {
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
   return t;
 }
-function runeTex() {
+export function runeTex() {
   return canvasTex(512, 512, g => {
     g.translate(256, 256); g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff';
     const ring = (r: number, w: number) => { g.lineWidth = w; g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.stroke(); };
@@ -76,7 +76,7 @@ function runeTex() {
     g.lineWidth = 3; g.beginPath(); for (let i = 0; i <= 5; i++) { const a = (i * 2 * (Math.PI * 2)) / 5 - Math.PI / 2; const x = Math.cos(a) * 150, y = Math.sin(a) * 150; if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.stroke();
   });
 }
-function noiseTex() {
+export function noiseTex() {
   const S = 128, t = canvasTex(S, S, g => {
     const img = g.createImageData(S, S), val = new Float32Array(S * S);
     for (let o = 0; o < 4; o++) { const f = 4 << o, amp = 1 / (o + 1); const grid: number[] = []; for (let i = 0; i < (f + 1) * (f + 1); i++) grid.push(rnd());
@@ -89,7 +89,7 @@ function noiseTex() {
 }
 
 // ---------------------------------------------------------------- sky: gradient dome, stars, moon with halo, cloud band
-function buildSky() {
+export function buildSky() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
     uniforms: { uTime: { value: 0 }, uTop: { value: new THREE.Color(0x0a0a1e) }, uMid: { value: new THREE.Color(0x26204a) }, uHor: { value: new THREE.Color(0x5a4a78) }, uMoonDir: { value: V3(-0.25, 0.42, -1).normalize() }, uMoonCol: { value: new THREE.Color(1.2, 1.15, 1.3) }, uTint: { value: new THREE.Color(1, 1, 1) } },
