@@ -3,7 +3,7 @@
 import { V3, onUpdate } from '../engine/world';
 import { shot } from '../director';
 import { SCENES } from './defs';
-import { showStage, type Stage } from './stage';
+import { showStage, CUT, type Stage } from './stage';
 import { BActor } from '../bestiary/bactor';
 import { ROSTER } from '../bestiary/models';
 import { GRADE } from '../look/post';
@@ -35,7 +35,7 @@ export function sceneViewer() {
   const ui = document.createElement('div'); ui.className = 'sv'; document.body.appendChild(ui);
   ui.innerHTML = `<div class="pane info"><div class="t">第一章 · 幽暗森林 · 场景预览</div><div class="n"></div><div class="r"></div><div class="q"></div></div>
     <div class="pane list"></div>
-    <div class="pane bar"><button class="b on" data-c="battle">战斗视角</button><button class="b" data-c="orbit">自由环视</button><button class="b" data-c="fight">让他们打一下</button></div>`;
+    <div class="pane bar"><button class="b on" data-c="battle">战斗视角</button><button class="b" data-c="orbit">自由环视</button><button class="b" data-c="fight">让他们打一下</button><button class="b" data-c="roof">屋顶：自动</button></div>`;
   const $ = (s: string) => ui.querySelector(s) as HTMLElement, list = $('.list');
   let lastG = '';
   for (const d of SCENES) {
@@ -64,6 +64,8 @@ export function sceneViewer() {
   const setMode = (m: 'battle' | 'orbit') => { mode = m; ui.querySelectorAll('[data-c]').forEach(e => e.classList.toggle('on', (e as HTMLElement).dataset.c === m)); };
   $('[data-c="battle"]').onclick = () => setMode('battle');
   $('[data-c="orbit"]').onclick = () => setMode('orbit');
+  const roofB = $('[data-c="roof"]'), roofModes: Array<typeof CUT.mode> = ['auto', 'show', 'hide'], roofCN = { auto: '屋顶：自动', show: '屋顶：显示', hide: '屋顶：隐藏' };
+  roofB.onclick = () => { CUT.mode = roofModes[(roofModes.indexOf(CUT.mode) + 1) % 3]; roofB.textContent = roofCN[CUT.mode]; roofB.classList.toggle('on', CUT.mode !== 'auto'); };
   $('[data-c="fight"]').onclick = () => { actors.forEach((a, i) => { if (i === 0) a.attack(); else setTimeout(() => a.attack(), 500 + i * 300); }); };
   // orbit input
   const cv = document.querySelector('canvas') as HTMLCanvasElement; cv.style.touchAction = 'none';

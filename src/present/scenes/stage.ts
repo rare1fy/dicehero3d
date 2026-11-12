@@ -1,7 +1,7 @@
 // Stage manager: builds one chapter scene at a time (voxel geometry + its lights, fog, sky, mist, flames, water, runes) and tears
 // it down when another is shown. Global lights are shared and re-tinted per scene. Returns an Env-compatible handle (phase2).
 import * as THREE from 'three';
-import { scene, V3, onUpdate, canvasTex } from '../engine/world';
+import { scene, camera, V3, onUpdate, canvasTex } from '../engine/world';
 import { clock } from '../engine/clock';
 import { VoxWorld } from '../look/voxkit';
 import { CELL } from '../bestiary/kit';
@@ -27,6 +27,13 @@ export interface Ctx {
   add(o: THREE.Object3D): void;
   /** dressing cards (grass, vines, webs, decals) collected during build, instanced after it */
   cards: Cards;
+  /** the cutaway layer: roofs, ceilings, front walls and the near tops of side walls — everything that would stand between the
+   *  camera and the room. Built like w (same cells, same look), but the camera hides it while it looks into the room from above
+   *  (every battle view) and shows it again from far away or from below the eaves (exterior shots). Nothing here casts shadow
+   *  into the room while hidden. */
+  cut: VoxWorld;
+  /** the eaves height (metres) of the cutaway: below it the camera is "inside" and the roof stays visible (default 3.5) */
+  cutEaves(h: number): void;
   /** drifting ambient particles while this stage is up */
   ambient(a: Ambient): void;
   /** a soft light shaft from above */
@@ -62,6 +69,8 @@ function earthTex(cols: number[]) {
 }
 
 export interface Stage { def: SceneDef; root: THREE.Group; phase2(k: number): void; dispose(): void }
+/** how the cutaway layer behaves: 'auto' = the camera decides, 'show' / 'hide' = forced (scene browser toggle) */
+export const CUT = { mode: 'auto' as 'auto' | 'show' | 'hide', far: 30, focus: V3(0, 0, -3) };
 
 let current: Stage | null = null;
 export function showStage(def: SceneDef): Stage {
@@ -76,9 +85,11 @@ export function showStage(def: SceneDef): Stage {
   for (const m of g.mist) { const mm = m.material as THREE.MeshBasicMaterial; mm.color.set(md.mist ?? 0x5a5c8c); mm.opacity = md.mistA ?? 0.08; }
   // the ground beyond the stage
   const earth = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), toon(0xffffff, { map: earthTex(md.earth) })); earth.rotation.x = -Math.PI / 2; earth.position.y = -2 * CELL; earth.receiveShadow = true; root.add(earth);
-  const w = new VoxWorld(CELL), cards = new Cards(), amb: Ambient[] = [];
+  const w = new VoxWorld(CELL), cut = new VoxWorld(CELL), cards = new Cards(), amb: Ambient[] = [], cutRoot = new THREE.Group(); let eaves = 3.5;
+  root.add(cutRoot);
   const ctx: Ctx = {
-    cards,
+    cards, cut,
+    cutEaves(h) { eaves = h; },
     ambient(a) { amb.push(a); },
     shaft(x, z, o) { shaft(root, x, z, { color: md.moon, ...o }); },
     w,
@@ -100,10 +111,12 @@ export function showStage(def: SceneDef): Stage {
   def.build(ctx);
   for (const m of w.build({ glow: 2.6 })) root.add(m);
   cards.build(root);
+  if (cut.cells.size) for (const m of cut.build({ glow: 2.6 })) cutRoot.add(m);
   const off = { on: true };
   onUpdate((dt, rdt) => {
     if (!off.on) return; const t = clock.rtime;
     ambientTick(amb, rdt);
+    cutRoot.visible = CUT.mode === 'show' || (CUT.mode === 'auto' && (camera.position.y < eaves || camera.position.distanceTo(CUT.focus) > CUT.far));
     for (const f of flames) {
       if (f.base < 0) { f.m.rotation.z += rdt * 0.08; ((f.m.material as THREE.MeshBasicMaterial).opacity = 0.45 + Math.sin(t * 1.6) * 0.12); continue; }
       const s = 1 + Math.sin(t * 9 + f.s) * 0.15 + Math.sin(t * 23 + f.s) * 0.08; f.m.scale.set(s, s * 1.3, s); f.m.rotation.y += dt * 2;
