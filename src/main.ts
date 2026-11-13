@@ -18,6 +18,7 @@ import { legoCast } from './present/bestiary/lego';
 import { initLegoEnv, legoEnvTex } from './present/look/legokit';
 import { figCast, setFigEnv } from './present/bestiary/figs';
 import { ui3dDemo, ui3dPointer } from './present/ui3d/demo';
+import { V2Show } from './present/v2/show2';
 import { GRADE } from './present/look/post';
 import { PX, PXU, readPixelFlag, installPixelKeys, setPixel } from './present/look/pixel';
 import type { Env } from './present/look/env';
@@ -65,6 +66,12 @@ Promise.resolve().then(() => {
   if (entry0 === 'scenes' || hash === 'scenes') {   // the scene browser builds its own stages (no default arena)
     G.__sv = sceneViewer();
     gfx.start(() => {}, () => { frames++; });
+    dh.ready(); return;
+  }
+  if (entry0 === 'v2' || hash === 'v2') {   // the rules-v2 slice (present/v2/show2.ts) builds its own stages (no default arena)
+    const V = new V2Show(platform);
+    dh.add({ v2: () => ({ run: V.run, battle: V.b }), show2: () => V, bot: (on = true) => V.bot(on), goto: (k: 'normal' | 'elite' | 'shop' | 'boss') => V.goto(k), pick: (c: 'warrior' | 'mage' | 'rogue', seed?: number) => V.pick(c, seed), idle: () => V.idle(), speed: (s: number) => { FX.speed = s; } });
+    gfx.start(() => {}, () => { V.L.renderText(gfx.renderer); V.ov.render(gfx.renderer); frames++; });
     dh.ready(); return;
   }
   if (brick || fig) { initLegoEnv(gfx.renderer); setFigEnv(legoEnvTex()); GRADE.bloomThreshold = 1.15; }   // white plastic should shine, not bloom
