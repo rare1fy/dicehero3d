@@ -17,7 +17,7 @@ export type Ev2 =
   | { t: 'roll'; dice: DieSnap2[]; reason: 'turn' | 'reroll' | 'spawn' | 'flip' | 'return'; kept: number[] }
   | { t: 'reroll'; uids: number[]; hpCost: number; rage: number; capped: boolean; free: boolean }
   /** v2: which row, which tier, which dice */
-  | { t: 'rowPlay'; ref: number | 'basic'; rowId: string; name: string; tier: TierName | null; count: number; uids: number[]; companions: number; target: number | null; strike: number; ultimate: boolean; combo: boolean; X: number; bonusPct: number }
+  | { t: 'rowPlay'; ref: number | 'basic'; rowId: string; name: string; tier: TierName | null; count: number; uids: number[]; companions: number; target: number | null; strike: number; ultimate: boolean; combo: boolean; X: number; bonusPct: number; /** v3: special dice handed in and their damage bonus (integer %) */ special?: Array<{ uid: number; kind: DieKind; pct: number }> }
   | { t: 'hit'; uid: number; dmg: number; absorbed: number; hpDmg: number; killed: boolean; aoe: boolean; ultimate: boolean; source: 'play' | 'cleave' | 'thorns' | 'dot' | 'detonate' }
   | { t: 'statusAdd'; who: Who; status: Status }
   | { t: 'statusTick'; who: Who; type: StatusV2; dmg: number }

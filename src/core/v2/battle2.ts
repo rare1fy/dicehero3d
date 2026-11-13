@@ -35,7 +35,7 @@ export interface Battle2State {
   freeRerollsLeft: number; rerollsThisTurn: number; bloodRerolls: number; freeBloodLeft: number;
   strikesUsed: number; maxStrikes: number;
   lastStrike: { ref: RowRef; count: number } | null;
-  comboThisTurn: boolean; earnUsed: boolean; danceUsed: boolean; tripleUsed: boolean; chainUsed: boolean; whetUsed: number;
+  comboThisTurn: boolean; sleeveUsed: boolean; earnUsed: boolean; danceUsed: boolean; tripleUsed: boolean; chainUsed: boolean; whetUsed: number;
   stormPct: number;
   // mage
   chantRing: number; overcharge: number; starTurnsLeft: number; resonanceNext: number; chantsThisCycle: number; chantedThisTurn: boolean;
@@ -94,13 +94,15 @@ export interface PlayOpts {
 export type Result2 = { ok: true; events: Ev2[] } | { ok: false; reason: string; events: Ev2[] };
 export interface Intent2 { kind: 'atk' | 'def' | 'skl' | 'mov' | 'frz' | 'curse'; text: string; value?: number; status?: StatusV2; desc?: string }
 export interface RowOption { ref: RowRef; rowId: string; name: string; ok: boolean; tier?: TierName; count?: number; reason?: 'cond' | 'strike' | 'chant' | 'none'; bestTier?: TierName | null }
-export interface Preview { total: number; hits: Array<{ uid: number; dmg: number }>; armor: number; barrier: number; heal: number; selfDmg: number; tier: TierName | null; ultimate: boolean; gainDice: number; kills: number[] }
+export interface Preview { total: number; hits: Array<{ uid: number; dmg: number }>; armor: number; barrier: number; heal: number; selfDmg: number; tier: TierName | null; ultimate: boolean; gainDice: number; kills: number[]; /** v3: special dice bonus in this play (integer %) */ specialPct: number }
 
 const BACKLASH_CAP = 30;
 const NEG: StatusV2[] = ['poison', 'burn', 'vulnerable', 'weak'];
 const DOT_DESC: Record<string, StatusV2> = { '灼烧': 'burn', '剧毒': 'poison', '火球': 'burn', '诅咒爆发': 'poison' };
 const CTL_DESC: Record<string, StatusV2> = { '虚弱': 'weak', '易伤': 'vulnerable', '碎裂诅咒': 'vulnerable', '诅咒注入': 'weak', '诅咒锻造': 'weak' };
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+/** v3 special die bonus (integer %) when handed in */
+export const V3_SPECIAL_PCT: Partial<Record<DieKind, number>> = { furyDie: 50, starDie: 15, shadowDie: 20 };
 
 interface PlayCtx {
   row: RowDef | null; level: Level; ref: RowRef; tierName: TierName | null; tier: Tier | null;
@@ -125,6 +127,7 @@ export class Battle2 {
     this.setup = setup;
     this.cls = CLASSES[setup.classId];
     this.board = buildBoard(setup.loadout);
+    this.v3 = this.board.some(r => r.def.tags.includes('pattern'));
     if (restore) {
       this.s = restore.s; this.stats = restore.stats; this.rng = createRng(restore.rngState);
       return;
@@ -136,7 +139,7 @@ export class Battle2 {
       player: { hp: setup.hp ?? maxHp, maxHp, armor: 0, barrier: 0, statuses: [], rage: 0, backlash: 0 },
       dice: [], turnDice: 0,
       freeRerollsLeft: 0, rerollsThisTurn: 0, bloodRerolls: 0, freeBloodLeft: 0,
-      strikesUsed: 0, maxStrikes: 1, lastStrike: null, comboThisTurn: false, earnUsed: false, danceUsed: false, tripleUsed: false, chainUsed: false, whetUsed: 0, stormPct: 0,
+      strikesUsed: 0, maxStrikes: 1, lastStrike: null, comboThisTurn: false, sleeveUsed: false, earnUsed: false, danceUsed: false, tripleUsed: false, chainUsed: false, whetUsed: 0, stormPct: 0,
       chantRing: 0, overcharge: 0, starTurnsLeft: 0, resonanceNext: 0, chantsThisCycle: 0, chantedThisTurn: false, chantHits: 0, echo: 0, flipsLeft: 0, prismSuit: null, pierceHitsThisCycle: 0, cycleActive: false, keepSel: null,
       knifeMark: null, classSpawns: 0, bonusFreeNext: 0, chantsThisCycleAtPlay: 0,
       overflow: 0, rageNext: 0, freeBloodNext: 0,
@@ -242,17 +245,17 @@ export class Battle2 {
     const p0 = { armor: c.s.player.armor, barrier: c.s.player.barrier, hp: c.s.player.hp };
     const ev = c.doPlay(ref, uids, target, true);
     const hits = new Map<number, number>(); let ult = false, tier: TierName | null = null, gain = 0, self = 0, heal = 0;
-    const kills: number[] = [];
+    const kills: number[] = []; let specialPct = 0;
     for (const e of ev) {
       if (e.t === 'hit') { hits.set(e.uid, (hits.get(e.uid) || 0) + e.dmg); if (e.killed) kills.push(e.uid); }
-      if (e.t === 'rowPlay') { ult = e.ultimate; tier = e.tier; }
+      if (e.t === 'rowPlay') { ult = e.ultimate; tier = e.tier; specialPct = (e.special || []).reduce((x, y) => x + y.pct, 0); }
       if (e.t === 'gainDice') gain += e.n;
       if (e.t === 'hp') { if (e.delta < 0) self -= e.delta; else heal += e.delta; }
     }
     return {
       total: [...hits.values()].reduce((a, b) => a + b, 0), hits: [...hits].map(([uid, dmg]) => ({ uid, dmg })),
       armor: Math.max(0, c.s.player.armor - p0.armor), barrier: Math.max(0, c.s.player.barrier - p0.barrier), heal, selfDmg: self,
-      tier, ultimate: ult, gainDice: gain, kills,
+      tier, ultimate: ult, gainDice: gain, kills, specialPct,
     };
   }
 
@@ -301,7 +304,7 @@ export class Battle2 {
   /** 刺客: shadow dice that would carry to next turn if the turn ended now (v2.2: only unused ones on the field) */
   private shadowCarryCount(): number {
     const s = this.s;
-    if (this.cls.id !== 'rogue' || s.classSpawns <= 0) return 0;
+    if (this.cls.id !== 'rogue' || (s.classSpawns <= 0 && !this.v3)) return 0;
     return Math.min(1 + this.talent('t_shadowbox'), s.dice.filter(d => d.kind === 'shadowDie').length);
   }
   /** 魔导 after a play: how many leftovers may stay (3, 余韵 4), whether the player must choose, and the current pick. null = no choice now */
@@ -430,7 +433,7 @@ export class Battle2 {
     const s = this.s, p = s.player;
     const m = this.check(ref, uids).match!;
     const sel = this.pick(uids);
-    this.rewards = [];
+    this.rewards = []; this.othersPick = null;
     if (targetUid != null) { const t = this.enemy(targetUid); if (t && !t.dead) s.targetUid = t.uid; }
     const target = this.target();
     const row = ref === 'basic' ? null : this.board[ref];
@@ -477,6 +480,9 @@ export class Battle2 {
     if (def?.flags?.perLen && def.cond.t === 'straight') bonus += def.flags.perLen * Math.max(0, sel.length - 3);
     if (def?.flags?.chantBonus) bonus += s.chantsThisCycleAtPlay * (level >= 2 ? def.flags.chantBonusL2 ?? def.flags.chantBonus : def.flags.chantBonus);
     if (def?.flags?.chase && strikeIdx >= 2) bonus += def.flags.chase - 1;
+    // v3 3: special dice add to this play when handed in (怒火 +50%, 星辰 +15%, 暗影残骰 +20%, each)
+    const special: Array<{ uid: number; kind: DieKind; pct: number }> = [];
+    if (this.v3) for (const d of sel) { const pc = V3_SPECIAL_PCT[d.kind]; if (pc) { special.push({ uid: d.uid, kind: d.kind, pct: pc }); bonus += pc / 100; } }
 
     s.strikesUsed++; this.stats.strikes++;
     if (ref === 'basic') this.stats.basics++; else { this.stats.plays++; this.stats.rows[def!.id] = (this.stats.rows[def!.id] || 0) + 1; }
@@ -487,7 +493,7 @@ export class Battle2 {
       if (def.cond.t === 'mixedRelease') this.stats.mixPlays++;
       if (s.chantRing >= 3) { this.stats.fullRingPlays++; this.stats.fullRingDice += sel.length; }
     }
-    this.emit({ t: 'rowPlay', ref, rowId: def ? def.id : 'basic', name: def ? def.name : this.cls.basicAttack.name, tier: tierName, count: m.count, uids: sel.map(d => d.uid), companions: m.companions, target: target ? target.uid : null, strike: strikeIdx + 1, ultimate, combo, X, bonusPct: Math.round(bonus * 100) });
+    this.emit({ t: 'rowPlay', ref, rowId: def ? def.id : 'basic', name: def ? def.name : this.cls.basicAttack.name, tier: tierName, count: m.count, uids: sel.map(d => d.uid), companions: m.companions, target: target ? target.uid : null, strike: strikeIdx + 1, ultimate, combo, X, bonusPct: Math.round(bonus * 100), ...(special.length ? { special } : {}) });
 
     // dice leave the field (飞刀 returns its die later)
     const knife = !!tier?.effects.some(e => e.t === 'hook' && e.id === 'knifeReturn');
@@ -599,7 +605,10 @@ export class Battle2 {
     const t = ctx.target; if (!t) return;
     const base = ctx.X * ctx.coef + ctx.flat;
     if (base > 0) this.dealHit(t, this.finalDmg(base, ctx, t), ctx, {});
-    if (this.cls.basicAttack.shadowify) {
+    if (this.v3 && this.cls.id === 'rogue') {
+      // v3: the first strike as 袖箭 adds 1 shadow die (once per turn)
+      if (ctx.strikeIdx === 0 && !this.s.sleeveUsed) { this.s.sleeveUsed = true; this.stats.sleeveSpawns++; this.spawnShadow(1, 'shadowify'); }
+    } else if (this.cls.basicAttack.shadowify) {
       const d = ctx.dice[0];
       const su = this.faceOf(d).suit;
       if (su === 'poison' || su === 'blade' || d.kind === 'cracked' || d.kind === 'cursed') { this.stats.sleeveSpawns++; this.spawnShadow(1, 'shadowify'); }
@@ -633,7 +642,7 @@ export class Battle2 {
         case 'dmg': {
           let tgt: Target = e.target; if (voidAll) tgt = 'all';
           if (flags.armorToDmg && ctx.target) { ctx.flat += ctx.target.armor; ctx.target.armor = 0; }
-          this.damageEffect(ctx, tgt, e.mul ?? 1, e.flat ?? 0, { ignoreArmor: !!e.ignoreArmor || !!(flags.assassin && ctx.count === 1), armorBreak: !!e.armorBreak, raw: !!e.raw });
+          this.damageEffect(ctx, tgt, e.mul ?? 1, e.flat ?? 0, { ignoreArmor: !!e.ignoreArmor || !!(flags.assassin && ctx.count === 1), armorBreak: !!e.armorBreak, raw: !!e.raw, exec: e.exec });
           break;
         }
         case 'armor': {
@@ -691,6 +700,7 @@ export class Battle2 {
         if (ctx.kills > 0) { s.earned.extra++; this.gain(1, 'furyUlt'); if (flags.titanOnBehead) this.carryNew('titanDie'); }
         break;
       }
+      case 'pierceBarrier': break;   // v3 陨石 ultimate: enemies have no barrier in the prototype; armor is ignored by the ultimate
       case 'cleave': break;   // handled in dealHit via ctx.row tiers (see damageEffect)
       case 'twinCut': {
         const vals = ctx.dice.map(d => this.points(d, def)); const sorted = vals.slice().sort((a, b) => a - b);
@@ -811,7 +821,7 @@ export class Battle2 {
   }
 
   /** damage effect on its targets; mul × X × coef (raw: X only) + flat */
-  private damageEffect(ctx: PlayCtx, tgt: Target, mul: number, flatAdd: number, o: { ignoreArmor?: boolean; armorBreak?: boolean; raw?: boolean; rawFlat?: boolean }) {
+  private damageEffect(ctx: PlayCtx, tgt: Target, mul: number, flatAdd: number, o: { ignoreArmor?: boolean; armorBreak?: boolean; raw?: boolean; rawFlat?: boolean; exec?: number }) {
     const def = ctx.row, flags = def?.flags || {};
     const targets = this.targets(tgt, ctx.target);
     const aoe = tgt === 'all' || tgt === 'others';
@@ -824,6 +834,8 @@ export class Battle2 {
       if (execLine && t.hp < t.maxHp * execLine && !o.rawFlat) base *= 2;
       if (flags.frozenBonusFromL2 && ctx.level >= 2 && (this.hasStatus(t, 'freeze') || t.ctlImmune > 0)) base *= 1 + flags.frozenBonusFromL2;
       if (flags.judge && t.rank !== 'midBoss' && t.rank !== 'boss' && t.hp < t.maxHp * flags.judge) base = Math.max(base, t.hp + t.armor);
+      // v3 处决: below the line the target dies outright
+      if (o.exec && t.hp < t.maxHp * o.exec) { this.dealHit(t, t.hp + t.armor, ctx, { aoe, ignoreArmor: true }); continue; }
       const d = this.finalDmg(base * (ctx.halve && !o.rawFlat ? 1 : 1), ctx, t);
       this.dealHit(t, d, ctx, { aoe, ignoreArmor: o.ignoreArmor, armorBreak: o.armorBreak });
       // 顺劈 (同点行 feed+): overkill carries to another enemy, chains
@@ -909,7 +921,7 @@ export class Battle2 {
     s.ironNext = false; s.steadyNext = false;
     s.freeRerollsLeft = cls.freeRerolls + s.bonusFreeNext + relicFree; s.bonusFreeNext = 0; s.resonanceNext = 0;
     s.rerollsThisTurn = 0; s.bloodRerolls = 0; s.strikesUsed = 0; s.maxStrikes = cls.strikesPerTurn;
-    s.lastStrike = null; s.comboThisTurn = false; s.earnUsed = false; s.danceUsed = false; s.tripleUsed = false; s.chainUsed = false; s.whetUsed = 0; s.stormPct = 0;
+    s.lastStrike = null; s.comboThisTurn = false; s.sleeveUsed = false; s.earnUsed = false; s.danceUsed = false; s.tripleUsed = false; s.chainUsed = false; s.whetUsed = 0; s.stormPct = 0;
     s.knifeMark = null; s.classSpawns = 0;
     s.freeBloodLeft = s.freeBloodNext + [0, 1, 2][this.talent('t_instinct')]; s.freeBloodNext = 0;
     p.rage = Math.min(3, s.rageNext); s.rageNext = 0; if (p.rage) this.emit({ t: 'rage', stacks: p.rage });
@@ -997,7 +1009,7 @@ export class Battle2 {
       // v2.1 反噬: N runs over the whole chant cycle and only clears on a play (doPlay)
     } else {
       // 暗影残骰 (v2.2 1.1): a class spawn this turn lets 1 (影匣 2 / 3) shadow die still on the field stay; nothing is created
-      const n = s.classSpawns > 0 ? 1 + this.talent('t_shadowbox') : 0;
+      const n = s.classSpawns > 0 || this.v3 ? 1 + this.talent('t_shadowbox') : 0;
       const keep = left.filter(d => d.kind === 'shadowDie').slice(0, n);
       for (const d of left) {
         if (keep.includes(d) && s.carry.length < 6) {
@@ -1010,8 +1022,12 @@ export class Battle2 {
     this.lastWasLightBasic = false;
   }
   private lastWasLightBasic = false;
+  /** rules v3: the board is pattern skills (同点 / 顺子 / 阵列); no rule reads normal die suits */
+  readonly v3: boolean;
   /** kill rewards queued during a play (paid after it resolves); null outside a play */
   private rewards: Array<() => void> | null = null;
+  /** v3 random extra targets of the play in progress */
+  private othersPick: { main: number; order: number[] } | null = null;
 
   private enemyTurn() {
     const s = this.s, p = s.player;
@@ -1381,7 +1397,7 @@ export class Battle2 {
     const bb = this.talent('t_bloodbath'); if (bb && p.rage) v += Math.min(p.rage, bb >= 2 ? 5 : 3);
     return v;
   }
-  private facesFor(kind: DieKind): number[] { return kindValues(kind); }
+  private facesFor(kind: DieKind): number[] { return this.v3 && kind === 'starDie' ? [1, 2, 3, 4, 5, 6] : kindValues(kind); }
   private suitFor(kind: DieKind, v: number): Suit { return kindSuit(this.cls.id, kind, v); }
   private setFace(d: Die, v: number) { d.face = { value: v, suit: this.suitFor(d.kind, v) }; }
   private rollDie(d: Die) {
@@ -1424,7 +1440,17 @@ export class Battle2 {
       case 'others': return a.filter(e => e !== m);
       case 'adjacent': { const i = a.indexOf(m); const n = a[i + 1] || a[i - 1]; return n ? [n] : []; }
       case 'second': { const o = a.find(e => e !== m); return [o || m]; }
+      // v3: random others, picked once per play so every effect of the play hits the same enemies
+      case 'other': return this.randomOthers(m, 1);
+      case 'two': return [m, ...this.randomOthers(m, 1)];
+      case 'three': return [m, ...this.randomOthers(m, 2)];
     }
+  }
+  private randomOthers(m: Enemy, n: number): Enemy[] {
+    if (!this.othersPick || this.othersPick.main !== m.uid) {
+      this.othersPick = { main: m.uid, order: this.rng.shuffle(this.alive().filter(e => e !== m).map(e => e.uid)) };
+    }
+    return this.othersPick.order.map(u => this.enemy(u)).filter((e): e is Enemy => !!e && !e.dead).slice(0, n);
   }
   private isMelee(e: Enemy) { return e.ct === 'warrior' || e.ct === 'guardian'; }
   private pick(uids: number[]) { return uids.map(u => this.s.dice.find(d => d.uid === u)).filter((d): d is Die => !!d); }

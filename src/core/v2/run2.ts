@@ -212,7 +212,7 @@ export class Run2 {
   private otherTablet() { const id = this.s.loadout.tablets[0].tabletId; return CLASSES[this.s.classId].tablets.find(t => t !== id)!; }
   /** 改修: keep each slot's level; start rows → new start rows; added slots re-picked from the new pool; evolutions re-chosen (first option). */
   private reforge() {
-    const s = this.s; if (s.loadout.version !== 'B') return;
+    const s = this.s; if (s.loadout.version !== 'B' || TABLETS[s.loadout.tablets[0].tabletId].style === 'pattern') return;   // v3: no reforge
     const t = s.loadout.tablets[0], to = TABLETS[this.otherTablet()];
     const old = t.slots; const slots: RowSlot[] = [];
     old.forEach((sl, i) => {

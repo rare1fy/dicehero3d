@@ -28,20 +28,20 @@ export const CLASSES: Record<ClassId, ClassDefV2> = {
   warrior: mk('warrior', {
     name: '嗜血狂战', hp: 120,
     strikesPerTurn: 1, maxStrikes: 1, leftover: 'dissipate', overflow: 'damagePct',
-    basicAttack: { minDice: 1, maxDice: 3, coef: 1, name: '普攻' },
+    basicAttack: { minDice: 1, maxDice: 3, coef: 1, name: '劈砍' },
     specialDice: ['furyDie', 'titanDie'],
     mechanics: ['bloodReroll', 'behead', 'perfectGuard', 'stunGuard', 'overflow'],
     earnDieMode: 'nextTurnPlusOne',
-    tablets: ['w_suit', 'w_point'], versionA: ['w_axe', 'w_same'],
+    tablets: ['w_v3', 'w_suit', 'w_point'], versionA: ['w_axe', 'w_same'],
   }),
   mage: mk('mage', {
     name: '星界魔导', hp: 110,   // v2.2 tuning: 100 → 110 (core2_report 数值调整)
     strikesPerTurn: 1, maxStrikes: 1, leftover: 'retain', overflow: 'discard',
-    basicAttack: { minDice: 1, maxDice: 3, coef: 1, name: '奥术弹' },
+    basicAttack: { minDice: 1, maxDice: 1, coef: 1, name: '奥术弹' },   // v3: mage hands in 1 loose die
     specialDice: ['starDie'],
     mechanics: ['chant', 'barrier', 'backlash', 'overcharge', 'overload', 'resonance'],
     earnDieMode: 'resonance',
-    tablets: ['m_suit', 'm_point'], versionA: ['m_sun', 'm_pairs'],
+    tablets: ['m_v3', 'm_suit', 'm_point'], versionA: ['m_sun', 'm_pairs'],
   }),
   rogue: mk('rogue', {
     name: '影锋刺客', hp: 90,
@@ -50,6 +50,6 @@ export const CLASSES: Record<ClassId, ClassDefV2> = {
     specialDice: ['shadowDie'],
     mechanics: ['twoStrikes', 'preciseBonus', 'preciseSpawn', 'knifeMark', 'shadowDie'],
     earnDieMode: 'strikePlusShadow',
-    tablets: ['r_suit', 'r_point'], versionA: ['r_shadow', 'r_knife'],
+    tablets: ['r_v3', 'r_suit', 'r_point'], versionA: ['r_shadow', 'r_knife'],
   }),
 };

@@ -48,7 +48,8 @@ export function paintSuitFace(g: CanvasRenderingContext2D, eg: CanvasRenderingCo
   const S: Suit = SUITS[suitOf(skin, value)], sp = skin.special ? SPECIALS[skin.special] : null;
   g.save(); g.translate(ox, 0); eg.save(); eg.translate(ox, 0);
   eg.fillStyle = '#000'; eg.fillRect(0, 0, T, T);
-  if (skin.scheme === 'A') paintA(g, eg, T, value, S, sp?.body);
+  if (skin.plain) paintPlain(g, eg, T, value, sp);
+  else if (skin.scheme === 'A') paintA(g, eg, T, value, S, sp?.body);
   else paintB(g, eg, T, value, S, skin, sp?.body);
   // hard 1-texel bevel: crisp cube edges without rounding
   g.fillStyle = 'rgba(255,255,255,0.32)'; g.fillRect(0, 0, T, 1); g.fillRect(0, 0, 1, T);
@@ -58,6 +59,23 @@ export function paintSuitFace(g: CanvasRenderingContext2D, eg: CanvasRenderingCo
     eg.fillStyle = mix(sp.glow, '#000000', 0.55); eg.fillRect(1, 1, T - 2, 1); eg.fillRect(1, T - 2, T - 2, 1); eg.fillRect(1, 1, 1, T - 2); eg.fillRect(T - 2, 1, 1, T - 2);
   }
   g.restore(); eg.restore();
+}
+
+/** rules v3: a plain bone-white face with a big dark numeral; special dice use their body colour, a light numeral and a small
+ *  effect icon in the corner (怒火 → flame, 星辰 → star, 暗影 → shadow) */
+function paintPlain(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, T: number, value: number, sp: (typeof SPECIALS)[keyof typeof SPECIALS] | null) {
+  const base = sp ? mix(sp.body, '#000000', 0.1) : '#eadfc8', ink = sp ? '#fff4e0' : '#2a1c18', rim = sp ? '#07050a' : '#fffaf0';
+  g.fillStyle = base; g.fillRect(0, 0, T, T);
+  if (!sp) { g.fillStyle = mix(base, '#7a6450', 0.25); g.fillRect(1, T - 3, T - 2, 2); g.fillRect(T - 3, 1, 2, T - 2); }
+  const n = NUM45[String(value)] || NUM45['1'], cs = Math.max(2, Math.floor(T / 6.5)), w = 4 * cs, h = 5 * cs;
+  const nx = Math.round((T - w) / 2), ny = Math.round((T - h) / 2);
+  iconGrow(g, n, nx, ny, cs, 1, rim);
+  icon(g, n, nx, ny, cs, () => ink);
+  if (sp) {
+    icon(eg, n, nx, ny, cs, () => mix(sp.glow, '#000000', 0.55));
+    const key = sp.glow === SPECIALS.fury.glow ? 'rage' : sp.glow === SPECIALS.starry.glow ? 'star' : sp.glow === SPECIALS.shadowres.glow ? 'shadow' : null;
+    if (key) { const m = MINI[key]; icon(g, m, T - 8, 2, 1, ch => (ch === '.' ? null : sp.glow)); icon(eg, m, T - 8, 2, 1, ch => (ch === '.' ? null : sp.glow)); }
+  }
 }
 
 function paintA(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, T: number, value: number, S: Suit, body?: string) {

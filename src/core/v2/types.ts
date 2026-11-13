@@ -34,7 +34,9 @@ export type Condition =
   | { t: 'sumAtLeast'; byCount: Record<number, number> }
   /** 元素交汇: ≥ minDice dice, at least minSuits suits with ≥ perSuit dice each; other dice may ride along */
   | { t: 'mixedRelease'; minDice: number; minSuits: number; perSuit: number }
-  | { t: 'any'; min: number; max: number };
+  | { t: 'any'; min: number; max: number }
+  /** v3 阵列: ≥2 groups, each the same value with ≥2 dice, every die in a group (2+2, 3+2, 4+2, 3+3, 2+2+2) */
+  | { t: 'array' };
 
 /** Tier ids. v2.1: each row writes its own steps (count → tier); the names are ids only, `ultimate` = 终极特权. */
 export type TierName = 'single' | 'feed' | 'area' | 'earn' | 'ultimate';
@@ -54,7 +56,8 @@ export interface TierRule {
 }
 
 // ── effects ──────────────────────────────────────────────
-export type Target = 'one' | 'all' | 'adjacent' | 'others' | 'second';
+/** v3: 'other' = one random other enemy (none if alone); 'two' / 'three' = the target plus 1 / 2 others */
+export type Target = 'one' | 'all' | 'adjacent' | 'others' | 'second' | 'other' | 'two' | 'three';
 export type StatusV2 = 'poison' | 'burn' | 'freeze' | 'stun' | 'vulnerable' | 'weak' | 'berserk';
 /** v2.2 灼烧: held = layers a 2+ 日行 laid in an earlier play (kept through turn ends until the mage's next play resolves); heldNew = laid by the play in progress */
 export interface Status { type: StatusV2; value: number; duration?: number; held?: number; heldNew?: number }
@@ -62,7 +65,7 @@ export interface Status { type: StatusV2; value: number; duration?: number; held
 export type Effect = EffectBody & { /** v2.2: only on the 1st / 2nd strike of the turn (刃行) */ onStrike?: 1 | 2 };
 export type EffectBody =
   /** damage = (X × coef × mul + flat) × bonus × modifiers */
-  | { t: 'dmg'; target: Target; mul?: number; flat?: number; ignoreArmor?: boolean; armorBreak?: boolean; raw?: boolean }
+  | { t: 'dmg'; target: Target; mul?: number; flat?: number; ignoreArmor?: boolean; armorBreak?: boolean; raw?: boolean; /** v3 处决: target HP below this share dies outright */ exec?: number }
   /** armor = X × coef2 × mul (of 'coef2'), points of one suit × mul, or a flat mul */
   | { t: 'armor'; mul: number; of: 'coef2' | 'suitPoints' | 'flat'; suit?: Suit }
   | { t: 'barrier'; mul: number }
@@ -105,13 +108,17 @@ export interface RowDef {
   /** flags read by the engine (e.g. 'execute30', 'bolts') with numeric params */
   flags?: Record<string, number>;
   evolutions: [EvoDef, EvoDef];
-  tags: Array<'suit' | 'point' | 'tool'>;
+  tags: Array<'suit' | 'point' | 'tool' | 'pattern'>;
+  /** v3: extra effects added to every tier from this level on (III) */
+  levelFx?: Partial<Record<Level, Effect[]>>;
+  /** v3: what levels II and III add, for the upgrade card */
+  levelDesc?: [string, string];
   /** short UI hint: condition icon kind */
-  icon: { kind: 'suit' | 'same' | 'straight' | 'atLeast' | 'sum' | 'pairs' | 'mix' | 'twoPair' | 'fullHouse' | 'one'; suit?: Suit; suits?: Suit[]; value?: number };
+  icon: { kind: 'suit' | 'same' | 'straight' | 'atLeast' | 'sum' | 'pairs' | 'mix' | 'twoPair' | 'fullHouse' | 'one' | 'array'; suit?: Suit; suits?: Suit[]; value?: number };
 }
 
 export interface TabletDef {
-  id: string; classId: ClassId; name: string; style: 'suit' | 'point';
+  id: string; classId: ClassId; name: string; style: 'suit' | 'point' | 'pattern';
   /** 动作逻辑 (v2.1) */
   question: string;
   startRows: string[];

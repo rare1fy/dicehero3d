@@ -143,14 +143,18 @@ export function simulate(o: { n: number; classId: ClassId; tablet?: string; vers
   };
 }
 
+/** v3 default: one pattern tablet per class */
 export const COMBOS: Array<{ classId: ClassId; tablet?: string; version?: 'A' | 'B'; stage?: Stage }> = [
+  { classId: 'warrior', tablet: 'w_v3' }, { classId: 'mage', tablet: 'm_v3' }, { classId: 'rogue', tablet: 'r_v3' },
+];
+/** v2.2 suit / point tablets (kept for comparison) */
+export const COMBOS_V2: typeof COMBOS = [
   { classId: 'warrior', tablet: 'w_suit' }, { classId: 'warrior', tablet: 'w_point' },
   { classId: 'mage', tablet: 'm_suit' }, { classId: 'mage', tablet: 'm_point' },
   { classId: 'rogue', tablet: 'r_suit' }, { classId: 'rogue', tablet: 'r_point' },
 ];
 export const COMBOS_EXTRA: typeof COMBOS = [
   ...COMBOS.map(c => ({ ...c, stage: 'built' as const })),
-  { classId: 'warrior', version: 'A' }, { classId: 'mage', version: 'A' }, { classId: 'rogue', version: 'A' },
 ];
 
 const pct = (x: number) => (x * 100).toFixed(0) + '%';

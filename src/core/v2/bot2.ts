@@ -36,6 +36,8 @@ function faceScore(b: Battle2, faces: Face[], kinds: Die['kind'][]): number {
 function coefGuess(def: RowDef, level: number, tier: string): number {
   const t = def.tiers[tier as keyof RowDef['tiers']];
   let c = def.coef[level - 1] * (t?.coefMul ?? 1) + (t?.coefAdd ?? 0);
+  // v3: the tier's damage multiplier lives on its dmg effect; status-only tiers still count a little
+  if (def.tags.includes('pattern')) { const ds = (t?.effects || []).filter(e => e.t === 'dmg') as Array<{ mul?: number }>; c *= ds.length ? Math.max(...ds.map(e => e.mul ?? 1)) : 0.8; }
   if (def.flags?.bolts) c = 1 + def.coef[level - 1] / 3;   // star bolts: points + flat per bolt
   if (def.id.startsWith('r_poison')) c = 1 + def.coef[level - 1] * 0.6;
   return c;

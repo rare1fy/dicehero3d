@@ -49,7 +49,7 @@ function mergeFx(a: Effect[], b: Effect[]): Effect[] {
   return out;
 }
 
-export const dmg = (target: Target, mul = 1, o: { flat?: number; ignoreArmor?: boolean; armorBreak?: boolean; add?: boolean; raw?: boolean } = {}): FxIn => ({ t: 'dmg', target, mul, ...o });
+export const dmg = (target: Target, mul = 1, o: { flat?: number; ignoreArmor?: boolean; armorBreak?: boolean; add?: boolean; raw?: boolean; exec?: number } = {}): FxIn => ({ t: 'dmg', target, mul, ...o });
 export const st = (status: 'poison' | 'burn' | 'vulnerable' | 'weak' | 'berserk', value: number, target: Target | 'self', duration?: number, ofX?: number): Effect =>
   ({ t: 'status', status, value, target, duration, ofX });
 export const stun = (target: Target, look: 'freeze' | 'stun' = 'stun', turns = 1, elseWeak?: number): Effect => ({ t: 'stun', target, look, turns, elseWeak });

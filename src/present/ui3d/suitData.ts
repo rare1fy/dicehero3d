@@ -70,7 +70,7 @@ export const SPECIALS: Record<SpecialId, Special> = {
 };
 
 /** How a die model is skinned with suits. */
-export interface SuitSkin { cls: ClassId; scheme: FaceScheme; special?: SpecialId }
+export interface SuitSkin { cls: ClassId; scheme: FaceScheme; special?: SpecialId; /** rules v3: no suits, faces show only a big numeral (special dice keep their body + a small effect icon) */ plain?: boolean }
 export function skinFaces(s: SuitSkin): number[] { return s.special ? SPECIALS[s.special].faces : [1, 2, 3, 4, 5, 6]; }
 export function suitOf(s: SuitSkin, v: number): SuitId {
   const sp = s.special ? SPECIALS[s.special] : null;

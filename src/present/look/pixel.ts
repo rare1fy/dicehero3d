@@ -7,10 +7,10 @@
 import * as THREE from 'three';
 
 export const PX = {
-  /** the user picked the pixel look at 3x as the default (2026-11-13); #std or ?px=0 shows the standard look */
+  /** the user picked the pixel look as the default (2026-11-13), first at 3x, then 2x ("2x的效果其实是最好的"); #std or ?px=0 shows the standard look */
   on: true,
   /** CSS px per art pixel (1 / 2 / 3) */
-  size: 3,
+  size: 2,
   /** render-time light balance (multipliers on the scene's own lights, restored after the frame) */
   warmK: 1.5, coolK: 1.0, hemiK: 1.2, pointK: 1.0,
   /** bloom ceiling (per-pixel cap on the added glow, which is then stepped into 6 bands) and how much it backs off on busy screens */

@@ -33,6 +33,7 @@ import { CLASSES, TALENT_FILLERS, talentDef, relicV2, rowDef, slotRow, xpToNext,
 import { Overlay, Pane, Banner, Toast, Screen, panel, icon, ICON, text, textW, pixWrap, PIX_H, type Rect } from './overlay';
 import { popPix } from './pix';
 import { uiSpecial, tabletRow, BASIC_ROW, lampsFor, recordBotTurn, gotoNode, type BotAct } from './adapt';
+import { SkillUI, type SkillKind, type SlotDef, type SlotView, type CardDef } from './skills';
 
 const EYE = V3(0.3, 13.4, 14.9), LOOK = V3(0, -0.6, -2.4);
 const HERO_POS = V3(-2.0, 0, 3.0), BOSS_POS = V3(0, 0.56, -4.7);
@@ -72,15 +73,20 @@ export class V2Show {
   private botOn = false; private botRnd = mulberry(1234); private botBusy = false;
   private pendingGold: { from: number; amount: number; overflow: number } | null = null; private lastDeath = V3(0, 1, -2.5);
   private screenResolve: ((v: number) => void) | null = null;
+  /** rules v3: the four skill slots (散骰 / 同点 / 顺子 / 阵列) and the lit cards; slotRefs[i] = the engine ref of slot i */
+  skills: SkillUI<RowRef>; private slotRefs: RowRef[] = [];
+  private drag: { i: number; x0: number; y0: number; moved: boolean; foe: number | null } | null = null;
+  private giveUp: Pane; private endPane: Pane; private giveUpRect: Rect | null = null;
 
   constructor(private platform: Platform) {
-    const L = this.L, skin: SuitSkin = { cls: 'warrior', scheme: 'A' };
+    const L = this.L, skin: SuitSkin = { cls: 'warrior', scheme: 'A', plain: true };
     this.tray = new DiceTray(L, skin, { sizePx: 70, bottom: 70 });
     this.flask = new HeartFlask(L); this.tablet = new SkillTablet(L);
     this.end = new StoneButton(L, LOOKS.end, 'end'); this.reroll = new StoneButton(L, LOOKS.reroll, 'reroll');
     this.loot = new Loot(L, 'warrior'); this.mech = new ClassMech(L, skin);
     this.banner = new Banner(this.ov); this.toast = new Toast(this.ov); this.screen = new Screen(this.ov);
     this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10); this.freePane = this.ov.pane(10);
+    this.skills = new SkillUI<RowRef>(this.ov, L); this.giveUp = this.ov.pane(11); this.endPane = this.ov.pane(11);
     this.loot.heroAt = () => (this.hero ? this.hero.chest() : V3(-2, 1.2, 3));
     this.tablet.onPick = (i) => this.playRow(i);
     this.end.onTap = () => this.act({ k: 'end' });
@@ -104,8 +110,10 @@ export class V2Show {
     this.mech.place(190 * k + 10, H - 64 * k, Math.max(3, 4 * k));
     this.loot.purse = { x: 54 * k + 10, y: 52 * k + 8 }; this.loot.emblem = { x: 230 * k + 10, y: H - 150 * k };
     this.tablet.place(W - 260 * k, H * 0.42, 250 * k);
-    this.end.place(W - 58 * k, H * 0.5, 76 * k);
-    this.reroll.place(W / 2 + 70 * k * 4.4, H - 70 * k, 70 * k);
+    this.end.place(W - 66 * k, H * 0.53, 84 * k);
+    // v3: the reroll sits in the left-hand area, right of the flask and the class gauge
+    this.reroll.place(Math.max(330 * k, 260), H - 74 * k, 78 * k);
+    this.skills.layout(W, H, k);
     this.tray.sizePx = 70 * k; this.tray.bottom = 70 * k;
     CAM.shift = W > H ? Math.round(H * 0.06) : 0;
     if (this.screen.on) this.reopen?.();
@@ -115,7 +123,9 @@ export class V2Show {
 
   // ------------------------------------------------------------ HUD visibility
   private hudBattle(on: boolean) {
-    for (const o of [this.tablet.root, this.end.root, this.reroll.root, this.mech.root]) o.visible = on;
+    for (const o of [this.reroll.root, this.mech.root]) o.visible = on;
+    this.tablet.root.visible = false; this.end.root.visible = on && this.cls === 'mage'; this.skills.show(on);
+    if (!on) { this.giveUp.visible = false; this.endPane.visible = false; this.drag = null; }
     if (!on) { for (let i = 0; i < 8; i++) this.L.text.hide(`tab.${i}`); this.L.text.hide('reroll.badge'); this.L.text.hide('end.badge'); this.tray.clear(); this.mech.setKept([]); for (const p of this.rowPanes) p.visible = false; this.info.visible = false; }
   }
   private hudRun(on: boolean) { this.L.on = on; this.relicPane.visible = on; }
@@ -153,7 +163,7 @@ export class V2Show {
   pick(c: ClassId, seed = (Date.now() % 100000) | 0) {
     this.screen.close(); this.reopen = null; cue('select', 0.8); void audio.unlock().then(() => audio.playMusic('bgm_battle', 0.6));
     this.cls = c; this.run = new Run2({ seed, classId: c }); this.result = null;
-    const skin: SuitSkin = { cls: c, scheme: 'A' };
+    const skin: SuitSkin = { cls: c, scheme: 'A', plain: true };
     this.tray.skin = skin; this.mech.setClass(c); this.mech.setSkin(skin); this.loot.setClass(c);
     this.loot.gold = this.loot.shownGold = this.run.s.gold; this.loot.level = this.run.s.level; this.loot.xp = this.loot.shownXp = this.run.s.xp; this.loot.xpMax = xpToNext(this.run.s.level);
     this.log.push(`pick ${c} seed ${seed}`);
@@ -188,8 +198,8 @@ export class V2Show {
     this.mode = 'battle'; this.setStage(NODE_SCENE[node.kind] || 'n_trail');
     this.hudRun(true); this.hudBattle(true);
     const b = run.startBattle(); this.b = b;
-    this.rows = b.rows().slice(); this.tablet.setRows([...this.rows.map(tabletRow), { ...BASIC_ROW, id: 'basic' }]);
-    for (const p of this.rowPanes) this.ov.drop(p); this.rowPanes = [...this.rows, null].map(() => this.ov.pane(8));
+    this.rows = b.rows().slice(); this.setupSlots(b);
+    for (const p of this.rowPanes) this.ov.drop(p); this.rowPanes = [];
     this.pd = { hp: b.s.player.hp, maxHp: b.s.player.maxHp, armor: 0, barrier: 0 };
     this.flask.set({ ...this.pd }); this.mech.setRage(0); this.mech.setChant(0); this.mech.setStrikes(0); this.mech.setKept([]);
     this.tray.fill(3);
@@ -236,6 +246,28 @@ export class V2Show {
     const b = this.b; if (!b || this.busy) return;
     const ref: RowRef = i >= this.rows.length ? 'basic' : this.rows[i].ref;
     const t = b.target(); this.act({ k: 'play', ref, uids: this.sel.slice(), target: t ? t.uid : undefined });
+  }
+  /** v3: play the skill in slot i at a target (null = the current target) */
+  playSlot(i: number, target: number | null = null) {
+    const b = this.b; if (!b || this.busy) return false;
+    const ref = this.slotRefs[i]; if (ref == null) return false;
+    if (target != null) b.s.targetUid = target;
+    const t = b.target(); return this.act({ k: 'play', ref, uids: this.sel.slice(), target: t ? t.uid : undefined });
+  }
+  private setupSlots(b: Battle2) {
+    const kindOf = (r: BoardRow): SkillKind => (r.def.cond.t === 'straight' ? 'straight' : r.def.cond.t === 'array' ? 'array' : 'same');
+    const order: SkillKind[] = ['same', 'straight', 'array'];
+    const rows = this.rows.slice().sort((x, y) => order.indexOf(kindOf(x)) - order.indexOf(kindOf(y))).slice(0, 3);
+    const ba = b.cls.basicAttack;
+    const defs: SlotDef[] = [{ name: ba.name, kind: 'basic', level: 1, steps: [ba.maxDice > 1 ? `1～${ba.maxDice}颗` : '1颗'], lines: [`散骰：不成型的骰子`, ba.maxDice > 1 ? `一次可交 1～${ba.maxDice} 颗，单体 ×${ba.coef}` : `只能交 1 颗，单体 ×${ba.coef}`, ...(ba.shadowify ? ['第一刀用它：补 1 颗暗影残骰'] : [])] }];
+    this.slotRefs = ['basic'];
+    for (const r of rows) {
+      const k = kindOf(r), cn = k === 'same' ? '同点' : k === 'straight' ? '顺子' : '阵列';
+      const steps = r.def.tierRule.steps.map(s => s.label);
+      defs.push({ name: r.name || r.def.name, kind: k, level: r.level, steps, lines: [`${cn}：${k === 'same' ? '全部同一点数' : k === 'straight' ? '点数各不相同且连续' : '≥2 组同点，每组 ≥2 颗'}`, ...r.def.tierRule.steps.map(s => `${s.label} 颗：${tierText(r.def.tiers[s.tier]?.effects || [])}`), ...(r.def.levelDesc ? [`II：${r.def.levelDesc[0]}`, `III：${r.def.levelDesc[1]}`] : [])] });
+      this.slotRefs.push(r.ref);
+    }
+    this.skills.setSlots(defs);
   }
 
   private async beat(e: Ev2): Promise<void> {
@@ -359,7 +391,7 @@ export class V2Show {
   }
 
   // ------------------------------------------------------------ dice
-  private skinFor(kind: DieKind): SuitSkin { return { cls: this.cls, scheme: 'A', special: uiSpecial(kind) }; }
+  private skinFor(kind: DieKind): SuitSkin { return { cls: this.cls, scheme: 'A', plain: true, special: uiSpecial(kind) }; }
   private reconcileTray(n: number, sp: Array<SpecialId | undefined>) {
     const t = this.tray; n = Math.min(6, n);
     if (t.count !== n) t.fill(n, sp);
@@ -425,7 +457,7 @@ export class V2Show {
   private async presentPlay(e: Extract<Ev2, { t: 'rowPlay' }>) {
     const hero = this.hero!, idx = e.ref === 'basic' ? this.rows.length : e.ref, row = e.ref === 'basic' ? null : this.rows[e.ref];
     const lamps = row ? lampsFor(row, e.tier) : 1, tc = TIER_COL[Math.max(0, Math.min(4, lamps - 1 + (e.ultimate ? 4 : 0)))];
-    this.tablet.flash(idx);
+    this.tablet.flash(idx); void idx;
     const ds = e.uids.map(u => this.dice.get(u)).filter((d): d is Die3D => !!d);
     for (const d of ds) { d.glow = 1; d.glowCol.set(hex(tc)); d.lift = 1; }
     const step = row?.def.tierRule.steps.find(s => s.tier === e.tier);
@@ -690,7 +722,7 @@ export class V2Show {
   }
 
   // ------------------------------------------------------------ bot
-  private botGen = 0; private freeRolls = 0; private freePane!: Pane; private botQ: BotAct[] = []; private botTurnNo = -1;
+  private botGen = 0; private freeRolls = 0; private autoEndArmed = false; private freePane!: Pane; private botQ: BotAct[] = []; private botTurnNo = -1;
   bot(on = true) {
     this.botOn = on; const gen = ++this.botGen;
     const loop = () => { if (!this.botOn || gen !== this.botGen) return; try { this.botTick(); } catch (e) { this.errors.push('[bot] ' + ((e as Error).stack || e)); } after(0.3, loop); };
@@ -720,21 +752,28 @@ export class V2Show {
     const live = !this.busy && b.s.phase === 'player' && !b.s.result;
     const opts = live ? b.options(this.sel) : null;
     const n = this.rows.length;
-    for (let i = 0; i <= n; i++) {
-      const row = i < n ? this.rows[i] : null, o = opts?.[i];
-      let v: RowView;
-      if (!o) v = { state: 'idle', tier: 0 };
-      else if (o.ok) {
-        const pv = b.preview(o.ref, this.sel, b.target()?.uid);
-        v = { state: 'ready', tier: row ? lampsFor(row, o.tier) : 1, value: pv ? pv.total || pv.armor || pv.barrier || undefined : undefined };
-      } else if (o.reason === 'strike' || o.reason === 'chant') v = { state: 'dead', tier: 0 };
-      else v = { state: 'idle', tier: row && o.bestTier ? lampsFor(row, o.bestTier) : 0 };
-      this.tablet.setView(i, v);
-    }
+    const views: SlotView[] = [], cards: CardDef<RowRef>[] = [], tid = b.target()?.uid;
+    this.slotRefs.forEach((ref, si) => {
+      const i = ref === 'basic' ? n : ref, o = opts?.[i], row = ref === 'basic' ? null : this.rows.find(r => r.ref === ref) || null;
+      if (!o) { views.push({ lit: false, tier: 0, dead: !live }); return; }
+      const dead = o.reason === 'strike' || o.reason === 'chant';
+      if (!o.ok) { views.push({ lit: false, tier: row && o.bestTier ? lampsFor(row, o.bestTier) : 0, dead }); return; }
+      const tier = row ? lampsFor(row, o.tier) : 1, pv = b.preview(o.ref, this.sel, tid);
+      views.push({ lit: true, tier, dead: false });
+      const fx = row ? row.def.tiers[o.tier!]?.effects || [] : [], all = fx.some(e => e.t === 'dmg' && e.target === 'all');
+      const label = row ? (row.def.tierRule.steps.find(s => s.tier === o.tier)?.label ?? '') : '';
+      const parts: string[] = []; if (pv?.total) parts.push(`伤害 ${pv.total}`); if (pv?.armor) parts.push(`护甲 ${pv.armor}`); if (pv?.barrier) parts.push(`屏障 ${pv.barrier}`); if (pv?.heal) parts.push(`回复 ${pv.heal}`);
+      const ex: string[] = []; if (pv?.kills.length) ex.push(`击杀 ${pv.kills.length}`); if (pv?.gainDice) ex.push(`+${pv.gainDice} 骰`); const spx = pv && (pv as { specialPct?: number }).specialPct ? `特殊骰 +${(pv as { specialPct?: number }).specialPct}%` : ''; if (spx) ex.push(spx);
+      cards.push({ slot: si, ref: o.ref, name: o.name, sub: row ? `${label} 颗 · ${tier} 档` : `${this.sel.length} 颗散骰`, value: parts.join('  '), extra: ex.join(' · ') || undefined, all, tier, ultimate: !!pv?.ultimate });
+    });
+    this.skills.setViews(views); this.skills.setCards(live ? cards : []);
     const ri = b.rerollInfo();
     this.reroll.setBadge(ri.free, ri.free > 0 ? 0 : ri.bloodCost ?? 0); this.freeRolls = live ? ri.free : 0;
     this.reroll.setEnabled(live && (ri.free > 0 || ri.bloodCost != null));
-    this.end.setEnabled(live); this.end.breathe(live && b.mustEndTurn());
+    this.end.setEnabled(live); this.end.breathe(live && this.cls === 'mage');
+    // v3 auto end: no strikes left or no dice on the field → end the turn by itself (the mage's keep pick waits for its button)
+    const kiA = live ? b.keepInfo() : null;
+    if (live && b.mustEndTurn() && !(kiA?.need) && !this.autoEndArmed) { this.autoEndArmed = true; after(0.45, () => { this.autoEndArmed = false; const bb = this.b; if (bb && !this.busy && bb.s.phase === 'player' && bb.mustEndTurn() && !bb.keepInfo()?.need) { this.toast.show('回合结束', 0.6, '#c8bcd4'); this.act({ k: 'end' }); } }); }
     // mage after the strike: which leftovers stay (cyan)
     const ki = live ? b.keepInfo() : null, keepSet = new Set(ki?.need ? (this.keep ?? ki.selected) : []);
     for (const d of this.dice.values()) if (!this.sel.includes(d.uid!)) { const kp = keepSet.has(d.uid!); d.glow = kp ? 1.1 : (d.suit?.special ? 0.5 : 0); d.glowCol.set(kp ? 0x6ad8ff : 0xb860ff); d.lift = kp ? 0.55 : 0; }
@@ -745,13 +784,39 @@ export class V2Show {
     const t = clock.time;
     this.hero?.update(dt); for (const a of this.foes.values()) a.update(dt); for (const a of this.picks) a.update(dt);
     this.tray.update(dt, t); this.flask.update(dt); this.loot.update(dt, t);
-    if (this.mode === 'battle' && this.b) { this.tablet.update(dt, t); this.end.update(dt); this.reroll.update(dt); this.mech.update(dt); this.drawRowNames(); this.drawInfo();
-      const rp = this.reroll, fs = Math.max(1, Math.round(this.ov.fp * this.ov.dpr)), ft = this.freeRolls > 0 ? `免费 ×${this.freeRolls}` : '';
-      if (ft) { const w = textW(ft, fs) / this.ov.dpr + 12, h = PIX_H * fs / this.ov.dpr + 8; this.freePane.paint(ft + fs, w, h, g => { panel(g, 0, 0, w * this.ov.dpr, h * this.ov.dpr, 2 * this.ov.dpr, { body: '#0e2214', rim: '#5ad07a', line: '#07050a', hi: '#1a3a22' }); text(g, ft, 6 * this.ov.dpr, 4 * this.ov.dpr, fs, '#b8ffc8'); }); this.freePane.at(rp.x - w / 2, rp.y - rp.sizePx * 0.62 - h); }
+    if (this.mode === 'battle' && this.b) { this.end.update(dt); this.reroll.update(dt); this.mech.update(dt); this.drawInfo(); this.skills.update(dt); this.drawEndAndGiveUp();
+      const rp = this.reroll, fs = Math.max(1, Math.round(this.ov.fp * this.ov.dpr)), bc = this.b.s.phase === 'player' && !this.busy ? this.b.rerollInfo().bloodCost : null;
+      const ft = this.freeRolls > 0 ? `免费 ×${this.freeRolls}` : bc != null && this.cls === 'warrior' && this.b.s.phase === 'player' ? `卖血 -${bc}` : '', red = !this.freeRolls;
+      if (ft) { const w = textW(ft, fs) / this.ov.dpr + 12, h = PIX_H * fs / this.ov.dpr + 8; this.freePane.paint(ft + fs, w, h, g => { panel(g, 0, 0, w * this.ov.dpr, h * this.ov.dpr, 2 * this.ov.dpr, red ? { body: '#2a0c0e', rim: '#e04040', line: '#07050a', hi: '#3a1416' } : { body: '#0e2214', rim: '#5ad07a', line: '#07050a', hi: '#1a3a22' }); text(g, ft, 6 * this.ov.dpr, 4 * this.ov.dpr, fs, red ? '#ffc0b8' : '#b8ffc8'); }); this.freePane.at(rp.x - w / 2, rp.y - rp.sizePx * 0.62 - h); }
       this.freePane.visible = !!ft; }
     else this.freePane.visible = false;
     this.banner.update(dt); this.toast.update(dt); this.screen.update(dt);
     this.drawPlates(); this.drawRelics();
+  }
+  private drawEndAndGiveUp() {
+    const b = this.b!, ov = this.ov, d = ov.dpr, live = !this.busy && b.s.phase === 'player' && !b.s.result;
+    // the mage's end button = chant: ring cells, backlash forecast; after a strike with too many leftovers it becomes 确认保留
+    if (this.cls === 'mage' && live) {
+      const ki = b.keepInfo(), keepMode = !!ki?.need, risk = b.chantRisk(), struck = b.s.strikesUsed > 0;
+      const title = keepMode ? '确认保留' : struck ? '结束回合' : '吟  唱', s2 = Math.max(1, Math.round(ov.fp * 1.5 * d)), s1 = Math.max(1, Math.round(ov.fp * d));
+      const sub = keepMode ? `留 ${(this.keep ?? ki!.selected).length}/${ki!.cap} 颗` : struck ? '' : `环 ${Math.min(3, b.s.chantRing + 1)}/3${b.s.chantRing >= 3 ? ' 过充' : ''}${risk ? ` · 反噬 +${risk}` : ''}`;
+      const w = Math.max(textW(title, s2), textW(sub, s1)) / d + 20, h = PIX_H * (s2 + (sub ? s1 : 0)) / d + (sub ? 16 : 12);
+      this.endPane.paint(['e', title, sub, d].join('|'), w, h, g => { panel(g, 0, 0, w * d, h * d, 2 * d, { body: '#0e1630', rim: keepMode ? '#6ad8ff' : '#8ab8ff', line: '#07050a', hi: '#1a2448' }); text(g, title, w * d / 2, 5 * d, s2, '#dceaff', 'center'); if (sub) text(g, sub, w * d / 2, 8 * d + PIX_H * s2, s1, risk && !keepMode ? '#d8a0ff' : '#9ad8ff', 'center'); });
+      this.endPane.at(Math.min(this.ov.w - w - 8, this.end.x - w / 2), this.end.y + this.end.sizePx * 0.6); this.endPane.visible = true;
+      this.skills.auras = struck && !keepMode ? [] : [{ cx: this.end.x, cy: this.end.y, rx: this.end.sizePx * 0.7, ry: this.end.sizePx * 0.7, col: keepMode ? 0x6ad8ff : 0x7aa8ff, n: 8 + 4 * Math.min(3, b.s.chantRing), speed: 1.2 + 0.5 * b.s.chantRing }];
+    } else { this.endPane.visible = false; this.skills.auras = []; }
+    // the rogue's quiet "skip the 2nd strike" button
+    if (this.cls === 'rogue' && live && b.s.strikesUsed > 0 && b.strikesLeft() > 0) {
+      const s = Math.max(1, Math.round(ov.fp * 0.75 * d)), t = '放弃第二刀', w = textW(t, s) / d + 16, h = Math.max(30, PIX_H * s / d + 12);
+      this.giveUp.paint('g' + d, w, h, g => { panel(g, 0, 0, w * d, h * d, 2 * d, { body: '#141018', rim: '#4a4252', line: '#07050a', hi: '#1e1824' }); text(g, t, w * d / 2, (h * d - PIX_H * s) / 2, s, '#a89cb4', 'center'); });
+      const x = this.ov.w / 2 - w / 2, y = this.ov.h - h - Math.round(150 * this.k); this.giveUp.at(x, y); this.giveUp.visible = true; this.giveUpRect = { x, y: y - 10, w, h: h + 18 };
+    } else { this.giveUp.visible = false; this.giveUpRect = null; }
+  }
+  /** what the selected special dice add (shown on the lit card) */
+  private specialText() {
+    const b = this.b!, ks = this.sel.map(u => b.dice().find(d => d.uid === u)?.kind);
+    const f = ks.filter(k => k === 'furyDie').length, s = ks.filter(k => k === 'starDie').length, sh = ks.filter(k => k === 'shadowDie').length;
+    const out: string[] = []; if (f) out.push(`怒火 +50%`); if (s) out.push(`星辰 +${15 * s}%`); if (sh) out.push(`暗影 +20%`); return out.join(' ');
   }
   private drawRowNames() {
     const ov = this.ov, d = ov.dpr, s = Math.max(1, Math.round(ov.fp * 0.75 * d));
@@ -838,12 +903,44 @@ export class V2Show {
     if (type === 'down') void audio.unlock();
     if (this.screen.pointer(type, x, y)) return true;
     if (this.mode !== 'battle' || !this.b) return false;
-    if (this.end.pointer(type, x, y) || this.reroll.pointer(type, x, y) || this.tablet.pointer(type, x, y)) return true;
-    if (type !== 'down' || this.busy || this.b.s.phase !== 'player') return false;
+    if (this.drag) return this.dragPointer(type, x, y);
+    if ((this.cls === 'mage' && this.end.pointer(type, x, y)) || this.reroll.pointer(type, x, y)) return true;
+    if (type !== 'down') return false;
+    if (this.giveUpRect && !this.busy) { const r = this.giveUpRect; if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { this.clearSel(); this.act({ k: 'end' }); return true; } }
+    const ci = this.skills.hitCard(x, y);
+    if (ci >= 0 && !this.busy) { this.drag = { i: this.skills.cards.filter(c => !c.out)[ci].def.slot, x0: x, y0: y, moved: false, foe: null }; return true; }
+    const si = this.skills.hitSlot(x, y); if (si >= 0) { this.skills.toggleTip(si); cue('click', 0.4); return true; }
+    if (this.skills.tipOn >= 0) this.skills.toggleTip(this.skills.tipOn);
+    if (this.busy || this.b.s.phase !== 'player') return false;
     const d = this.pickDie(x, y);
     if (d) { const ki = this.b.keepInfo(); if (ki?.need && this.b.strikesLeft() === 0) this.toggleKeep(d); else this.setSel(d, !this.sel.includes(d.uid!)); return true; }
     const f = this.pickFoe(x, y); if (f != null) { this.b.s.targetUid = f; cue('click', 0.5); this.refresh(); return true; }
     return false;
+  }
+  /** v3 drag-to-cast: hold a lit card, an arc arrow follows the finger; release on an enemy (or anywhere up-field for an all-target skill) */
+  private dragPointer(type: string, x: number, y: number) {
+    const D = this.drag!, card = this.skills.cards.find(c => !c.out && c.def.slot === D.i);
+    if (!card) { this.drag = null; this.skills.arrow = null; return true; }
+    if (type === 'move') {
+      if (Math.hypot(x - D.x0, y - D.y0) > 14) D.moved = true;
+      if (D.moved) {
+        D.foe = this.pickFoe(x, y);
+        this.skills.arrow = { x0: card.x, y0: card.y - card.h * 0.3, x1: x, y1: y, hot: D.foe != null || (card.def.all && y < this.ov.h * 0.62) };
+        if (D.foe != null) { const a = this.foes.get(D.foe); a?.tint(0xffa040, 0.7); }
+      }
+      return true;
+    }
+    if (type === 'up' || type === 'cancel') {
+      this.drag = null; this.skills.arrow = null;
+      if (type === 'cancel') return true;
+      if (!D.moved) { this.playSlot(D.i); return true; }
+      const foe = this.pickFoe(x, y);
+      if (foe != null) this.playSlot(D.i, foe);
+      else if (card.def.all && y < this.ov.h * 0.62) this.playSlot(D.i);
+      else cue('deselect', 0.4);
+      return true;
+    }
+    return true;
   }
   private bindKeys() {
     if (typeof window === 'undefined' || !window.addEventListener) return;
@@ -851,7 +948,7 @@ export class V2Show {
       if (this.mode !== 'battle' || !this.b) return;
       const k = e.key.toLowerCase();
       if (k === 'r') this.reroll.tap(); else if (k === 'e') this.end.tap();
-      else if (k === ' ' || k === 'enter') { e.preventDefault(); const i = this.tablet.rows.findIndex(r => r.view.state === 'ready'); if (i >= 0) { this.tablet.flash(i); this.playRow(i); } }
+      else if (k === ' ' || k === 'enter') { e.preventDefault(); const c = this.skills.cards.find(x => !x.out); if (c) this.playSlot(c.def.slot); }
       else if (k === 'escape') { this.clearSel(); this.refresh(); }
       else if (k === 'tab') { e.preventDefault(); const al = this.b.alive(); if (al.length) { const i = al.findIndex(x => x.uid === this.b!.s.targetUid); this.b.s.targetUid = al[(i + 1) % al.length].uid; this.refresh(); } }
       else { const n = parseInt(k, 10); if (n >= 1 && n <= 6 && !this.busy) { const ds = [...this.dice.values()].filter(d => d.mode === 'rest').sort((a, b) => a.home.x - b.home.x); const d = ds[n - 1]; if (d) this.setSel(d, !this.sel.includes(d.uid!)); } }
@@ -860,12 +957,30 @@ export class V2Show {
 
   // ------------------------------------------------------------ capture helpers (CSS px)
   rowPx(i: number) { return this.tablet.rowPx(i); }
+  /** v3 capture helpers: the lit cards (slot, centre px), a slot's px, an enemy's chest px */
+  cardsPx() { return this.skills.cards.filter(c => !c.out).map(c => ({ slot: c.def.slot, name: c.def.name, x: Math.round(c.x), y: Math.round(c.y), all: c.def.all })); }
+  foePx(uid?: number) { const u = uid ?? this.b?.target()?.uid; const a = u != null ? this.foes.get(u) : null; if (!a) return null; const v = worldToUi(a.chest()); return [Math.round(v.x), Math.round(v.y)]; }
+  dragPath() { const c = this.cardsPx().find(x => !x.all) || this.cardsPx()[0], f = this.foePx(); if (!c || !f) return []; return Array.from({ length: 16 }, (_, i) => [Math.round(c.x + (f[0] - c.x) * i / 15), Math.round(c.y + (f[1] - c.y) * i / 15)]); }
+  playCard(slot?: number) { const c = this.skills.cards.find(x => !x.out && (slot == null || x.def.slot === slot)); return c ? this.playSlot(c.def.slot) : false; }
+  /** capture helper: press a lit card and drag partway toward the target without releasing (then simDrop() releases on it) */
+  simDrag(k = 0.85) { const c = this.cardsPx().find(x => !x.all) || this.cardsPx()[0], f = this.foePx(); if (!c || !f) return false; this.pointer('down', c.x, c.y); for (let i = 1; i <= 8; i++) this.pointer('move', c.x + (f[0] - c.x) * k * i / 8, c.y + (f[1] - c.y) * k * i / 8); this.pointer('move', f[0], f[1]); return true; }
+  simDrop() { const f = this.foePx(); if (!f || !this.drag) return false; this.pointer('up', f[0], f[1]); return true; }
   readyRow() { return this.tablet.rows.findIndex(r => r.view.state === 'ready'); }
   diePx(uid: number) { const d = this.dice.get(uid); return d ? worldToUi(d.root.position) : null; }
   btnPx(id: string) { const b = this.screen.btns.find(x => x.id === id); return b ? [b.r.x + b.r.w / 2, b.r.y + b.r.h / 2] : null; }
   idle() { return this.mode === 'battle' && !this.busy && !!this.b && this.b.s.phase === 'player'; }
   /** select the dice of the bot's first play this turn (captures: "dice selected, a row lit") */
-  botSelect() { const b = this.b; if (!b || !this.idle()) return false; const a = recordBotTurn(b, mulberry(7)).find(x => x.k === 'play') as Extract<BotAct, { k: 'play' }> | undefined; if (!a) return false; this.selectUids(a.uids); return true; }
+  botSelect() {
+    const b = this.b; if (!b || !this.idle()) return false;
+    const a = recordBotTurn(b, mulberry(7)).find(x => x.k === 'play') as Extract<BotAct, { k: 'play' }> | undefined;
+    // capture helper: the subset (of the dice as they lie now) that lights a pattern skill with the biggest preview; else the bot's pick
+    const ds = b.dice().map(d => d.uid); let best: number[] | null = null, bv = 0;
+    for (let m = 1; m < 1 << ds.length; m++) {
+      const u = ds.filter((_, i) => m & (1 << i)), o = b.options(u).find(x => x.ok && x.ref !== 'basic'); if (!o) continue;
+      const v = (b.preview(o.ref, u, b.target()?.uid)?.total ?? 0) + u.length * 100; if (v > bv) { bv = v; best = u; }
+    }
+    const pick = best ?? a?.uids ?? ds.slice(0, 1); this.selectUids(pick); return true;
+  }
 }
 
 interface CardData { title: string; tag: string; desc: string; col: string; ico: string[]; price?: string; dim?: boolean }
@@ -906,6 +1021,20 @@ function heroReadable(a: BattleActor) {
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.035; ring.renderOrder = 1; a.root.add(ring);
   const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 20), new THREE.MeshBasicMaterial({ color: 0x07050a, transparent: true, opacity: 0.55, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.y = 0.03; disc.renderOrder = 1; a.root.add(disc);
+}
+/** a short Chinese line for a tier's effects (slot tier notes) */
+const TGT_CN: Record<string, string> = { one: '单体', all: '全体', two: '随机 2 个', three: '随机 3 个', second: '另 1 个', other: '另 1 个', others: '其余', adjacent: '相邻' };
+function tierText(fx: import('../../core/v2/types').Effect[]) {
+  const out: string[] = [];
+  for (const e of fx) {
+    if (e.t === 'dmg') out.push(`${TGT_CN[e.target] || e.target} ×${e.mul ?? 1}${e.ignoreArmor ? ' 无视护甲' : ''}${e.exec ? ` 生命<${Math.round(e.exec * 100)}%斩杀` : ''}`);
+    else if (e.t === 'armor') out.push('护甲'); else if (e.t === 'heal') out.push(`回复 ×${e.mul}`); else if (e.t === 'barrier') out.push('屏障');
+    else if (e.t === 'status') out.push(`${ST_CN[e.status as StatusV2] || e.status}${e.target === 'all' ? '（全体）' : ''}`);
+    else if (e.t === 'stun') out.push(`${e.look === 'freeze' ? '冻结' : '眩晕'}${e.target === 'all' ? '全体' : ''}`);
+    else if (e.t === 'taunt') out.push('嘲讽'); else if (e.t === 'spawnShadow') out.push(`+${e.n} 残骰`); else if (e.t === 'capUp') out.push(e.which === 'behead' ? '斩首 +1 骰' : '完防上限 +1');
+    else if (e.t === 'earnDie') out.push('+1 骰');
+  }
+  return out.join('，') || '—';
 }
 function mulberry(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function cameraRef() { return CAMERA; }

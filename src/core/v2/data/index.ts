@@ -3,6 +3,7 @@ import type { ClassId, Loadout, RowDef, RowSlot, TabletDef } from '../types';
 import { W_ROWS, W_TABLETS } from './rows_warrior';
 import { M_ROWS, M_TABLETS } from './rows_mage';
 import { R_ROWS, R_TABLETS } from './rows_rogue';
+import { V3_ROWS, V3_TABLETS } from './rows_v3';
 import { CLASSES } from './classes';
 
 export * from './classes';
@@ -10,15 +11,18 @@ export * from './talents';
 export * from './enemies';
 export * from './relics';
 
-const ALL_ROWS = [...W_ROWS, ...M_ROWS, ...R_ROWS];
+const ALL_ROWS = [...W_ROWS, ...M_ROWS, ...R_ROWS, ...V3_ROWS];
 export const ROWS: Record<string, RowDef> = Object.fromEntries(ALL_ROWS.map(r => [r.id, r]));
-export const TABLETS: Record<string, TabletDef> = Object.fromEntries([...W_TABLETS, ...M_TABLETS, ...R_TABLETS].map(t => [t.id, t]));
+export const TABLETS: Record<string, TabletDef> = Object.fromEntries([...W_TABLETS, ...M_TABLETS, ...R_TABLETS, ...V3_TABLETS].map(t => [t.id, t]));
 
 export function rowDef(id: string): RowDef { const r = ROWS[id]; if (!r) throw new Error('unknown row ' + id); return r; }
 
 /** The row a slot actually plays: the evolved row if it has been rewritten. */
 export function slotRow(slot: RowSlot): RowDef {
-  const base = rowDef(slot.rowId);
+  const base0 = rowDef(slot.rowId);
+  // v3: level-III effects ride on every tier
+  const lf = base0.levelFx?.[3];
+  const base = lf && slot.level >= 3 ? { ...base0, tiers: Object.fromEntries(Object.entries(base0.tiers).map(([k, t]) => [k, { ...t!, effects: [...t!.effects, ...lf] }])) } : base0;
   if (!slot.evolvedTo) return base;
   const ev = base.evolutions.find(e => e.id === slot.evolvedTo);
   return ev ? ev.apply(base) : base;

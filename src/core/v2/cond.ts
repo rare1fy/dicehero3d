@@ -77,6 +77,10 @@ export function matchCond(cond: Condition, faces: Face[], kinds: (DieKind | unde
     case 'twoPair': { if (n !== 4) return null; const c = [...counts(vals).values()].sort(); return c.length === 2 && c[0] === 2 && c[1] === 2 ? { count: 4, companions: 0 } : null; }
     case 'fullHouse': { if (n !== 5) return null; const c = [...counts(vals).values()].sort(); return c.length === 2 && c[0] === 2 && c[1] === 3 ? { count: 5, companions: 0 } : null; }
     case 'sumAtLeast': { const need = cond.byCount[n]; return need != null && vals.reduce((a, b) => a + b, 0) >= need ? { count: n, companions: 0 } : null; }
+    case 'array': {
+      const c = [...counts(vals).values()];
+      return c.length >= 2 && c.every(x => x >= 2) ? { count: n, companions: 0 } : null;
+    }
     case 'mixedRelease': {
       if (n < cond.minDice) return null;
       const have = new Map<Suit, number>(); for (const f of faces) if (f.suit !== 'none') have.set(f.suit, (have.get(f.suit) || 0) + 1);
