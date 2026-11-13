@@ -221,7 +221,7 @@ export class V2Show {
   }
   private startRun(run: Run2, logLine: string) {
     const c = run.s.classId;
-    this.screen.close(); this.reopen = null; cue('select', 0.8); void audio.unlock().then(() => audio.playMusic('bgm_battle', 0.6));
+    this.menu.close(); this.screen.close(); this.reopen = null; cue('select', 0.8); void audio.unlock().then(() => audio.playMusic('bgm_battle', 0.6));
     this.cls = c; this.run = run; this.result = null; this.tauntSeen = false; this.paused = false; FX.speed = SPEEDS[PREFS.speed];
     const skin: SuitSkin = { cls: c, scheme: 'A', plain: true };
     this.tray.skin = skin; this.mech.setClass(c); this.mech.setSkin(skin); this.loot.setClass(c);

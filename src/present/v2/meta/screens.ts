@@ -32,7 +32,7 @@ export function titleMenu(h: MetaHost, focus?: string) {
   if (h.openCodex) items.push({ kind: 'btn', id: 'codex', label: '图鉴', sub: '职业技能 · 骰子 · 遗物 · 敌人', on: () => h.openCodex!(() => titleMenu(h, 'codex')) });
   items.push({ kind: 'btn', id: 'set', label: '设置', on: () => settingsMenu(h, () => titleMenu(h, 'set')) });
   items.push({ kind: 'btn', id: 'cred', label: '制作人员', on: () => creditsMenu(h, () => titleMenu(h, 'cred')) });
-  h.menu.open({ title: '六面史诗', subtitle: '— 3D · 第一章 幽暗森林 —', items, big: true, dim: 0.15 }, focus);
+  h.menu.open({ title: '六面史诗', subtitle: '第一章 · 幽暗森林', items, layout: 'title', dim: 0.12 }, focus);
 }
 
 export function pauseMenu(h: MetaHost, focus?: string) {
@@ -44,7 +44,7 @@ export function pauseMenu(h: MetaHost, focus?: string) {
   items.push(
     { kind: 'btn', id: 'set', label: '设置', on: () => settingsMenu(h, () => pauseMenu(h, 'set')) },
     { kind: 'btn', id: 'keys', label: '操作说明', on: () => controlsMenu(h, () => pauseMenu(h, 'keys')) },
-    { kind: 'btn', id: 'title', label: '回到标题', sub: '本局停在当前关卡开始时，可以继续', on: () => confirm(h, '回到标题？', '这一场战斗的进度不保存，下次从这一关开始。', '回到标题', () => h.toTitle(), () => pauseMenu(h, 'title')) },
+    { kind: 'btn', id: 'title', label: '回到标题', sub: '下次从这一关开始', on: () => confirm(h, '回到标题？', '这一场战斗的进度不保存，下次从这一关开始。', '回到标题', () => h.toTitle(), () => pauseMenu(h, 'title')) },
     { kind: 'btn', id: 'quit', label: '放弃本局', danger: true, on: () => confirm(h, '放弃本局？', '存档会被删除，无法恢复。', '放弃', () => h.abandonRun(), () => pauseMenu(h, 'quit')) },
   );
   h.menu.open({ title: '暂停', items, onBack: () => h.resume(), dim: 0.62 }, focus);

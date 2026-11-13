@@ -23,5 +23,5 @@ const KIND_CN: Record<string, string> = { normal: '雾林小径', elite: '废弃
 /** one line for the title screen's continue button */
 export function saveSummary(d: RunSave) {
   const s = d.s, n = s.nodes[s.node];
-  return `${CLASSES[s.classId].name} · ${s.level} 级 · 第 ${s.node + 1}/${s.nodes.length} 站 ${n ? KIND_CN[n.kind] ?? '' : ''} · 生命 ${s.hp}/${s.maxHp}`;
+  return `${CLASSES[s.classId].name} ${s.level}级 · ${n ? KIND_CN[n.kind] ?? "" : ""} ${s.node + 1}/${s.nodes.length}`;
 }
