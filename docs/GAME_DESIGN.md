@@ -3,6 +3,7 @@
 > 这一份是**当前有效**的规则和设计总表，数值和代码一致（`src/core/v2/data/rows_v4.ts`、`classes.ts`、`battle2.ts`）。
 > 设计过程和取舍看 `docs/handoff/design/`（`CLASS_DESIGN_V4.md` 是职业设计原稿，`DECISIONS_V4.md` 是之后的拍板记录），模拟数据看 `docs/handoff/core2_report.md`。
 > 原则（用户）：「机制问题不要给数值问题让步，能数值解决的问题就不要随便去动机制。」
+> **注意（2026-11-14）：技能系统正在按 v5 重做。** 这里的技能表、升级和觉醒都会被替换，讨论和结论见 `docs/handoff/design/SKILL_REDESIGN_V5.md`。
 
 ---
 
