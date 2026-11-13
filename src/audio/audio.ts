@@ -81,13 +81,14 @@ const H: Partial<Record<Cue, (k: number, x?: number) => void>> = {
   select: () => audio.any('die_click', { gain: 0.7, rate: 1.25 }),
   deselect: () => audio.any('ui_tap', { gain: 0.5, rate: 0.8 }),
   whoosh: k => audio.noise(0.28, { from: 600, to: 3200, gain: 0.25 * k + 0.08, q: 0.8 }),
-  reveal: k => { audio.any('pickup', { gain: 0.5 + k * 0.15, rate: 0.8 + k * 0.12, jitter: 0.02 }); if (k >= 2) audio.noise(0.6, { from: 3000, to: 200, gain: 0.25, type: 'lowpass' }); if (k >= 3) audio.tone(110, 0.9, { to: 55, gain: 0.5, type: 'sawtooth' }); },
-  count: (k) => { const now = performance.now(); if (now - countT > 900) count = 0; countT = now; audio.any('ui_tap', { gain: 0.6 + k * 0.3, rate: 1 + Math.min(10, count++) * 0.07, jitter: 0.01 }); if (k >= 1) audio.tone(880, 0.25, { to: 1320, gain: 0.15, type: 'triangle' }); },
-  relic: () => { audio.any('coins', { gain: 0.45, rate: 1.4 }); audio.tone(1320, 0.4, { to: 1760, gain: 0.12, type: 'triangle' }); },
+  // user 11-13: the 'pickup' jingle sounds like a chord and fired on every banner / armor gain (「那个和弦音效…还是疯狂在放」): non-musical cues
+  reveal: k => { audio.noise(0.35, { from: 500, to: 2400, gain: 0.12 + k * 0.05, q: 0.7 }); if (k >= 2) audio.noise(0.6, { from: 3000, to: 200, gain: 0.25, type: 'lowpass' }); if (k >= 3) audio.tone(110, 0.9, { to: 55, gain: 0.5, type: 'sawtooth' }); },
+  count: (k) => { const now = performance.now(); if (now - countT > 900) count = 0; countT = now; audio.any('ui_tap', { gain: 0.6 + k * 0.3, rate: 1 + Math.min(10, count++) * 0.07, jitter: 0.01 }); },
+  relic: () => { audio.any('coins', { gain: 0.45, rate: 1.4 }); },
   impact: k => { audio.any('sword_hit', { gain: 0.6 + k * 0.4, rate: 1.05 - k * 0.15 }); audio.tone(90, 0.25, { to: 40, gain: 0.35 * k + 0.1 }); },
   crit: k => { audio.any('sword_hit', { gain: 1, rate: 0.75 }); audio.any('shatter', { gain: 0.5, rate: 0.7 }); audio.tone(70, 0.6, { to: 30, gain: 0.7 }); audio.noise(0.5, { from: 2000, to: 80, gain: 0.35 * (k || 1), type: 'lowpass' }); },
   block: () => { audio.any('sword_hit', { gain: 0.7, rate: 1.5 }); audio.tone(1800, 0.15, { gain: 0.08, type: 'square' }); },
-  armor: () => { audio.any('pickup', { gain: 0.35, rate: 0.7 }); },
+  armor: () => { audio.any('sword_hit', { gain: 0.25, rate: 1.7 }); },
   hurt: k => { audio.any('sword_hit', { gain: 0.5 + k * 0.3, rate: 0.7 }); audio.tone(120, 0.3, { to: 50, gain: 0.4 }); },
   heal: () => audio.any('heal', { gain: 0.5 }),
   burn: () => audio.any('fireball', { gain: 0.45, rate: 1.2 }),
@@ -96,7 +97,7 @@ const H: Partial<Record<Cue, (k: number, x?: number) => void>> = {
   deny: () => audio.any('ui_tap', { gain: 0.6, rate: 0.6 }),
   click: () => audio.any('ui_tap', { gain: 0.6 }),
   coin: () => audio.any('coins', { gain: 0.5 }),
-  win: () => { audio.any('pickup', { gain: 0.8, rate: 1.0, jitter: 0 }); },   // user 11-13: the C–E–G reward chord was annoying, removed
+  win: () => { audio.any('coins', { gain: 0.6, rate: 0.9 }); },   // user 11-13: no chord / jingle at all
   lose: () => { audio.tone(220, 1.2, { to: 110, gain: 0.3, type: 'sawtooth' }); },
   shatter: k => { audio.any('shatter', { gain: 0.6 + k * 0.3, rate: 1.1 - k * 0.2 }); },
   summon: () => { audio.any('goblin', { gain: 0.7, rate: 0.8 }); audio.noise(0.8, { from: 150, to: 900, gain: 0.25, type: 'lowpass' }); },

@@ -15,7 +15,7 @@ export const PX = {
   on: true,
   /** CSS px per art pixel (1 / 2 / 3). 2026-11-13 evening: with the UI now crisp on its own layer, the user likes the scene at 3x
    *  (「这种清晰度的UI+3x效果还不错」) → 3 */
-  size: 3,
+  size: 1,   // user 2026-11-13: 「我们默认就1x」 (2× / 3× stay in the settings menu)
   /** render-time light balance (multipliers on the scene's own lights, restored after the frame) */
   warmK: 1.5, coolK: 1.0, hemiK: 1.2, pointK: 1.0,
   /** bloom ceiling (per-pixel cap on the added glow, which is then stepped into 6 bands) and how much it backs off on busy screens */
@@ -54,7 +54,6 @@ export function readPixelFlag(hash: string, query: (k: string) => string | null)
   const q = query('px');
   if (q != null) { on = q !== '0'; if (/^[123]$/.test(q)) size = +q; }
   // phones: 2x/3x art pixels are not readable there (user: 「2x还是太不清晰了在手机上」) — 1x unless the URL asks; a settings switch comes later
-  if (q == null && !/px[123]/.test(hash) && isPhone()) size = 1;
   PX.on = on; PX.size = size; PXU.uPx.value = on ? 1 : 0;
   return rest.join('&');
 }
