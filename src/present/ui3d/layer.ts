@@ -25,6 +25,35 @@ export class UiLayer implements Ui3DLayer {
     this.key = new THREE.DirectionalLight(0xffe2b8, 2.6); this.key.position.set(-6, 10, 14); this.scene.add(this.key);
     this.fill = new THREE.DirectionalLight(0x7aa0ff, 0.9); this.fill.position.set(8, -4, 6); this.scene.add(this.fill);
     setUi3DLayer(this);
+    // fx4: every widget turns a little toward the screen centre for the frame it is drawn (restored after), so the sides show
+    this.scene.onBeforeRender = () => this.tiltOn();
+    this.scene.onAfterRender = () => this.tiltOff();
+  }
+  /** max turn toward the screen centre (rad) and the idle sway; tilt = 0 turns it off */
+  tilt = 0.36; sway = 0.035;
+  private tilted: THREE.Object3D[] = []; private tq = new THREE.Quaternion(); private te = new THREE.Euler();
+  /** the extra screen-space turn for a widget at CSS px (x, y) (also used by the UI → world hand-over) */
+  tiltAt(x: number, y: number, ph = 0, out = new THREE.Quaternion()) {
+    const nx = Math.max(-1, Math.min(1, (x - this.w / 2) / (this.w / 2))), ny = Math.max(-1, Math.min(1, (y - this.h / 2) / (this.h / 2))), t = performance.now() / 1000;
+    // left → yaw right (+y), bottom → pitch up (−x) plus a constant slight upward look; a slow sway on both
+    this.te.set(-ny * this.tilt * 0.75 - 0.06 + Math.sin(t * 0.9 + ph) * this.sway, -nx * this.tilt + Math.sin(t * 0.7 + ph * 1.3) * this.sway, 0);
+    return out.setFromEuler(this.te);
+  }
+  private tiltOn() {
+    this.tilted.length = 0; if (!this.tilt) return;
+    for (const o of this.scene.children) {
+      if (!(o as THREE.Group).isGroup || !o.visible || o.renderOrder >= 30 || o.userData.noTilt) continue;
+      const p = this.toPx(o.position), ph = (o.id * 0.618) % 6.28;
+      const q = this.tiltAt(p.x, p.y, ph, (o.userData.uiTilt as THREE.Quaternion) || (o.userData.uiTilt = new THREE.Quaternion()));
+      o.userData.uiBase = (o.userData.uiBase as THREE.Quaternion || new THREE.Quaternion()).copy(o.quaternion);
+      o.quaternion.premultiply(q); o.updateMatrixWorld(true); this.tilted.push(o);
+    }
+  }
+  private tiltOff() { for (const o of this.tilted) { o.quaternion.copy(o.userData.uiBase as THREE.Quaternion); o.updateMatrixWorld(true); } this.tilted.length = 0; }
+  /** the orientation a top-level UI group is drawn with (its own rotation plus the screen tilt) */
+  shownQuat(o: THREE.Object3D, out = new THREE.Quaternion()) {
+    if (!this.tilt || o.userData.noTilt) return out.copy(o.quaternion);
+    const p = this.toPx(o.position); return this.tiltAt(p.x, p.y, (o.id * 0.618) % 6.28, out).multiply(o.quaternion);
   }
   resize(w: number, h: number, dpr: number) {
     this.w = w; this.h = h; this.dpr = dpr; this.camera.aspect = w / Math.max(1, h); this.camera.updateProjectionMatrix();

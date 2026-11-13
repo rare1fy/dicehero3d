@@ -70,6 +70,16 @@ export class DiceTray {
     }
   }
   clear() { for (const t of this.dice) t.die.dispose(); this.dice = []; }
+  /** add dice (pop in at the front, existing ones slide over) without clearing: the base dice joining the earned ones at turn start */
+  topUp(n: number, specials: Array<SpecialId | undefined> = []) {
+    for (let i = 0; i < n; i++) {
+      const d = this.make(specials[i]), p = this.slotPx(0, this.dice.length + 1);
+      const t: TrayDie = { die: d, special: specials[i], x: p.x, y: p.y + 40, s: 0, z: 0, ph: R(0, 6.28), axis: V3(R(0.4, 1), R(0.6, 1), R(-0.3, 0.3)).normalize(), busy: true, showValue: null };
+      this.dice.unshift(t);
+      void animP(0.26, k => { t.s = this.sizePx * ease.outBack(k); t.y = p.y + 40 * (1 - ease.outCubic(k)); }).then(() => { t.busy = false; });
+    }
+    if (n > 0) cue('click', 0.3);
+  }
 
   /** a die is won: it pops out of `from` (world) and arcs into a new slot. Resolves when it has settled. */
   async earn(from: THREE.Vector3, special?: SpecialId) {
@@ -122,7 +132,7 @@ export class DiceTray {
       const d = t.die, rec = recs[i];
       const go = () => {
         // hand-over: the world pose covering the same pixels, same on-screen orientation
-        const h = uiToWorld(t.x, t.y, t.s, DIE, dist), qW = uiQuatToWorld(d.root.quaternion);
+        const h = uiToWorld(t.x, t.y, t.s, DIE, dist), qW = uiQuatToWorld(this.L.shownQuat(d.root));   // fx4: the shown pose includes the layer tilt
         scene.add(d.root); d.root.position.copy(h.pos); d.root.quaternion.copy(qW); d.root.scale.setScalar(h.scale);
         d.mesh.castShadow = true;
         prependLeg(rec, h.pos, qW, h.scale);

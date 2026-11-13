@@ -8,6 +8,8 @@ import { CAM } from '../engine/gfx';
 import { shot, staticShot } from '../director';
 import { FIELD, simThrow, playThrow } from '../dice/throw';
 import { Die3D, throwHooks, flyDie, DICE3D } from '../dice/die3d';
+import { presentQuat } from '../dice/faces';
+import { DiceFlow } from './diceFlow';
 import { fxImpact, fxSparks, fxGlow, fxShield, fxHeal, fxRing, fxSmoke, fxStatus, COL } from '../fx/fx';
 import { GRADE } from '../look/post';
 import { SCENES } from '../scenes/defs';
@@ -33,7 +35,9 @@ import { CLASSES, TALENT_FILLERS, talentDef, relicV2, rowDef, slotRow, xpToNext,
 import { Overlay, Pane, Banner, Toast, Screen, panel, icon, ICON, text, textW, pixWrap, PIX_H, type Rect } from './overlay';
 import { popPix } from './pix';
 import { uiSpecial, tabletRow, BASIC_ROW, lampsFor, recordBotTurn, gotoNode, type BotAct } from './adapt';
-import { SkillUI, type SkillKind, type SlotDef, type SlotView, type CardDef } from './skills';
+import { SkillUI, KIND_CN, type SkillKind, type SlotDef, type SlotView, type CardDef } from './skills';
+import { HeroFx } from './heroFx';   // fx4
+import { playDeath, lastHit } from './death';   // fx4
 
 const EYE = V3(0.3, 13.4, 14.9), LOOK = V3(0, -0.6, -2.4);
 const HERO_POS = V3(-2.0, 0, 3.0), BOSS_POS = V3(0, 0.56, -4.7);
@@ -46,9 +50,9 @@ const NODE_SCENE: Record<string, string> = { normal: 'n_trail', elite: 'n_lumber
 const NODE_CN: Record<string, [string, string]> = { normal: ['雾林小径', '普通战 · 两波'], elite: ['废弃伐木场', '精英 · 狼人首领'], midBoss: ['墓园祭坛', '首领 · 枯骨巫妖'], shop: ['林边货车', '商人'] };
 const CLASS_IDS: ClassId[] = ['warrior', 'mage', 'rogue'];
 const CLASS_LINES: Record<ClassId, string[]> = {
-  warrior: ['卖血重投，攒血怒', '斩首 / 格挡挣骰子', '骰子溢出变伤害'],
-  mage: ['不出手 = 吟唱，骰子留在环上', '屏障挡伤，反噬越叠越深', '攒满一波爆发'],
-  rogue: ['一回合两刀', '第一刀后白送一次重投', '精准连击产暗影残骰'],
+  warrior: ['散骰可一次交 1～3 颗', '卖血重投，攒血怒加伤', '斩首 / 完防：下回合 +1 骰'],
+  mage: ['不出手 = 吟唱：骰子留场，下回合多骰', '吟唱得屏障，挨打叠反噬', '满环交 4 颗以上：星辰骰'],
+  rogue: ['一回合两刀，第一刀后免费重投', '两刀同技能：精准连击', '暗影残骰留到下回合'],
 };
 const ROMAN = ['', 'I', 'II', 'III'];
 const gainSpecial = (r: GainReason): SpecialId | undefined => (r === 'fury' || r === 'furyUlt' ? 'fury' : r === 'shadow' || r === 'precise' || r === 'mark' ? 'shadowres' : r === 'titan' ? 'titan' : undefined);
@@ -59,7 +63,7 @@ interface FoeDisp { hp: number; maxHp: number; armor: number; lane: number; boss
 
 export class V2Show {
   run: Run2 | null = null; b: Battle2 | null = null; mode: Mode = 'select'; busy = true; flying = false; result: null | 'win' | 'lose' = null;
-  L = new UiLayer(); ov = new Overlay();
+  L = new UiLayer(); ov = new Overlay(); hfx = new HeroFx(this.ov);   // fx4: class state on the hero model
   tray: DiceTray; flask: HeartFlask; tablet: SkillTablet; end: StoneButton; reroll: StoneButton; loot: Loot; mech: ClassMech;
   banner: Banner; toast: Toast; screen: Screen;
   stage: Stage | null = null; hero: BattleActor | null = null; picks: BattleActor[] = [];
@@ -73,10 +77,12 @@ export class V2Show {
   private botOn = false; private botRnd = mulberry(1234); private botBusy = false;
   private pendingGold: { from: number; amount: number; overflow: number } | null = null; private lastDeath = V3(0, 1, -2.5);
   private screenResolve: ((v: number) => void) | null = null;
-  /** rules v3: the four skill slots (散骰 / 同点 / 顺子 / 阵列) and the lit cards; slotRefs[i] = the engine ref of slot i */
-  skills: SkillUI<RowRef>; private slotRefs: RowRef[] = [];
+  /** rules v3: the four skill slots (散骰 / 同点 / 连环 / 阵列) and the lit cards; slotRefs[i] = the engine ref of slot i */
+  skills: SkillUI<RowRef>; private slotRefs: RowRef[] = []; private readyWas: boolean[] = []; private selWas = 0; private hoverUid: number | null = null;
   private drag: { i: number; x0: number; y0: number; moved: boolean; foe: number | null } | null = null;
   private giveUp: Pane; private endPane: Pane; private giveUpRect: Rect | null = null;
+  /** v4 (SHOW3 #14): every move of a die between the field and the prep tray goes through this ordered queue */
+  flow = new DiceFlow(); private endDone = false;
 
   constructor(private platform: Platform) {
     const L = this.L, skin: SuitSkin = { cls: 'warrior', scheme: 'A', plain: true };
@@ -88,6 +94,7 @@ export class V2Show {
     this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10); this.freePane = this.ov.pane(10);
     this.skills = new SkillUI<RowRef>(this.ov, L); this.giveUp = this.ov.pane(11); this.endPane = this.ov.pane(11);
     this.loot.heroAt = () => (this.hero ? this.hero.chest() : V3(-2, 1.2, 3));
+    this.flow.onError = (st, err) => { const m = '[flow] ' + st + ' ' + ((err as Error).stack || err); this.errors.push(m); this.platform.log(m); };
     this.tablet.onPick = (i) => this.playRow(i);
     this.end.onTap = () => this.act({ k: 'end' });
     this.reroll.onTap = () => this.act({ k: 'reroll', uids: this.sel.slice() });
@@ -106,13 +113,15 @@ export class V2Show {
   layout() {
     const s = this.platform.canvasSize(), dpr = Math.min(this.platform.dpr(), 2), W = s.w, H = s.h, k = Math.min(1, H / 720);
     this.L.resize(W, H, dpr); this.ov.resize(W, H, dpr);
-    this.flask.place(96 * k + 10, H - 120 * k, 170 * k);
-    this.mech.place(190 * k + 10, H - 64 * k, Math.max(3, 4 * k));
+    // v4 (SHOW3 #9): the flask and the class gauge sit bottom-centre, left of the dice tray; the bottom-left corner keeps only the reroll
+    const fx = Math.max(260, W / 2 - 330 * k);
+    this.flask.place(fx, H - 112 * k, 160 * k);
+    this.mech.place(fx + 150 * k, H - 64 * k, Math.max(3, 4 * k));
     this.loot.purse = { x: 54 * k + 10, y: 52 * k + 8 }; this.loot.emblem = { x: 230 * k + 10, y: H - 150 * k };
     this.tablet.place(W - 260 * k, H * 0.42, 250 * k);
     this.end.place(W - 66 * k, H * 0.53, 84 * k);
     // v3: the reroll sits in the left-hand area, right of the flask and the class gauge
-    this.reroll.place(Math.max(330 * k, 260), H - 74 * k, 78 * k);
+    this.reroll.place(Math.max(64, 74 * k), H - 78 * k, 84 * k);
     this.skills.layout(W, H, k);
     this.tray.sizePx = 70 * k; this.tray.bottom = 70 * k;
     CAM.shift = W > H ? Math.round(H * 0.06) : 0;
@@ -262,7 +271,7 @@ export class V2Show {
     const defs: SlotDef[] = [{ name: ba.name, kind: 'basic', level: 1, steps: [ba.maxDice > 1 ? `1～${ba.maxDice}颗` : '1颗'], lines: [`散骰：不成型的骰子`, ba.maxDice > 1 ? `一次可交 1～${ba.maxDice} 颗，单体 ×${ba.coef}` : `只能交 1 颗，单体 ×${ba.coef}`, ...(ba.shadowify ? ['第一刀用它：补 1 颗暗影残骰'] : [])] }];
     this.slotRefs = ['basic'];
     for (const r of rows) {
-      const k = kindOf(r), cn = k === 'same' ? '同点' : k === 'straight' ? '顺子' : '阵列';
+      const k = kindOf(r), cn = KIND_CN[k];
       const steps = r.def.tierRule.steps.map(s => s.label);
       defs.push({ name: r.name || r.def.name, kind: k, level: r.level, steps, lines: [`${cn}：${k === 'same' ? '全部同一点数' : k === 'straight' ? '点数各不相同且连续' : '≥2 组同点，每组 ≥2 颗'}`, ...r.def.tierRule.steps.map(s => `${s.label} 颗：${tierText(r.def.tiers[s.tier]?.effects || [])}`), ...(r.def.levelDesc ? [`II：${r.def.levelDesc[0]}`, `III：${r.def.levelDesc[1]}`] : [])] });
       this.slotRefs.push(r.ref);
@@ -282,7 +291,7 @@ export class V2Show {
         return;
       }
       case 'turnStart': {
-        this.mech.setStrikes(0); this.keep = null;
+        this.mech.setStrikes(0); this.keep = null; this.endDone = false;
         if (e.turn > 1) this.toast.show(`第 ${e.turn} 回合 · ${e.diceCount} 颗骰`, 0.8, '#ffe8c0');
         shot('battle', staticShot(EYE, LOOK, 42), { speed: 2 });
         if (e.overflow > 0) { popPix(`溢出 ${e.overflow} 颗 → 加伤`, this.hero!.head().add(V3(0, 0.8, 0)), { color: '#ff9a6a', h: 0.34, life: 1.4 }); }
@@ -296,7 +305,7 @@ export class V2Show {
       }
       case 'rowPlay': return this.presentPlay(e);
       case 'spent': {
-        for (const u of e.uids) { const d = this.dice.get(u); if (d) { fxSparks(d.root.position, 0xffe0a0, 6, 2, { life: 0.3 }); d.dispose(); this.dice.delete(u); } }
+        for (const u of e.uids) { const d = this.dice.get(u); if (d) { if (d.root.visible) fxSparks(d.root.position, 0xffe0a0, 6, 2, { life: 0.3 }); d.dispose(); this.dice.delete(u); } }
         return;
       }
       case 'hit': return this.impact(e);
@@ -335,14 +344,15 @@ export class V2Show {
       case 'purify': popPix('净化', this.hero!.head().add(V3(0, 0.6, 0)), { color: '#fff4c0', h: 0.4 }); return;
       case 'gainDice': {
         const src = e.from != null && this.foes.get(e.from) ? this.foes.get(e.from)!.chest() : this.hero!.chest();
+        if (this.endAhead()) await this.turnEndVanish();
         popPix(`${GAIN_CN[e.reason]} +${e.n} 骰`, src.clone().add(V3(0, 1.0, 0)), { color: '#ffe08a', h: 0.42, life: 1.3 });
-        for (let i = 0; i < e.n; i++) { void this.tray.earn(src, gainSpecial(e.reason)); await wait(0.12); }
+        for (let i = 0; i < e.n; i++) await this.condense(src, gainSpecial(e.reason));
         return;
       }
       case 'special': {
         const d = this.dice.get(e.uid);
         if (e.action === 'transform' && d) { d.setSuit(this.skinFor(e.kind)); d.glow = 1; d.glowCol.set(0xff5a10); fxSparks(d.root.position, 0xff6a1a, 18, 4, { life: 0.6 }); popPix('怒火骰', d.root.position.clone().add(V3(0, 0.7, 0)), { color: '#ff9a40', h: 0.36 }); cue('roar', 0.4); await wait(0.3); }
-        else if (e.action === 'vanish' && d) { fxSmoke(d.root.position, 0x6a5a7a, 4, { alpha: 0.4 }); d.dispose(); this.dice.delete(e.uid); }
+        else if (e.action === 'vanish' && d) { if (this.endAhead()) { await this.turnEndVanish(); return; } fxSmoke(d.root.position, 0x6a5a7a, 4, { alpha: 0.4 }); d.dispose(); this.dice.delete(e.uid); }
         return;
       }
       case 'rage': this.mech.setRage(e.stacks); if (e.stacks > 0) popPix(`血怒 ${e.stacks}`, this.hero!.head().add(V3(-0.5, 0.9, 0)), { color: '#ff7a6a', h: 0.36 }); return;
@@ -379,6 +389,7 @@ export class V2Show {
       case 'relic': { let nm = e.id; try { nm = relicV2(e.id).name; } catch { /* unknown */ } this.toast.show(`${nm}  ${e.text}`, 1.0, '#ffe0a0'); cue('relic', 0.6); await wait(0.25); return; }
       case 'waveClear': return this.wavePayoff(e);
       case 'victory': {
+        void this.flow.step('fade', async () => { for (const [u, d] of [...this.dice]) { fxSmoke(d.root.position, 0x6a5a7a, 3, { alpha: 0.3 }); d.dispose(); this.dice.delete(u); } while (this.tray.count) void this.tray.drop(); await this.flow.beat(0.3); });
         this.hero!.cheer(); cue('win'); this.banner.show('胜  利', `+${e.gold} 金  +${e.xp} 经验`, 1.6, '#fff0b0');
         shot('victory', staticShot(HERO_POS.clone().add(V3(2.6, 3.4, 5.6)), HERO_POS.clone().add(V3(0, 1.2, 0)), 40), { speed: 1.6 });
         await wait(1.4); return;
@@ -392,52 +403,90 @@ export class V2Show {
 
   // ------------------------------------------------------------ dice
   private skinFor(kind: DieKind): SuitSkin { return { cls: this.cls, scheme: 'A', plain: true, special: uiSpecial(kind) }; }
+  /** turn start: the tray already holds the dice won last turn; the base dice join them (front), then specials are matched */
   private reconcileTray(n: number, sp: Array<SpecialId | undefined>) {
     const t = this.tray; n = Math.min(6, n);
-    if (t.count !== n) t.fill(n, sp);
-    else t.dice.forEach((d, i) => { if (d.special !== sp[i]) { d.special = sp[i]; d.die.setSuit({ ...t.skin, special: sp[i] }); } });
+    while (t.count > n) { const d = t.dice.shift()!; d.die.dispose(); }
+    if (t.count < n) t.topUp(n - t.count);
+    t.dice.forEach((d, i) => { if (d.special !== sp[i]) { d.special = sp[i]; d.die.setSuit({ ...t.skin, special: sp[i] }); } });
     for (const d of t.dice) ghost(d.die, false, d.special);
   }
   private async onRoll(e: Extract<Ev2, { t: 'roll' }>) {
     if (e.reason === 'turn') {
-      for (const d of [...this.dice.values()]) d.dispose(); this.dice.clear(); this.mech.setKept([]);
-      this.reconcileTray(e.dice.length, e.dice.map(d => uiSpecial(d.kind)));
-      this.hero!.toss(); await wait(0.12);
-      this.flying = true;
-      const ds = await this.tray.launch(e.dice.map(d => d.value), { eye: EYE });
-      this.flying = false;
-      ds.forEach((d, i) => { const s = e.dice[i]; if (!s) { d.dispose(); return; } d.uid = s.uid; this.dice.set(s.uid, d); });
+      // v4: dice kept on the field stay (a re-rolled carried die hops in place); only the rest come out of the prep tray
+      const stay = e.dice.filter(s => this.dice.has(s.uid)), fresh = e.dice.filter(s => !this.dice.has(s.uid)), keptSet = new Set(e.kept);
+      for (const [u, d] of [...this.dice]) if (!e.dice.some(s => s.uid === u)) { d.dispose(); this.dice.delete(u); }
+      await this.flow.step('start.throw', async () => {
+        for (const s of stay) { const d = this.dice.get(s.uid)!; d.setSuit(this.skinFor(s.kind)); if (d.value !== s.value || !keptSet.has(s.uid)) { d.setValue(s.value, d.topIdx, d.topTurns); fxSparks(d.root.position, 0xc8b0ff, 8, 2, { life: 0.35 }); } d.glow = 0; d.lift = 0; }
+        if (!fresh.length) { while (this.tray.count) void this.tray.drop(); return; }
+        this.reconcileTray(fresh.length, fresh.map(d => uiSpecial(d.kind)));
+        await wait(0.3); this.hero!.toss(); await wait(0.12);
+        const kept = stay.map(s => this.dice.get(s.uid)!).map(d => ({ p: d.home.clone(), q: d.homeQ.clone() }));
+        this.flying = true;
+        const ds = await this.tray.launch(fresh.map(d => d.value), { eye: EYE, kept, stagger: 0.09 });
+        this.flying = false;
+        ds.forEach((d, i) => { const s = fresh[i]; if (!s) { d.dispose(); return; } d.uid = s.uid; this.dice.set(s.uid, d); });
+      });
       return;
     }
     if (e.reason === 'flip') { for (const s of e.dice) { const d = this.dice.get(s.uid); if (d) { d.setValue(s.value, d.topIdx, d.topTurns); fxSparks(d.root.position, 0x8ad8ff, 10, 3, { life: 0.4 }); } } return; }
     // reroll / spawn / return: (re)thrown from above the near edge, avoiding the dice at rest
     const ids = new Set(e.dice.map(s => s.uid));
     const kept = [...this.dice.values()].filter(d => d.mode === 'rest' && !ids.has(d.uid!)).map(d => ({ p: d.home.clone(), q: d.homeQ.clone() }));
-    const from = V3(lerp(FIELD.x0, FIELD.x1, 0.35), 2.4, FIELD.z1 + 0.9), recs = simThrow(e.dice.length, kept, from); let dur = 0;
+    const spawn = e.reason === 'spawn';
+    const from = spawn && this.hero ? this.hero.weapon().add(V3(0.4, 0.6, 0)) : V3(lerp(FIELD.x0, FIELD.x1, 0.35), 2.4, FIELD.z1 + 0.9), recs = simThrow(e.dice.length, kept, from); let dur = 0;
+    const go = async () => {
     e.dice.forEach((s, i) => {
       let d = this.dice.get(s.uid);
       if (!d) { d = new Die3D('standard', { suit: this.skinFor(s.kind) }); d.uid = s.uid; this.dice.set(s.uid, d); if (e.reason === 'spawn') { d.glow = 0.8; d.glowCol.set(0xb860ff); } }
       else d.setSuit(this.skinFor(s.kind));
       d.root.position.copy(from); playThrow(d, recs[i], s.value, EYE); dur = Math.max(dur, recs[i].rel + recs[i].dur);
     });
-    if (e.reason === 'spawn') { popPix('暗影残骰', from.clone().add(V3(0, 0.8, 0)), { color: '#d8a0ff', h: 0.36 }); cue('magic', 0.5); }
+    if (spawn) { popPix('暗影残骰', from.clone().add(V3(0, 0.8, 0)), { color: '#d8a0ff', h: 0.36 }); cue('magic', 0.5); }
     cue('whoosh', 0.6); await wait(dur + 0.05);
+    };
+    if (spawn) await this.flow.step('play.spawn', go); else await go();
   }
-  /** next-turn dice in the prep tray: count from nextDice(); dice that depend on how this turn ends are drawn faint (ghost) */
-  private syncPreview() {
-    const b = this.b!; if (b.s.phase !== 'player') return;
-    const nd = b.nextDice(), n = Math.max(0, Math.min(6, nd.count)), t = this.tray;
-    const field = b.dice(), sp: Array<SpecialId | undefined> = [];
-    const fury = field.filter(d => d.kind === 'furyDie').length + b.s.carry.filter(d => d.kind === 'furyDie').length, shadow = field.filter(d => d.kind === 'shadowDie').length + b.s.carry.filter(d => d.kind === 'shadowDie').length;
-    for (let i = 0; i < n; i++) sp.push(undefined);
-    let j = n - 1; for (let i = 0; i < fury && j >= 3; i++) sp[j--] = 'fury'; for (let i = 0; i < shadow && j >= 3; i++) sp[j--] = 'shadowres';
-    while (t.count > n) void t.drop();
-    while (t.count < n) void t.earn(this.hero!.chest(), sp[t.count]);
-    t.dice.forEach((d, i) => { if (d.special !== sp[i]) { d.special = sp[i]; d.die.setSuit({ ...t.skin, special: sp[i] }); } });
-    // presentation-side reading (see report): mage before the strike keeps the ring only by chanting; fury / shadow dice only carry if unused
-    const onField = field.filter(d => d.kind === 'furyDie' || d.kind === 'shadowDie').length;
-    const tent = this.cls === 'mage' && b.s.strikesUsed === 0 ? n - 3 : Math.min(Math.max(0, n - 3), onField);
-    t.dice.forEach((d, i) => ghost(d.die, i >= n - tent, d.special));
+  /** v4: the prep tray only holds the dice won for next turn (they condense as they are won); no faint 'maybe' dice any more */
+  private syncPreview() { /* intentionally empty: see condense() / turnEndVanish() */ }
+  /** is this beat part of a turn end (the batch goes on into the enemy turn)? */
+  private endAhead() { return !this.endDone && this.batch.slice(this.bi).some(x => x.t === 'enemyTurn'); }
+  /** a die won for next turn condenses in the prep tray; past 6 it bursts into sparks that fly into the hero (溢出加伤) */
+  private condense(src: THREE.Vector3, sp?: SpecialId) {
+    return this.flow.step('earn', async () => {
+      const onField = this.endDone ? this.dice.size : 0;
+      if (this.tray.count + onField >= 6) {
+        const p = this.tray.slotPx(Math.min(5, this.tray.count), Math.min(6, this.tray.count + 1)), w = this.L.at(p.x, p.y, 2);
+        this.tray.sparks.burst(w, 18, this.L.px(220), this.L.px(5), '#ff9a40', { life: 0.5 });
+        const to = this.hero!.chest(); fxSparks(to, 0xff7a30, 20, 4, { life: 0.5 }); fxGlow(to, 0xff7a30, 1.8, 0.4, 3); cue('roar', 0.3);
+        popPix('溢出 → 加伤', this.hero!.head().add(V3(0, 0.8, 0)), { color: '#ff9a6a', h: 0.36 }); await this.flow.beat(0.4); return;
+      }
+      await this.tray.earn(src, sp);
+    });
+  }
+  private endKeep = new Set<number>();
+  /** turn end step 4 (after the gains have condensed): the dice that stay on the field get a ring of light */
+  private turnEndStay() {
+    const keep = this.endKeep;
+    return this.flow.step('end.stay', async () => {
+      const ds = [...this.dice.values()]; if (!ds.length) return;
+      for (const d of ds) { const c = keep.has(d.uid!) ? 0x6ad8ff : 0xb860ff; d.glow = 1.1; d.glowCol.set(c); fxRing(d.home.clone().add(V3(0, 0.05, 0)), c, 0.7, { life: 0.5, width: 0.08 }); }
+      cue('tick', 0.4); await this.flow.beat(0.4); for (const d of ds) d.glow = 0.35;
+    });
+  }
+  /** turn end step 1: the dice that do not stay fade on the field; step 4: the ones that stay get a ring of light */
+  private turnEndVanish() {
+    if (this.endDone) return Promise.resolve(); this.endDone = true;
+    const next = this.batch.slice(this.bi).find((x): x is Extract<Ev2, { t: 'roll' }> => x.t === 'roll' && x.reason === 'turn');
+    const stay = new Set(next ? next.dice.map(s => s.uid) : []), keep = new Set(next ? next.kept : []);
+    this.clearSel();
+    const p = this.flow.step('end.vanish', async () => {
+      let any = false;
+      for (const [u, d] of [...this.dice]) if (!stay.has(u)) { any = true; fxSmoke(d.root.position, 0x6a5a7a, 3, { alpha: 0.35 }); anim(0.3, k => d.root.scale.setScalar(Math.max(0.01, 1 - k)), () => d.dispose()); this.dice.delete(u); }
+      if (any) await this.flow.beat(0.35);
+    });
+    this.endKeep = keep;
+    return p;
   }
   private clearSel() { for (const u of this.sel) { const d = this.dice.get(u); if (d) { d.lift = 0; d.glow = 0; } } this.sel = []; }
   private setSel(d: Die3D, on: boolean) {
@@ -454,29 +503,47 @@ export class V2Show {
   }
 
   // ------------------------------------------------------------ the play
+  /** v4 (SHOW3 #10): ① pattern + skill name + points, the dice lined up → ② the dice fly into the hero, energy gathers → ③ the attack */
   private async presentPlay(e: Extract<Ev2, { t: 'rowPlay' }>) {
-    const hero = this.hero!, idx = e.ref === 'basic' ? this.rows.length : e.ref, row = e.ref === 'basic' ? null : this.rows[e.ref];
-    const lamps = row ? lampsFor(row, e.tier) : 1, tc = TIER_COL[Math.max(0, Math.min(4, lamps - 1 + (e.ultimate ? 4 : 0)))];
-    this.tablet.flash(idx); void idx;
+    const hero = this.hero!, row = e.ref === 'basic' ? null : this.rows[e.ref];
+    const lamps = row ? lampsFor(row, e.tier) : 1, tc = TIER_COL[Math.max(0, Math.min(4, lamps - 1 + (e.ultimate ? 4 : 0)))], col = hex(tc);
+    const kind: SkillKind = !row ? 'basic' : row.def.cond.t === 'straight' ? 'straight' : row.def.cond.t === 'array' ? 'array' : 'same';
     const ds = e.uids.map(u => this.dice.get(u)).filter((d): d is Die3D => !!d);
-    for (const d of ds) { d.glow = 1; d.glowCol.set(hex(tc)); d.lift = 1; }
-    const step = row?.def.tierRule.steps.find(s => s.tier === e.tier);
-    popPix(e.name + (step && row && row.def.tierRule.steps.length > 1 ? ` ·${lamps}档` : ''), hero.head().add(V3(0.6, 1.1, 0)), { color: tc, h: 0.5, big: e.ultimate, life: 1.4, rise: 0.5 });
-    if (e.combo) popPix('精准连击', hero.head().add(V3(0.6, 1.8, 0)), { color: '#e070ff', h: 0.42, life: 1.4 });
-    if (e.bonusPct) popPix(`+${e.bonusPct}%`, hero.head().add(V3(-0.6, 1.5, 0)), { color: '#ffb070', h: 0.36 });
+    const pts = ds.reduce((a, d) => a + d.value, 0);
     if (this.cls === 'rogue') this.mech.setStrikes(e.strike, e.combo);
-    cue('reveal', Math.min(4, lamps)); if (e.ultimate) { shake(0.4); slowmo(0.5, 0.35); GRADE.flashCol.set(1, 0.9, 0.8); this.flash(0.35); }
-    await wait(0.28);
+    await this.flow.step('play.show', async () => {
+      // the handed dice line up in the air above the field, value up, in the tier colour
+      const n = ds.length, gap = 0.95, c0 = hero.home.clone().add(V3(1.7, 2.3, -0.6));
+      for (const d of ds) { d.glow = 1.2; d.glowCol.set(col); }
+      await Promise.all(ds.map((d, i) => flyDie(d, c0.clone().add(V3((i - (n - 1) / 2) * gap, 0, 0)), 0.3, { arc: 0.4, ease: ease.outCubic, q: presentQuat(d.topIdx, d.topTurns, CAMERA.quaternion.clone()) })));
+      const top = c0.clone().add(V3(0, 1.0, 0));
+      popPix(`${KIND_CN[kind]} · ${e.name}${row && row.def.tierRule.steps.length > 1 ? `  ${lamps}档` : ''}`, top, { color: tc, h: 0.5, big: e.ultimate, life: 1.5, rise: 0.3 });
+      popPix(`点数 ${pts}`, c0.clone().add(V3(0, -0.75, 0)), { color: '#fff2d0', h: 0.42, life: 1.3, rise: 0.2 });
+      if (e.combo) popPix('精准连击', top.clone().add(V3(0, 0.6, 0)), { color: '#e070ff', h: 0.4, life: 1.4 });
+      if (e.bonusPct) popPix(`+${e.bonusPct}%`, c0.clone().add(V3((n / 2) * gap + 0.6, 0.2, 0)), { color: '#ffb070', h: 0.38 });
+      cue('reveal', Math.min(4, lamps)); for (const d of ds) fxSparks(d.root.position, col, 6, 2, { life: 0.3 });
+      await this.flow.beat(0.5);
+    });
+    await this.flow.step('play.gather', async () => {
+      const to = hero.chest();
+      await Promise.all(ds.map((d, i) => wait(i * 0.05).then(() => flyDie(d, to, 0.32, { arc: 0.6, ease: ease.inCubic, scale: d.root.scale.x * 0.4, turns: 0.8 })).then(() => { d.root.visible = false; fxGlow(to, col, 1.4, 0.3, 3); })));
+      // energy gathering on the hero: motes pulled in, a ring at the feet
+      for (let i = 0; i < 3; i++) after(i * 0.08, () => fxSparks(to.clone().add(V3(R(-1.2, 1.2), R(0.2, 1.4), R(-1, 1))), col, 6, 2, { life: 0.3, dir: V3(0, -1, 0) }));
+      fxRing(hero.home.clone().add(V3(0, 0.1, 0)), col, 1.4, { life: 0.5, width: 0.14 }); fxGlow(to, col, 2.4, 0.5, 3); cue('magic', 0.5);
+      if (e.ultimate) { shake(0.4); slowmo(0.5, 0.35); GRADE.flashCol.set(1, 0.9, 0.8); this.flash(0.35); }
+      await this.flow.beat(0.3);
+    });
+    // ③ the attack: the hits / effects that follow are their own engine events
     const tA = e.target != null ? this.foes.get(e.target) : [...this.foes.values()].find(a => a.root.visible);
     const aim = tA ? tA.home.clone() : V3(0, 0, -3); hero.faceToward(aim);
     const melee = this.cls !== 'mage', dist = melee ? Math.max(0, hero.home.distanceTo(aim) - (tA && this.disp.get(e.target!)?.boss ? 2.6 : 1.6)) : 0;
     const act = hero.attack(dist); cue('whoosh', 0.9);
-    const until = act.dur * act.at, to = tA ? tA.chest() : aim;
-    const flights = ds.map((d, i) => wait(Math.max(0, until - 0.22) + i * 0.02).then(() => flyDie(d, to, 0.22, { arc: 0.5, ease: ease.inCubic, turns: 1.2 })).then(() => { d.root.visible = false; }));
-    await act.impact; await Promise.all(flights);
+    if (!melee && tA) void act.impact.then(() => this.orb(hero.weapon(), tA.chest(), col));
+    await act.impact;
   }
   private async impact(e: Extract<Ev2, { t: 'hit' }>) {
     const a = this.foes.get(e.uid), d = this.disp.get(e.uid); if (!a) return;
+    lastHit.set(e.uid, e.dmg);   // fx4: the killing blow's size picks the death form
     if (d) { d.armor = Math.max(0, d.armor - e.absorbed); d.hp = Math.max(0, d.hp - e.hpDmg); }
     const heavy = e.hpDmg >= 30 || e.ultimate, mid = !heavy && e.hpDmg >= 14, p = a.chest();
     fxImpact(p.clone().add(V3(0, 0, 0.4)), e.aoe ? 0xffc040 : 0xffe2a8, Math.min(3, 0.6 + e.dmg / 22), { dir: V3(0, 0.1, -1) });
@@ -510,15 +577,8 @@ export class V2Show {
   }
   private async enemyTurnBeat() {
     this.clearSel(); this.banner.show('敌方回合', '', 0.45, '#ffb0a0');
-    // leftover field dice: the mage's retained ones fly to the chant ring (the next turn's kept list), the rest fade out
-    const next = this.batch.slice(this.bi).find((x): x is Extract<Ev2, { t: 'roll' }> => x.t === 'roll' && x.reason === 'turn');
-    const kept = new Set(next ? next.kept : []), keepVals: number[] = [];
-    for (const [u, d] of [...this.dice]) {
-      if (this.cls === 'mage' && kept.has(u)) { keepVals.push(d.value); void flyDie(d, this.mechWorld(), 0.35, { arc: 1.2, scale: 0.4, ease: ease.inCubic }).then(() => d.dispose()); }
-      else { fxSmoke(d.root.position, 0x6a5a7a, 3, { alpha: 0.35 }); d.dispose(); }
-      this.dice.delete(u);
-    }
-    if (keepVals.length) after(0.35, () => this.mech.setKept(keepVals));
+    // turn end (SHOW3 #14): vanish -> condense (gainDice beats) -> recall (no rule yet) -> the dice that stay glow
+    await this.turnEndVanish(); await this.turnEndStay(); this.mech.setKept([]);
     shot('enemy', staticShot(V3(1.4, 12.4, 14.0), V3(-0.2, 0.2, -2.6), 40), { speed: 2.2 });
     await wait(0.5);
   }
@@ -562,29 +622,29 @@ export class V2Show {
     if (d?.boss) {
       a.collapse(); slowmo(1.6, 0.25); shake(0.8); GRADE.flashCol.set(1, 1, 1); this.flash(0.5);
       fxSparks(a.chest(), 0xa0ffc0, 60, 8, { life: 0.9, grav: 3 }); await wait(1.0);
-      anim(1.0, k => a.root.scale.setScalar(Math.max(0.01, 1 - ease.inCubic(k))), () => { a.root.visible = false; a.root.scale.setScalar(1); });
+      void playDeath(a, { boss: true, from: this.hero?.home, ratio: (lastHit.get(uid) ?? 0) / Math.max(1, d.maxHp) });   // fx4: knock-down / shatter, slower for bosses
       const st = this.stage; anim(1.6, k => st?.phase2(1 - k), undefined, { real: true }); await wait(0.6); return;
     }
-    a.dead = true; a.hurt(1.4);
-    fxSmoke(a.chest(), 0x3a4a3a, 6, { alpha: 0.5 });
-    anim(0.45, k => a.root.scale.setScalar(Math.max(0.01, 1 - ease.inCubic(k))), () => { a.root.visible = false; });
+    // fx4: knock-down or shatter, by the killing blow (damage ÷ max HP); the body sinks out of sight in the background
+    void playDeath(a, { from: this.hero?.home, ratio: (lastHit.get(uid) ?? 0) / Math.max(1, d?.maxHp ?? 1) });
     await wait(0.3);
   }
   /** 跨波兑现: the dice earned this turn burst out of the last kill and settle into the prep tray, then follow into the next wave */
   private async wavePayoff(e: Extract<Ev2, { t: 'waveClear' }>) {
-    for (const [u, d] of [...this.dice]) { fxSmoke(d.root.position, 0x6a5a7a, 3, { alpha: 0.35 }); d.dispose(); this.dice.delete(u); }
-    await wait(0.5);
     const extra = Math.max(0, e.nextDice - 3), from = this.lastDeath.clone();
-    this.banner.show(`第 ${e.wave + 1} 波 清场`, extra > 0 ? `挣到 ${extra} 颗骰 · 带进下一波` : `下一波 ${e.nextDice} 颗骰`, 1.6, '#ffe08a');
-    this.tray.fill(3); await wait(0.45);
+    this.banner.show(`第 ${e.wave + 1} 波 清场`, '', 1.4, '#ffe08a'); await wait(0.6);
+    await this.flow.step('end.vanish', async () => { for (const [u, d] of [...this.dice]) { fxSmoke(d.root.position, 0x6a5a7a, 3, { alpha: 0.35 }); d.dispose(); this.dice.delete(u); } await this.flow.beat(0.3); });
+    this.endDone = true;
+    // each die won this turn condenses in the prep tray with its reason (the next wave's base dice come out with the throw)
     const reasons = e.reasons.slice();
-    for (let i = 0; i < extra; i++) {
+    // dice already condensed during the turn (斩首 …) are in the tray; only the missing ones condense now
+    for (let i = this.tray.count; i < extra; i++) {
       const r = reasons[i] as GainReason | undefined;
       popPix(r ? `${GAIN_CN[r]} +1` : '+1', from.clone().add(V3(R(-0.4, 0.4), 1.0 + i * 0.3, 0)), { color: '#ffe08a', h: 0.45, life: 1.2 });
       fxSparks(from, 0xffe08a, 20, 5, { life: 0.5 }); cue('reveal', 0.8);
-      await this.tray.earn(from, r ? gainSpecial(r) : undefined); await wait(0.1);
+      await this.condense(from, r ? gainSpecial(r) : undefined);
     }
-    await wait(0.5);
+    await wait(0.3);
   }
 
   // ------------------------------------------------------------ battle over → rewards → next node
@@ -756,17 +816,21 @@ export class V2Show {
     this.slotRefs.forEach((ref, si) => {
       const i = ref === 'basic' ? n : ref, o = opts?.[i], row = ref === 'basic' ? null : this.rows.find(r => r.ref === ref) || null;
       if (!o) { views.push({ lit: false, tier: 0, dead: !live }); return; }
-      const dead = o.reason === 'strike' || o.reason === 'chant';
-      if (!o.ok) { views.push({ lit: false, tier: row && o.bestTier ? lampsFor(row, o.bestTier) : 0, dead }); return; }
+      const dead = o.reason === 'strike' || o.reason === 'chant', ready = !dead && (row ? !!o.bestTier : b.dice().length > 0);
+      if (!o.ok) { views.push({ lit: false, ready, tier: row && o.bestTier ? lampsFor(row, o.bestTier) : 0, dead }); if (ready && !this.readyWas[si]) cue('tick', 0.25); this.readyWas[si] = ready; return; }
+      this.readyWas[si] = ready;
       const tier = row ? lampsFor(row, o.tier) : 1, pv = b.preview(o.ref, this.sel, tid);
       views.push({ lit: true, tier, dead: false });
       const fx = row ? row.def.tiers[o.tier!]?.effects || [] : [], all = fx.some(e => e.t === 'dmg' && e.target === 'all');
       const label = row ? (row.def.tierRule.steps.find(s => s.tier === o.tier)?.label ?? '') : '';
       const parts: string[] = []; if (pv?.total) parts.push(`伤害 ${pv.total}`); if (pv?.armor) parts.push(`护甲 ${pv.armor}`); if (pv?.barrier) parts.push(`屏障 ${pv.barrier}`); if (pv?.heal) parts.push(`回复 ${pv.heal}`);
       const ex: string[] = []; if (pv?.kills.length) ex.push(`击杀 ${pv.kills.length}`); if (pv?.gainDice) ex.push(`+${pv.gainDice} 骰`); const spx = pv && (pv as { specialPct?: number }).specialPct ? `特殊骰 +${(pv as { specialPct?: number }).specialPct}%` : ''; if (spx) ex.push(spx);
-      cards.push({ slot: si, ref: o.ref, name: o.name, sub: row ? `${label} 颗 · ${tier} 档` : `${this.sel.length} 颗散骰`, value: parts.join('  '), extra: ex.join(' · ') || undefined, all, tier, ultimate: !!pv?.ultimate });
+      cards.push({ slot: si, ref: o.ref, name: o.name, sub: row ? `${label}颗 ${tier}档` : `${this.sel.length}颗`, value: parts.join('  '), extra: ex.join(' · ') || undefined, all, tier, ultimate: !!pv?.ultimate });
     });
     this.skills.setViews(views); this.skills.setCards(live ? cards : []);
+    // dice of the lit skill glow in its card colour (several cards: the strongest)
+    const top = cards.reduce<CardDef<RowRef> | null>((a, c) => (!a || c.tier > a.tier || c.ultimate ? c : a), null), selCol = top ? hex(top.ultimate ? TIER_COL[4] : TIER_COL[Math.max(0, Math.min(3, top.tier - 1))]) : 0xffd860;
+    for (const u of this.sel) { const d = this.dice.get(u); if (d) d.glowCol.set(cards.length ? selCol : 0x8a8090); }
     const ri = b.rerollInfo();
     this.reroll.setBadge(ri.free, ri.free > 0 ? 0 : ri.bloodCost ?? 0); this.freeRolls = live ? ri.free : 0;
     this.reroll.setEnabled(live && (ri.free > 0 || ri.bloodCost != null));
@@ -783,6 +847,7 @@ export class V2Show {
   private frame(dt: number) {
     const t = clock.time;
     this.hero?.update(dt); for (const a of this.foes.values()) a.update(dt); for (const a of this.picks) a.update(dt);
+    this.hfx.update(dt, this.hero, this.b, this.cls, this.mode === 'battle');   // fx4
     this.tray.update(dt, t); this.flask.update(dt); this.loot.update(dt, t);
     if (this.mode === 'battle' && this.b) { this.end.update(dt); this.reroll.update(dt); this.mech.update(dt); this.drawInfo(); this.skills.update(dt); this.drawEndAndGiveUp();
       const rp = this.reroll, fs = Math.max(1, Math.round(this.ov.fp * this.ov.dpr)), bc = this.b.s.phase === 'player' && !this.busy ? this.b.rerollInfo().bloodCost : null;
@@ -805,6 +870,11 @@ export class V2Show {
       this.endPane.at(Math.min(this.ov.w - w - 8, this.end.x - w / 2), this.end.y + this.end.sizePx * 0.6); this.endPane.visible = true;
       this.skills.auras = struck && !keepMode ? [] : [{ cx: this.end.x, cy: this.end.y, rx: this.end.sizePx * 0.7, ry: this.end.sizePx * 0.7, col: keepMode ? 0x6ad8ff : 0x7aa8ff, n: 8 + 4 * Math.min(3, b.s.chantRing), speed: 1.2 + 0.5 * b.s.chantRing }];
     } else { this.endPane.visible = false; this.skills.auras = []; }
+    // v4 (SHOW3 #17): the reroll lights up once dice are selected, little dice (one per selected die) circling it
+    const ri = live ? b.rerollInfo() : null, can = !!ri && (ri.free > 0 || ri.bloodCost != null), nSel = this.sel.length;
+    this.reroll.breathe(can && nSel > 0);
+    if (can && nSel > 0) this.skills.auras = [...this.skills.auras, { cx: this.reroll.x, cy: this.reroll.y, rx: this.reroll.sizePx * 0.72, ry: this.reroll.sizePx * 0.5, col: ri!.free > 0 ? 0xfff2d8 : 0xff4a3a, n: nSel, speed: 1.4, size: 15, solid: true }];
+    if (nSel !== this.selWas) { if (can && nSel > 0 && !this.selWas) cue('tick', 0.35); this.selWas = nSel; }
     // the rogue's quiet "skip the 2nd strike" button
     if (this.cls === 'rogue' && live && b.s.strikesUsed > 0 && b.strikesLeft() > 0) {
       const s = Math.max(1, Math.round(ov.fp * 0.75 * d)), t = '放弃第二刀', w = textW(t, s) / d + 16, h = Math.max(30, PIX_H * s / d + 12);
@@ -832,15 +902,14 @@ export class V2Show {
   }
   private drawInfo() {
     const b = this.b!, ov = this.ov, d = ov.dpr, s = Math.max(1, Math.round(ov.fp * d)), p = b.s.player, lines: Array<[string, string]> = [];
-    if (this.cls === 'warrior') { lines.push([`血怒 ${p.rage}/5`, '#ff8a7a']); const nd = b.s.phase === 'player' ? b.nextDice() : null; if (b.s.overflow > 0) lines.push([`溢出 ${b.s.overflow} 颗 · 本回合加伤`, '#ffb070']); else if (nd && nd.overflow > 0) lines.push([`下回合溢出 ${nd.overflow}`, '#ffb070']); }
-    else if (this.cls === 'mage') { lines.push([`吟唱 ${b.s.chantRing}/3${b.s.overcharge ? ' 过充' + b.s.overcharge : ''}`, '#8ac8ff']); const risk = b.s.phase === 'player' ? b.chantRisk() : 0; if (p.backlash) lines.push([`反噬 ${p.backlash} 层`, '#d090ff']); if (risk) lines.push([`再吟唱 多受 ${risk}`, '#d090ff']); }
-    else { lines.push([`第 ${Math.min(b.s.maxStrikes, b.s.strikesUsed + 1)}/${b.s.maxStrikes} 刀`, '#e0a8ff']); const sh = b.dice().filter(x => x.kind === 'shadowDie').length; if (sh) lines.push([`暗影残骰 ${sh}`, '#c890ff']); if (b.s.knifeMark) lines.push([`标记：${b.s.knifeMark.shape === 'straight' ? '顺子' : '同点'}`, '#ffd0ff']); }
-    if (this.cls === 'mage') { const ki = b.s.phase === 'player' && !this.busy ? b.keepInfo() : null; if (ki?.need) lines.unshift([`选 ${ki.cap} 颗保留 · 青光=留`, '#6ad8ff']); }
-    const sts = p.statuses.map(x => `${ST_CN[x.type]}${x.value > 1 ? x.value : ''}`).join(' '); if (sts) lines.push([sts, '#c8e0a8']);
+    // v4: the class state (血怒 / 吟唱 / 刀数) is drawn on the hero by heroFx (fx4); only what has no picture stays here
+    if (this.cls === 'warrior') { const nd = b.s.phase === 'player' ? b.nextDice() : null; if (b.s.overflow > 0) lines.push([`溢出 ${b.s.overflow} 颗 · 本回合加伤`, '#ffb070']); else if (nd && nd.overflow > 0) lines.push([`下回合溢出 ${nd.overflow}`, '#ffb070']); }
+    const sts = p.statuses.map(x => `${ST_CN[x.type] || '状态'}${x.value > 1 ? x.value : ''}`).join(' '); if (sts) lines.push([sts, '#c8e0a8']);
+    if (!lines.length) { this.info.visible = false; return; }
     const key = lines.map(l => l[0]).join('|') + d, lh = PIX_H * s / d + 4, w = Math.max(...lines.map(l => textW(l[0], s) / d)) + 16, h = lines.length * lh + 10;
     this.info.paint(key, w, h, g => { panel(g, 0, 0, w * d, h * d, 2 * d, { body: '#140e18', rim: '#4a3e56', line: '#07050a', hi: '#221a28' }); lines.forEach((l, i) => text(g, l[0], 8 * d, (5 + i * lh) * d, s, l[1])); });
     // above the heart flask, clear of the flask, the potion list and the dice tray
-    this.info.at(12, this.ov.h - 230 * this.k - h); this.info.visible = true;
+    this.info.at(this.flask.x - w / 2, this.ov.h - 250 * this.k - h); this.info.visible = true;
   }
   private drawRelics() {
     const run = this.run; if (!run || !this.L.on) { this.relicPane.visible = false; return; }
@@ -858,7 +927,7 @@ export class V2Show {
       const a = this.foes.get(uid), fd = this.disp.get(uid), en = b.enemy(uid); if (!a || !fd || !en || !a.root.visible) { p.visible = false; continue; }
       const it = live ? b.intent(en) : null, sts = en.statuses.map(x => `${ST_CN[x.type]}${x.value > 1 ? x.value : ''}`).join(' ');
       const W = 150, bh = 10, ih = it ? PIX_H * s2 / d + 10 : 0, nh = PIX_H * s1 / d + 2, sh = sts ? PIX_H * s1 / d + 2 : 0, H = ih + nh + bh + sh + 10;
-      const iTxt = it ? (it.desc && it.kind !== 'mov' ? `${it.desc} ${it.value ?? ''}`.trim() : it.text) : '';
+      const iTxt = it ? cnText(it.kind === 'atk' && it.status ? `${it.value ?? ''} +${ST_CN[it.status as StatusV2] || ''}` : it.desc && it.kind !== 'mov' ? `${it.desc} ${it.value ?? ''}`.trim() : it.text) : '';
       const key = [uid, fd.hp, fd.maxHp, fd.armor, iTxt, it?.kind, sts, tgt === uid, d].join('|');
       p.paint(key, W, H, g => {
         let y = 0;
@@ -884,6 +953,12 @@ export class V2Show {
       p.at(sp.x - W / 2, sp.y - H); p.visible = sp.z < 1;
     }
   }
+  /** tap an enemy: a short tip with its intent spelled out (the plate keeps only icon + number) */
+  private foeTip(uid: number) {
+    const b = this.b!, en = b.enemy(uid); if (!en) return; const it = b.intent(en);
+    const what = it.kind === 'atk' ? `下回合攻击 ${it.value ?? ''}${it.status ? ' 并附加' + (ST_CN[it.status as StatusV2] || '') : ''}` : it.kind === 'def' ? `下回合防御 +${it.value ?? ''} 护甲` : it.kind === 'mov' ? `正在逼近（距离 ${en.distance}）` : it.kind === 'frz' ? '被控制，下回合不行动' : it.kind === 'curse' ? '往你的骰子里塞诅咒骰' : `施法：${cnText(it.desc || it.text)}`;
+    this.toast.show(`${en.name}：${what}`, 1.6, '#ffe0c8');
+  }
   private flash(k: number) { anim(0.28, t => { GRADE.flash = k * (1 - t) * (1 - t); }, () => { GRADE.flash = 0; }, { real: true }); }
 
   // ------------------------------------------------------------ input
@@ -900,11 +975,16 @@ export class V2Show {
     return best;
   }
   private pointer(type: string, x: number, y: number): boolean {
-    if (type === 'down') void audio.unlock();
+    if (type === 'down') { void audio.unlock(); this.flow.hurry(); }
     if (this.screen.pointer(type, x, y)) return true;
     if (this.mode !== 'battle' || !this.b) return false;
     if (this.drag) return this.dragPointer(type, x, y);
+    if (type === 'down' && this.hfx.pointer(x, y, this.hero)) { cue('click', 0.4); return true; }   // fx4: tap the hero → class-state tips
     if ((this.cls === 'mage' && this.end.pointer(type, x, y)) || this.reroll.pointer(type, x, y)) return true;
+    if (type === 'move' && !this.busy && this.b.s.phase === 'player') {   // hover: a resting die rises a little
+      const h = this.pickDie(x, y), u = h?.uid ?? null;
+      if (u !== this.hoverUid) { const o = this.hoverUid != null ? this.dice.get(this.hoverUid) : null; if (o && !this.sel.includes(o.uid!)) o.lift = 0; if (h && !this.sel.includes(u!)) { h.lift = 0.3; cue('tick', 0.15); } this.hoverUid = u; }
+    }
     if (type !== 'down') return false;
     if (this.giveUpRect && !this.busy) { const r = this.giveUpRect; if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { this.clearSel(); this.act({ k: 'end' }); return true; } }
     const ci = this.skills.hitCard(x, y);
@@ -914,7 +994,8 @@ export class V2Show {
     if (this.busy || this.b.s.phase !== 'player') return false;
     const d = this.pickDie(x, y);
     if (d) { const ki = this.b.keepInfo(); if (ki?.need && this.b.strikesLeft() === 0) this.toggleKeep(d); else this.setSel(d, !this.sel.includes(d.uid!)); return true; }
-    const f = this.pickFoe(x, y); if (f != null) { this.b.s.targetUid = f; cue('click', 0.5); this.refresh(); return true; }
+    const f = this.pickFoe(x, y); if (f != null) { this.b.s.targetUid = f; cue('click', 0.5); this.foeTip(f); this.refresh(); return true; }
+    if (this.sel.length) { this.clearSel(); cue('deselect', 0.4); this.refresh(); return true; }
     return false;
   }
   /** v3 drag-to-cast: hold a lit card, an arc arrow follows the finger; release on an enemy (or anywhere up-field for an all-target skill) */
@@ -924,7 +1005,7 @@ export class V2Show {
     if (type === 'move') {
       if (Math.hypot(x - D.x0, y - D.y0) > 14) D.moved = true;
       if (D.moved) {
-        D.foe = this.pickFoe(x, y);
+        D.foe = this.pickFoe(x, y); this.skills.pull(D.i, (x - D.x0) * 0.12, (y - D.y0) * 0.12);
         this.skills.arrow = { x0: card.x, y0: card.y - card.h * 0.3, x1: x, y1: y, hot: D.foe != null || (card.def.all && y < this.ov.h * 0.62) };
         if (D.foe != null) { const a = this.foes.get(D.foe); a?.tint(0xffa040, 0.7); }
       }
@@ -937,7 +1018,7 @@ export class V2Show {
       const foe = this.pickFoe(x, y);
       if (foe != null) this.playSlot(D.i, foe);
       else if (card.def.all && y < this.ov.h * 0.62) this.playSlot(D.i);
-      else cue('deselect', 0.4);
+      else { cue('deny', 0.4); this.skills.bounce(D.i); }
       return true;
     }
     return true;
@@ -961,7 +1042,7 @@ export class V2Show {
   cardsPx() { return this.skills.cards.filter(c => !c.out).map(c => ({ slot: c.def.slot, name: c.def.name, x: Math.round(c.x), y: Math.round(c.y), all: c.def.all })); }
   foePx(uid?: number) { const u = uid ?? this.b?.target()?.uid; const a = u != null ? this.foes.get(u) : null; if (!a) return null; const v = worldToUi(a.chest()); return [Math.round(v.x), Math.round(v.y)]; }
   dragPath() { const c = this.cardsPx().find(x => !x.all) || this.cardsPx()[0], f = this.foePx(); if (!c || !f) return []; return Array.from({ length: 16 }, (_, i) => [Math.round(c.x + (f[0] - c.x) * i / 15), Math.round(c.y + (f[1] - c.y) * i / 15)]); }
-  playCard(slot?: number) { const c = this.skills.cards.find(x => !x.out && (slot == null || x.def.slot === slot)); return c ? this.playSlot(c.def.slot) : false; }
+  playCard(slot?: number) { const cs = this.skills.cards.filter(x => !x.out && (slot == null || x.def.slot === slot)), c = cs[cs.length - 1]; return c ? this.playSlot(c.def.slot) : false; }
   /** capture helper: press a lit card and drag partway toward the target without releasing (then simDrop() releases on it) */
   simDrag(k = 0.85) { const c = this.cardsPx().find(x => !x.all) || this.cardsPx()[0], f = this.foePx(); if (!c || !f) return false; this.pointer('down', c.x, c.y); for (let i = 1; i <= 8; i++) this.pointer('move', c.x + (f[0] - c.x) * k * i / 8, c.y + (f[1] - c.y) * k * i / 8); this.pointer('move', f[0], f[1]); return true; }
   simDrop() { const f = this.foePx(); if (!f || !this.drag) return false; this.pointer('up', f[0], f[1]); return true; }
@@ -1036,6 +1117,8 @@ function tierText(fx: import('../../core/v2/types').Effect[]) {
   }
   return out.join('，') || '—';
 }
+/** no English ids on screen (SHOW3 #12): status ids inside engine strings become their Chinese names */
+function cnText(t: string) { return t.replace(/(poison|burn|freeze|stun|vulnerable|weak|berserk)/g, m => ST_CN[m as StatusV2]); }
 function mulberry(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function cameraRef() { return CAMERA; }
 function worldAlong(ndc: THREE.Vector3, dist: number) { const v = ndc.clone().unproject(CAMERA); return CAMERA.position.clone().add(v.sub(CAMERA.position).normalize().multiplyScalar(dist)); }

@@ -85,7 +85,7 @@ export class StoneButton {
     this.cap.position.z = 0.32 * Math.max(-1, p) * 0.8;
     // a little tilt toward the screen centre so the side reads (perspective already shows it; this adds a touch)
     const dx = (this.x - L.w / 2) / L.w, dy = (this.y - L.h / 2) / L.h;
-    this.root.rotation.set(dy * 0.5, dx * 0.6, 0);
+    this.root.rotation.set(0, 0, 0); void dx; void dy;   // fx4: the toward-centre tilt now comes from the layer (UiLayer.tilt) for every widget
     const br = this.breatheOn && this.enabled ? 0.5 + 0.5 * Math.sin(this.t * 3.2) : 0;
     this.glowMat.opacity = br * 0.6 + (this.down ? 0.25 : 0);
     this.rimMat.emissive.setHex(this.look.glow).multiplyScalar(br * 0.55);

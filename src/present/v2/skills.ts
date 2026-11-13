@@ -1,4 +1,4 @@
-// Rules v3 skill UI: four resident skill slots (散骰 / 同点 / 顺子 / 阵列: icon, name, tier lamps; tap = tier notes), the lit skill
+// Rules v3 skill UI: four resident skill slots (散骰 / 同点 / 连环 / 阵列: icon, 「牌型 · 技能名」, tier lamps; tap = tier notes), the lit skill
 // cards that fly out of their slot and grow at the right thumb (energy motes orbiting them), and the drag arrow from a card to an
 // enemy (a segmented voxel arc rising toward the camera, pixel arrowhead). Data comes from the caller; nothing here reads rules.
 import * as THREE from 'three';
@@ -8,7 +8,10 @@ import { ease, lerp } from '../engine/clock';
 
 export type SkillKind = 'basic' | 'same' | 'straight' | 'array';
 export interface SlotDef { name: string; kind: SkillKind; level: number; steps: string[]; lines: string[] }
-export interface SlotView { lit: boolean; tier: number; dead: boolean }
+/** the player-facing pattern names (rules v3, user 12:40): 「顺子」 is called 连环 */
+export const KIND_CN: Record<SkillKind, string> = { basic: '散骰', same: '同点', straight: '连环', array: '阵列' };
+/** lit = the selection fires it (card out); ready = the dice on the field can make it (soft hint after the roll) */
+export interface SlotView { lit: boolean; tier: number; dead: boolean; ready?: boolean }
 export interface CardDef<R = unknown> { slot: number; ref: R; name: string; sub: string; value: string; extra?: string; all: boolean; tier: number; ultimate: boolean }
 
 export const TIER_HEX = ['#ffe2a8', '#6ac8ff', '#ffc040', '#ff7030', '#d060ff'];
@@ -20,8 +23,8 @@ export const KIND_ICON: Record<SkillKind, string[]> = {
   array: ['###.###...', '#o#.#o#...', '###.###...', '..........', '..........', '...###.###', '...#o#.#o#', '...###.###', '..........', '..........'],
 };
 
-interface Card<R> { def: CardDef<R>; pane: Pane; k: number; out: number; from: { x: number; y: number }; x: number; y: number; w: number; h: number; key: string }
-interface Orbit { cx: number; cy: number; rx: number; ry: number; col: number; n: number; speed: number }
+interface Card<R> { def: CardDef<R>; pane: Pane; k: number; out: number; from: { x: number; y: number }; x: number; y: number; w: number; h: number; key: string; bump: number; dx: number; dy: number }
+export interface Orbit { cx: number; cy: number; rx: number; ry: number; col: number; n: number; speed: number; /** mote size px (default ~6) */ size?: number; /** steady, not twinkling (e.g. little dice) */ solid?: boolean }
 
 export class SkillUI<R = unknown> {
   defs: SlotDef[] = []; views: SlotView[] = []; rects: Rect[] = []; cards: Card<R>[] = [];
@@ -47,7 +50,7 @@ export class SkillUI<R = unknown> {
   }
   layout(W: number, H: number, k: number) {
     this.W = W; this.H = H; this.k = k;
-    const w = Math.round(Math.max(150, 176 * k)), h = Math.round(Math.max(40, 46 * k)), x = W - w - 12, y0 = Math.round(92 * k);
+    const w = Math.round(Math.max(190, 214 * k)), h = Math.round(Math.max(40, 46 * k)), x = W - w - 12, y0 = Math.round(92 * k);
     this.rects = [0, 1, 2, 3].map(i => ({ x, y: y0 + i * (h + 6), w, h }));
     for (const s of this.slots) s.key = ''; this.placeCards();
   }
@@ -57,6 +60,9 @@ export class SkillUI<R = unknown> {
   hitSlot(x: number, y: number) { if (!this.on) return -1; return this.rects.findIndex((r, i) => i < this.defs.length && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h); }
   hitCard(x: number, y: number) { if (!this.on) return -1; return this.cards.findIndex(c => !c.out && c.k > 0.5 && Math.abs(x - c.x) <= c.w / 2 && Math.abs(y - c.y) <= c.h / 2); }
   toggleTip(i: number) { this.tipOn = this.tipOn === i ? -1 : i; }
+  /** a card being dragged follows the finger a little; release on nothing = spring back with a small wobble */
+  pull(slot: number, dx: number, dy: number) { const c = this.cards.find(x => !x.out && x.def.slot === slot); if (c) { c.dx = dx; c.dy = dy; } }
+  bounce(slot: number) { const c = this.cards.find(x => !x.out && x.def.slot === slot); if (c) c.bump = 1; }
   cardSize() { return { w: Math.round(Math.max(200, 240 * this.k)), h: Math.round(Math.max(140, 162 * this.k)) }; }
 
   /** the lit skills: kept cards update in place, new ones fly out of their slot, missing ones fade */
@@ -67,7 +73,7 @@ export class SkillUI<R = unknown> {
       const c = live.find(x => x.def.slot === d.slot), key = [d.name, d.sub, d.value, d.extra, d.tier, d.all].join('|');
       if (c) { if (c.key !== key) { c.def = d; c.key = key; c.pane.key = ''; } continue; }
       const r = this.rects[d.slot] || { x: this.W, y: this.H / 2, w: 10, h: 10 };
-      this.cards.push({ def: d, pane: this.ov.pane(14), k: 0, out: 0, from: { x: r.x + r.w / 2, y: r.y + r.h / 2 }, x: 0, y: 0, w: 0, h: 0, key });
+      this.cards.push({ def: d, pane: this.ov.pane(14), k: 0, out: 0, from: { x: r.x + r.w / 2, y: r.y + r.h / 2 }, x: 0, y: 0, w: 0, h: 0, key, bump: 0, dx: 0, dy: 0 });
     }
     this.cards.sort((a, b) => a.def.slot - b.def.slot); this.placeCards();
   }
@@ -83,8 +89,9 @@ export class SkillUI<R = unknown> {
     this.slots.forEach((p, i) => {
       const def = this.defs[i], r = this.rects[i]; if (!this.on || !def || !r) { p.visible = false; return; }
       const v = this.views[i] || { lit: false, tier: 0, dead: false };
-      p.paint(['s', def.name, def.level, v.lit, v.tier, v.dead, r.w, r.h, d, this.tipOn === i].join('|'), r.w, r.h, g => drawSlot(g, d, r.w, r.h, fp, def, v, this.tipOn === i));
-      p.at(r.x - (v.lit ? 10 : 0), r.y); p.visible = true;
+      p.paint(['s', def.name, def.level, v.lit, v.ready, v.tier, v.dead, r.w, r.h, d, this.tipOn === i].join('|'), r.w, r.h, g => drawSlot(g, d, r.w, r.h, fp, def, v, this.tipOn === i));
+      p.at(r.x - (v.lit ? 10 : v.ready ? 4 : 0), r.y); p.visible = true;
+      p.alpha = v.ready && !v.lit ? 0.86 + 0.14 * Math.sin(this.t * 3 + i) : 1;
     });
     // tier notes
     const ti = this.tipOn, td = this.defs[ti], tr = this.rects[ti];
@@ -92,7 +99,7 @@ export class SkillUI<R = unknown> {
       const s = Math.max(1, Math.round(fp * d)), w = Math.round(270 * Math.max(0.8, this.k)), lines = td.lines.flatMap(l => pixWrap(l, (w - 20) * d / s)), lh = PIX_H * s / d + 4, h = 34 + lines.length * lh;
       this.tip.paint('t' + ti + td.lines.join('|') + w + d, w, h, g => {
         panel(g, 0, 0, w * d, h * d, 2 * d, { body: '#140e18', rim: '#c8a060', line: '#07050a', hi: '#221a28' });
-        text(g, `${td.name} ${ROMAN[td.level] || ''}`, 10 * d, 6 * d, s, '#ffe6a0');
+        text(g, `${KIND_CN[td.kind]} · ${td.name} ${ROMAN[td.level] || ''}`, 10 * d, 6 * d, s, '#ffe6a0');
         lines.forEach((l, j) => text(g, l, 10 * d, (28 + j * lh) * d, s, '#e8dcc8'));
       });
       this.tip.at(tr.x - w - 8, Math.min(this.H - h - 8, tr.y)); this.tip.visible = true;
@@ -103,7 +110,9 @@ export class SkillUI<R = unknown> {
       const e = ease.outBack(c.k), sc = c.out ? 1 + c.out * 0.25 : lerp(0.3, 1, Math.min(1, e));
       c.pane.paint(c.key + c.w + d, c.w, c.h, g => drawCard(g, d, c.w, c.h, fp, c.def));
       c.pane.scale = sc; c.pane.alpha = c.out ? Math.max(0, 1 - c.out) : Math.min(1, c.k * 2.5);
-      c.pane.at(lerp(c.from.x, c.x, e) - c.w / 2, lerp(c.from.y, c.y, e) - c.h / 2); c.pane.visible = this.on;
+      if (c.bump > 0) { c.bump = Math.max(0, c.bump - dt / 0.35); c.dx *= 0.7; c.dy *= 0.7; }
+      const wob = c.bump > 0 ? Math.sin(c.bump * 22) * 8 * c.bump : 0;
+      c.pane.at(lerp(c.from.x, c.x, e) - c.w / 2 + c.dx + wob, lerp(c.from.y, c.y, e) - c.h / 2 + c.dy); c.pane.visible = this.on;
     }
     for (const c of this.cards.filter(x => x.out >= 1)) this.ov.drop(c.pane);
     this.cards = this.cards.filter(x => x.out < 1);
@@ -113,8 +122,8 @@ export class SkillUI<R = unknown> {
     for (const o of orbits) for (let j = 0; j < o.n && m < this.motes.length; j++, m++) {
       const a = this.t * o.speed + (j / o.n) * Math.PI * 2, wob = Math.sin(this.t * 3 + j * 1.7);
       const px = o.cx + Math.cos(a) * o.rx * (1 + 0.06 * wob), py = o.cy + Math.sin(a) * o.ry * (1 + 0.06 * wob), z = this.L.px(40) * Math.sin(a);
-      const s = this.motes[m]; this.L.at(px, py, z, s.position); s.scale.setScalar(this.L.px(5 + 2.5 * (0.5 + 0.5 * Math.sin(a * 2 + j)), z)); s.rotation.z = a;
-      this.moteMats[m].color.setHex(o.col); this.moteMats[m].opacity = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(a)); s.visible = true;
+      const s = this.motes[m]; this.L.at(px, py, z, s.position); s.scale.setScalar(this.L.px(o.size ?? 5 + 2.5 * (0.5 + 0.5 * Math.sin(a * 2 + j)), z)); s.rotation.set(o.solid ? 0.6 : 0, o.solid ? a : 0, o.solid ? 0.4 : a);
+      this.moteMats[m].color.setHex(o.col); this.moteMats[m].opacity = o.solid ? 1 : 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(a)); s.visible = true;
     }
     for (; m < this.motes.length; m++) this.motes[m].visible = false;
     // the drag arrow
@@ -137,18 +146,19 @@ export class SkillUI<R = unknown> {
 
 const hexN = (h: string) => parseInt(h.slice(1), 16);
 function drawSlot(g: CanvasRenderingContext2D, d: number, w: number, h: number, fp: number, def: SlotDef, v: SlotView, open: boolean) {
-  const rim = v.lit ? '#ffd060' : v.dead ? '#3a3442' : open ? '#c8a060' : '#6a5a78', body = v.lit ? '#2e2214' : v.dead ? '#100c14' : '#1a1422';
-  panel(g, 0, 0, w * d, h * d, 2 * d, { body, rim, line: '#07050a', hi: v.lit ? '#3e2e1a' : '#241c2c' });
+  const rd = !!v.ready && !v.lit && !v.dead;
+  const rim = v.lit ? '#ffd060' : v.dead ? '#3a3442' : open ? '#c8a060' : rd ? '#b89a60' : '#5a4a68', body = v.lit ? '#2e2214' : v.dead ? '#100c14' : rd ? '#221a1e' : '#151018';
+  panel(g, 0, 0, w * d, h * d, 2 * d, { body, rim, line: '#07050a', hi: v.lit ? '#3e2e1a' : rd ? '#2e2420' : '#1e1824' });
   const ic = Math.max(2, Math.round((h - 12) / 10)) * d;
-  icon(g, KIND_ICON[def.kind], 7 * d, (h * d - 10 * ic) / 2, ic, { main: v.lit ? '#ffe6a0' : v.dead ? '#4a4252' : '#c8bcd4', acc: v.lit ? '#ff9a40' : '#8a7aa0' });
-  const s = Math.max(1, Math.round(fp * d)), tx = 14 * d + 10 * ic;
-  text(g, `${def.name}${def.level > 1 ? ' ' + ROMAN[def.level] : ''}`, tx, 5 * d, s, v.lit ? '#fff2d0' : v.dead ? '#6a6072' : '#e8dcf0');
+  icon(g, KIND_ICON[def.kind], 7 * d, (h * d - 10 * ic) / 2, ic, { main: v.lit ? '#ffe6a0' : v.dead ? '#4a4252' : rd ? '#f0dcb0' : '#7a6e86', acc: v.lit ? '#ff9a40' : rd ? '#d8a050' : '#5a4e6a' });
+  const s = Math.max(1, Math.round(fp * d)), s0 = Math.max(1, Math.round(fp * 0.75 * d)), tx = 14 * d + 10 * ic;
+  const kc = v.lit ? '#ffc860' : rd ? '#d8b070' : '#7a6e86', nm = `${def.name}${def.level > 1 ? ' ' + ROMAN[def.level] : ''}`;
+  text(g, KIND_CN[def.kind], tx, 5 * d, s, kc); text(g, '· ' + nm, tx + textW(KIND_CN[def.kind], s) + 4 * d, 5 * d, s, v.lit ? '#fff2d0' : v.dead ? '#6a6072' : rd ? '#f4e8d8' : '#a89cb4'); void s0;
   const n = def.steps.length, lw = 9 * d, ly = h * d - 12 * d;
   for (let i = 0; i < n; i++) {
     const on = i < v.tier && !v.dead; g.fillStyle = '#07050a'; g.fillRect(tx + i * (lw + 4 * d) - d, ly - d, lw + 2 * d, 7 * d);
     g.fillStyle = on ? TIER_HEX[i] : '#3a3040'; g.fillRect(tx + i * (lw + 4 * d), ly, lw, 5 * d);
   }
-  void textW;
 }
 function drawCard(g: CanvasRenderingContext2D, d: number, w: number, h: number, fp: number, c: CardDef) {
   const col = c.ultimate ? TIER_HEX[4] : TIER_HEX[Math.max(0, Math.min(4, c.tier - 1))];
@@ -159,11 +169,11 @@ function drawCard(g: CanvasRenderingContext2D, d: number, w: number, h: number, 
   const tx = 18 * d + 10 * ic;
   text(g, c.name, tx, 7 * d, s2, '#fff6e0');
   let y = 9 * d + PIX_H * s2;
-  text(g, c.sub + (c.all ? ' · 全体' : ''), tx, y, s1, col); y += PIX_H * s1 + 6 * d;
+  text(g, `${KIND_CN[kindOfName(c)]} · ${c.sub}${c.all ? ' · 全体' : ''}`, tx, y, s1, col); y += PIX_H * s1 + 6 * d;
   if (c.value) { text(g, c.value, w * d / 2, y, s2, '#ffe08a', 'center'); y += PIX_H * s2 + 3 * d; }
   if (c.extra) { text(g, c.extra, w * d / 2, y, s1, '#ffb070', 'center'); y += PIX_H * s1 + 2 * d; }
   const hy = h * d - PIX_H * s0 - 6 * d;
   if (hy >= y) text(g, c.all ? '点击出手' : '点击 / 拖向敌人', w * d / 2, hy, s0, '#9a8a70', 'center');
 }
-/** cards carry the slot kind through their slot index order: 0 散骰, 1 同点, 2 顺子, 3 阵列 */
+/** cards carry the slot kind through their slot index order: 0 散骰, 1 同点, 2 连环, 3 阵列 */
 function kindOfName(c: CardDef): SkillKind { return (['basic', 'same', 'straight', 'array'] as SkillKind[])[c.slot] || 'basic'; }
