@@ -8,11 +8,15 @@ import { camera, view, V3 } from '../engine/world';
 import { setUi3DLayer, type Ui3DLayer } from '../look/pixel';
 import { UiText } from './pixfont';
 
-const CAM_Z = 40, FOV = 24;
+// user 11-14: 「UI的透视感还是不够，特别是血瓶的」 — the UI camera was 24° at 40 units (nearly orthographic: a turned button only
+// squashed, the edges never converged). Same px scale on the z = 0 plane, but a nearer, wider lens: setLens(camZ) keeps
+// 2·camZ·tan(fov/2) constant, so layouts do not move while depth and the turn toward the centre read as real perspective.
+const VIEW_H = 2 * 40 * Math.tan((24 * Math.PI) / 360);
+const fovFor = (z: number) => 2 * Math.atan(VIEW_H / (2 * z)) * 180 / Math.PI;
 
 export class UiLayer implements Ui3DLayer {
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(FOV, 1, 1, 200);
+  camZ = 40; camera = new THREE.PerspectiveCamera(24, 1, 1, 200);
   on = true;
   text = new UiText();
   w = 1; h = 1; dpr = 1;
@@ -20,17 +24,19 @@ export class UiLayer implements Ui3DLayer {
   upp = 0.01;
   key: THREE.DirectionalLight; fill: THREE.DirectionalLight; hemi: THREE.HemisphereLight;
   constructor() {
-    this.camera.position.set(0, 0, CAM_Z);
+    this.camera.position.set(0, 0, this.camZ);
     this.hemi = new THREE.HemisphereLight(0xd8d0ff, 0x30202a, 1.5); this.scene.add(this.hemi);
     this.key = new THREE.DirectionalLight(0xffe2b8, 2.6); this.key.position.set(-6, 10, 14); this.scene.add(this.key);
     this.fill = new THREE.DirectionalLight(0x7aa0ff, 0.9); this.fill.position.set(8, -4, 6); this.scene.add(this.fill);
-    setUi3DLayer(this);
+    setUi3DLayer(this); this.setLens(24);
     // fx4: every widget turns a little toward the screen centre for the frame it is drawn (restored after), so the sides show
     this.scene.onBeforeRender = () => this.tiltOn();
     this.scene.onAfterRender = () => this.tiltOff();
   }
   /** max turn toward the screen centre (rad) and the idle sway; tilt = 0 turns it off */
-  tilt = 0.5; sway = 0.035;   // user 11-13: 「两边的UI没有稍微往里面斜一点」 — HUD groups sit at |nx| ≈ 0.6–0.85 → 17–25° (UX_V3 §5)
+  // user 11-13: 「两边的UI没有稍微往里面斜一点」; 11-14: 「透视感还是不够」 — a turn equal to the view ray just faces the lens (flat): turn
+  // well past it (HUD groups at |nx| ≈ 0.6–0.85 → 38–54°, ≈ 20° past the ray at camZ 24) so the sides and the converging edges show
+  tilt = 1.1; sway = 0.035;
   private tilted: THREE.Object3D[] = []; private tq = new THREE.Quaternion(); private te = new THREE.Euler();
   /** the extra screen-space turn for a widget at CSS px (x, y) (also used by the UI → world hand-over) */
   tiltAt(x: number, y: number, ph = 0, out = new THREE.Quaternion()) {
@@ -57,18 +63,20 @@ export class UiLayer implements Ui3DLayer {
   }
   resize(w: number, h: number, dpr: number) {
     this.w = w; this.h = h; this.dpr = dpr; this.camera.aspect = w / Math.max(1, h); this.camera.updateProjectionMatrix();
-    this.upp = (2 * CAM_Z * Math.tan((FOV * Math.PI) / 360)) / Math.max(1, h);
+    this.upp = VIEW_H / Math.max(1, h);
     this.text.resize(w, h, dpr);
   }
   /** CSS px → scene point at depth z (z toward the camera; the point projects back onto the same px) */
   at(x: number, y: number, z = 0, out = V3()) {
-    const k = (CAM_Z - z) / CAM_Z;
+    const k = (this.camZ - z) / this.camZ;
     return out.set((x - this.w / 2) * this.upp * k, (this.h / 2 - y) * this.upp * k, z);
   }
   /** scene point → CSS px */
   toPx(p: THREE.Vector3) { const v = p.clone().project(this.camera); return { x: (v.x + 1) / 2 * this.w, y: (1 - v.y) / 2 * this.h, z: v.z }; }
   /** px size at depth z → scene units */
-  px(n: number, z = 0) { return n * this.upp * (CAM_Z - z) / CAM_Z; }
+  px(n: number, z = 0) { return n * this.upp * (this.camZ - z) / this.camZ; }
+  /** the lens: camera distance (smaller = stronger perspective); the z = 0 plane keeps its px scale */
+  setLens(camZ: number) { this.camZ = camZ; this.camera.position.z = camZ; this.camera.fov = fovFor(camZ); this.camera.updateProjectionMatrix(); }
   /** draw the full-resolution text (call after the 3D frame) */
   renderText(r: THREE.WebGLRenderer) { if (this.on) this.text.render(r); }
   dispose() { setUi3DLayer(null); }

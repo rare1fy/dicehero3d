@@ -22,6 +22,8 @@ export class HeartFlask {
   dot = 0; private cutShown = 0;
   /** the armour shield and the barrier rings (v2 shows armour / barrier in the status rows instead) */
   showShield = false; showDome = false;
+  /** thickness multiplier (the extruded heart reads as a solid bottle under the UI perspective) */
+  depthK = 1.6;
   private shown = 1; private ghost = 1; private wave = new Spring(90, 3.2); private rock = new Spring(140, 7); private pop = new Spring(260, 14);
   private ghostFrom = 1; private ghostAge = 1;
   private shieldK = 0; private shieldPop = new Spring(300, 12); private domeK = 0; private time = 0; private crackK = [0, 0];
@@ -68,7 +70,7 @@ export class HeartFlask {
     const w = this.wave.step(0, dt), rk = this.rock.step(0, dt), pp = this.pop.step(0, dt);
     // 1 cell = sizePx / FH CSS px; the hit shake moves the whole flask by whole cells (no rotation: pixel art stays square)
     const uc = this.sizePx / FH, sx = Math.round(rk * 0.25), sy = Math.round(-pp * 0.2);
-    L.at(this.x + sx * uc, this.y + sy * uc, 0, this.root.position); this.root.scale.setScalar(L.px(uc));
+    L.at(this.x + sx * uc, this.y + sy * uc, 0, this.root.position); this.root.scale.set(L.px(uc), L.px(uc), L.px(uc) * this.depthK);
     this.root.rotation.set(0, 0, 0);
     // the blood: rows (heart grid) quantised in the shader; a little floor so any HP > 0 shows the tip
     const u = this.heart.u, row = (v: number) => { const r = levelRow(v); return v > 0 ? Math.min(HH - 1, r) : r; };

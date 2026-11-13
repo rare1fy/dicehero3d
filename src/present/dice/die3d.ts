@@ -36,7 +36,7 @@ export class Die3D {
   readonly seed: number;
   faceVals: number[]; topIdx = 2; topTurns = 0;
   mode: DieMode = 'hidden';
-  play: { rec: ThrowRec; t0: number; ii: number } | null = null;
+  play: { rec: ThrowRec; t0: number; ii: number; /** playback speed (1 = recorded) */ rate?: number } | null = null;
   tween: object | null = null;
   home = V3(); homeQ = new THREE.Quaternion();
   lift = 0; liftT = 0; sepY = 0; dodge = V3(); dodgeT = V3();
@@ -181,7 +181,7 @@ export const throwHooks = { impact: (_d: Die3D, _v: number) => {}, landed: (_d: 
 export function updateDice(dt: number, rdt: number) {
   for (const d of DICE3D) {
     if (d.mode === 'play' && d.play) {
-      const P = d.play, rec = P.rec, t = clock.time - P.t0 - rec.rel, F = rec.f, nF = F.length / 7;
+      const P = d.play, rec = P.rec, t = (clock.time - P.t0) * (P.rate ?? 1) - rec.rel, F = rec.f, nF = F.length / 7;
       if (t < 0) { d.root.visible = false; continue; }
       d.root.visible = true;
       const fi = t * SIM_FPS, i0 = Math.min(nF - 1, Math.floor(fi)), i1 = Math.min(nF - 1, i0 + 1), a = Math.min(1, fi - i0);

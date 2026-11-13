@@ -35,8 +35,17 @@ export function actorSubject(a: BattleActor, home: THREE.Vector3, hero = false):
 /** dice sockets: screen band (fractions of H / W) and the die's on-screen size (reference px at 1280×720; ≥ 72 required) */
 export const BANDS = { diceY: 0.655, diceX: 0.6, top: 0.09 };
 export const DIE_PX = 64;
-/** the classic battle camera (R5): eye / look / fov as the director takes them */
-const LOOK0 = new THREE.Vector3(0, -0.6, -2.4), EYE0 = LOOK0.clone().add(new THREE.Vector3(0.3, 14.0, 17.3).multiplyScalar(0.62)), FOV0 = 42;   // closer: the hero reads big, as in show-01
+/** the classic battle camera (R5): eye / look / fov as the director takes them. Tunable live: __dh.show2() → CAMERA_TUNE + layout()
+ *  user 11-14: 「镜头我觉得默认要再上拉仰起来一点，看到更多战场和场景信息」 — the eye higher and farther, the look further up the path */
+// was lookZ −2.4, back (0.3, 14, 17.3) × 0.62 (pitch ≈ 39°); now ≈ 35°, 20 % farther and higher: the gate behind the enemies shows
+export const CAMERA_TUNE = { lookY: -0.6, lookZ: -2.8, back: [0.3, 12.8, 18.0] as [number, number, number], dist: 0.74, fov: 42 };
+const LOOK0 = new THREE.Vector3(), EYE0 = new THREE.Vector3();
+let FOV0 = 42;
+function readTune() {
+  const T = CAMERA_TUNE; LOOK0.set(0, T.lookY, T.lookZ); EYE0.copy(LOOK0).add(new THREE.Vector3(...T.back).multiplyScalar(T.dist)); FOV0 = T.fov;
+}
+readTune();
+(globalThis as unknown as { __camTune?: typeof CAMERA_TUNE }).__camTune = CAMERA_TUNE;   // debug: tune, then __dh.show2().layout()
 
 export interface CameraFit { eye: THREE.Vector3; look: THREE.Vector3; fov: number; pitch: number; distance: number; fits: boolean;
   /** the dice sockets: centre on the ground and scale (1 = a 0.8 m die) */
@@ -52,6 +61,7 @@ function setCam(eye: THREE.Vector3, look: THREE.Vector3, o: FitOpts) {
 function screenY(p: THREE.Vector3, o: FitOpts) { _p.copy(p).project(_cam); return (1 - _p.y) / 2 * o.H - (o.shift ?? 0); }   // the director lifts the image by shift px
 
 export function fitBattle(subjects: FramingSubject[], o: FitOpts): CameraFit {
+  readTune();
   const back = EYE0.clone().sub(LOOK0), topPx = o.H * BANDS.top;
   let m = 1, eye = EYE0.clone(), fits = false;
   for (; m <= 1.4; m += 0.03) {

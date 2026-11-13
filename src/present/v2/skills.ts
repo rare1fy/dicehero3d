@@ -15,7 +15,7 @@ export interface SlotView { lit: boolean; tier: number; dead: boolean; ready?: b
 export interface CardDef<R = unknown> { slot: number; ref: R; name: string; sub: string; value: string; extra?: string; all: boolean; tier: number; ultimate: boolean }
 
 export const TIER_HEX = ['#ffe2a8', '#6ac8ff', '#ffc040', '#ff7030', '#d060ff'];
-const ROMAN = ['', 'I', 'II', 'III'];
+const ROMAN = ['', 'I', 'II', 'III', 'IV'];
 export const KIND_ICON: Record<SkillKind, string[]> = {
   basic: ['..........', '..######..', '.#......#.', '.#......#.', '.#..oo..#.', '.#..oo..#.', '.#......#.', '.#......#.', '..######..', '..........'],
   same: ['..........', '####..####', '#..#..#..#', '#oo#..#oo#', '#oo#..#oo#', '#..#..#..#', '####..####', '..........', '..........', '..........'],

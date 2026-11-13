@@ -42,7 +42,9 @@ export function paintSlotFront(s: Slot3D, B: number, tier: number) {
   const n = st.all ? 3 : 1, pw = 16 + (n - 1) * 6, ph = 16;
   paintCells(s.tgt, ['t2', n].join('|'), pw, ph, pen => { for (let i = n - 1; i >= 0; i--) foeHead(pen, i * 6, 0); });
   s.tgt.at(R(s.cx + s.size * 0.42 - s.tgt.w / 2), R(s.cy + s.size * 0.12 - s.tgt.h / 2));
-  s.tgt.alpha = on ? Math.max(0, B * 2 - 1) : 0; s.tgt.visible = s.tgt.alpha > 0.02;
+  // 铁壁 / 屏障 / 治疗 act on the hero: no enemy portrait (it also covered the value pill on the medium buttons)
+  const selfPlay = !!st.valKind && st.valKind !== 'dmg';
+  s.tgt.alpha = on && !selfPlay ? Math.max(0, B * 2 - 1) : 0; s.tgt.visible = s.tgt.alpha > 0.02;
   // tier-2 extra effect (e.g. 冻结) hung on the right edge
   const ex = st.extra && tier >= 2 ? st.extra : null;
   paintCells(s.ext, ['x2', ex].join('|'), 16, 16, pen => { if (!ex) return; pen.panel(0, 0, 15, 15, panelWith(PANEL.focus, '#ffb040'), 4); pixGlyph(pen, ex as PixGlyph, 3, 3, { col: '#9ae8ff' }); });
@@ -56,5 +58,49 @@ export function paintSlotFront(s: Slot3D, B: number, tier: number) {
     pixGlyph(pen, 'sword', 3, Math.floor((chh - 9) / 2), { col }); pen.text(ct, 13, Math.floor((chh - textCellsH(fp)) / 2), { col, fp });
   });
   s.cmb.at(R(s.cx - s.size * 0.5 - s.cmb.w / 2), R(s.cy - s.size * 0.42 - s.cmb.h / 2));
+  paintLine(s, B, fp);
   s.cmb.alpha = cb && on ? Math.max(0, B * 2 - 1) * (cb.last ? 0.75 + 0.25 * Math.sin(s.t * 8) : 1) : 0; s.cmb.visible = s.cmb.alpha > 0.02;
+}
+
+/** a pixel tick (✓): a 2-cell foot and a 4-cell rise, 1-cell ink outline */
+function check(pen: PixPen, x: number, y: number, col: string) {
+  const pts: Array<[number, number]> = [[0, 2], [1, 3], [2, 4], [3, 3], [4, 2], [5, 1], [6, 0]];
+  for (const [i, j] of pts) pen.rect(x + i - 1, y + j - 1, 3, 3, INK);
+  for (const [i, j] of pts) pen.rect(x + i, y + j, 1, 2, col);
+}
+
+/**
+ * Warrior v4 lines under the play button (UX_V3 §8):
+ * - 斩杀线: the hit kills its target → a red plaque 「斩首 +1骰」 (or 「斩杀 再动」 when the kill grants another action this turn);
+ * - 完防线 on 铁壁: armour after the play against this turn's incoming attacks — a blue bar, a red tick at the incoming total,
+ *   and when it covers everything the bar turns green with a ✓ 「完防」.
+ */
+function paintLine(s: Slot3D, B: number, fp: number) {
+  const ln = s.st.line && s.st.lit ? s.st.line : null, uc = GRID.uc, R = Math.round, th = Math.max(15, textCellsH(fp) + 6);
+  let key = 'none', w = 4;
+  const killT = ln?.kind === 'kill' ? (ln.act ? '斩杀 再动' : '斩首 +1骰') : '';
+  if (ln?.kind === 'kill') { key = 'k' + killT; w = 13 + textCellsW(killT, fp) + 4; }
+  else if (ln?.kind === 'guard') { key = ['g', ln.armor, ln.incoming, ln.full].join(','); w = ln.full ? 13 + textCellsW('完防', fp) + 13 : 50; }
+  paintCells(s.ln, ['ln', key, fp].join('|'), w + 1, th + 1, pen => {
+    if (!ln) return;
+    const gy = Math.floor((th - 9) / 2), ty = Math.floor((th - textCellsH(fp)) / 2);
+    if (ln.kind === 'kill') {
+      pen.panel(0, 0, w, th, PANEL.danger, 2); pixGlyph(pen, 'skull', 3, gy, { col: '#fff0bd' });
+      pen.text(killT, 13, ty, { col: '#ffd8c8', fp });
+      return;
+    }
+    if (ln.full) {
+      pen.panel(0, 0, w, th, panelWith(PANEL.normal, '#5ad070'), 2); pixGlyph(pen, 'shield', 3, gy, { col: '#4a9aff' });
+      pen.text('完防', 13, ty, { col: '#b8ffc8', fp }); check(pen, w - 11, Math.floor(th / 2) - 3, '#5ad070');
+      return;
+    }
+    pen.panel(0, 0, w, th, PANEL.normal, 2); pixGlyph(pen, 'shield', 3, gy, { col: '#4a9aff' });
+    const bx = 14, bw = w - 19, by = Math.floor(th / 2) - 2, max = Math.max(ln.incoming * 1.25, ln.armor, 1);
+    const fill = Math.round((bw - 2) * Math.min(1, ln.armor / max)), tick = 1 + Math.round((bw - 2) * Math.min(1, ln.incoming / max));
+    pen.rect(bx, by, bw, 5, INK); pen.rect(bx + 1, by + 1, bw - 2, 3, '#1c2030');
+    if (fill > 0) { pen.rect(bx + 1, by + 1, fill, 3, '#4a9aff'); pen.rect(bx + 1, by + 1, fill, 1, '#9ad0ff'); }
+    pen.rect(bx + tick - 1, by - 2, 3, 9, INK); pen.rect(bx + tick, by - 1, 1, 7, '#ff4a3a');   // the incoming total
+  });
+  s.ln.at(R(s.cx - s.ln.w / 2), R(s.cy + s.size * 0.5 + 2 * uc));
+  s.ln.alpha = ln && s.vis > 0.3 ? Math.max(0, B * 2 - 1) : 0; s.ln.visible = s.ln.alpha > 0.02;
 }

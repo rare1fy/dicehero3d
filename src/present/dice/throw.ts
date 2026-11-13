@@ -105,9 +105,9 @@ export function simThrow(n: number, kept: Pose[], from: THREE.Vector3): ThrowRec
 }
 
 /** Start a recorded throw: renumber faces so `value` lands on top (upright for `eye`), then play the track from now. */
-export function playThrow(d: Die3D, rec: ThrowRec, value: number, eye: THREE.Vector3) {
+export function playThrow(d: Die3D, rec: ThrowRec, value: number, eye: THREE.Vector3, rate = 1) {
   d.setValue(value, rec.top, uprightTurns(rec.qEnd, rec.top, rec.pEnd, eye));
-  d.mode = 'play'; d.play = { rec, t0: clock.time, ii: 0 }; d.root.visible = false; d.root.scale.setScalar(1);
+  d.mode = 'play'; d.play = { rec, t0: clock.time, ii: 0, rate }; d.root.visible = false; d.root.scale.setScalar(1);
   d.home.copy(rec.pEnd); d.homeQ.copy(rec.qEnd); d.lift = 0; d.liftT = 0; d.glow = 0;
 }
 

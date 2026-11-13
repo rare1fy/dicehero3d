@@ -15,7 +15,7 @@ import { UiSparks } from './vox';
 import { SPECIALS, type SuitSkin, type SpecialId } from './suitData';
 import { cue } from '../../audio/cues';
 
-export interface TrayDie { die: Die3D; special?: SpecialId; /** current px pose (x, y, size) */ x: number; y: number; s: number; z: number; ph: number; axis: THREE.Vector3; busy: boolean; showValue: number | null; /** R5: seconds of cyan condense glow left */ glowT?: number }
+export interface TrayDie { die: Die3D; special?: SpecialId; /** came back from the field at turn end (next turn's base dice, trimmed first) */ returned?: boolean; /** current px pose (x, y, size) */ x: number; y: number; s: number; z: number; ph: number; axis: THREE.Vector3; busy: boolean; showValue: number | null; /** R5: seconds of cyan condense glow left */ glowT?: number }
 export interface LaunchOpts {
   /** landing points on the field (one per die; missing = anywhere on FIELD) */
   targets?: Array<THREE.Vector3 | null | undefined>;
@@ -31,6 +31,8 @@ export interface LaunchOpts {
   dist?: number;
   /** R5: how far from its target a die may land (default 0.5; the FIELD box is this + 0.32) */
   targetR?: number;
+  /** playback speed of the recorded throws (user: 「吐骰子的过程过慢」) */
+  rate?: number;
 }
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
@@ -47,6 +49,8 @@ export class DiceTray {
     this.sparks = new UiSparks(L.scene, 160);
   }
   get count() { return this.dice.length; }
+  /** dice won this turn (the returned ones are only next turn's base dice coming back) */
+  get earnedCount() { return this.dice.filter(t => !t.returned).length; }
   private skinFor(sp?: SpecialId): SuitSkin { return { ...this.skin, special: sp }; }
   /** where slot i of n sits (CSS px) */
   slotPx(i: number, n = this.dice.length) { if (this.slotFn) return this.slotFn(i, n); const gap = this.sizePx * 1.4; return { x: this.L.w / 2 + (i - (n - 1) / 2) * gap, y: this.L.h - this.bottom }; }
@@ -89,7 +93,7 @@ export class DiceTray {
 
   /** a die is won: it pops out of `from` (world) and arcs into a new slot. Resolves when it has settled. */
   async earn(from: THREE.Vector3, special?: SpecialId) {
-    if (this.dice.length >= 6) return null;
+    if (this.dice.length >= 6) { const r = this.dice.findIndex(t => t.returned); if (r < 0) return null; void this.drop(r); }
     const sp = worldToUi(from), d = this.make(special);
     const t: TrayDie = { die: d, special, x: sp.x, y: sp.y, s: 0, z: 0, ph: R(0, 6.28), axis: V3(R(0.4, 1), R(0.6, 1), R(-0.3, 0.3)).normalize(), busy: true, showValue: null };
     this.dice.push(t); cue('reveal', 0.6); if (this.still) { t.glowT = 2.2; d.glow = 1.2; d.glowCol.set(0x40e0ff); }
@@ -105,6 +109,27 @@ export class DiceTray {
     });
     this.sparks.burst(this.L.at(end.x, end.y, 2), 14, this.L.px(160), this.L.px(5), glow, { life: 0.4 }); cue('count', 0.8);
     t.busy = false; return t;
+  }
+
+  /**
+   * Turn end (user: 「回合末没用的骰子……和队列要有往返的交互」): a die left on the field flies back into the prep tray, at the front
+   * (the base dice of next turn; the turn start throws them out again). From its screen spot, a short arc over the slot, a little
+   * squash on arrival.
+   */
+  async recall(from: THREE.Vector3, delay = 0) {
+    if (delay > 0) await wait(delay);
+    if (this.dice.length >= 6) return null;
+    const sp = worldToUi(from), d = this.make(), s0 = this.sizePx * 1.25;
+    const t: TrayDie = { die: d, x: sp.x, y: sp.y, s: s0, z: 0, ph: R(0, 6.28), axis: V3(R(0.4, 1), R(0.6, 1), R(-0.3, 0.3)).normalize(), busy: true, showValue: null, returned: true };
+    this.dice.unshift(t);
+    const x0 = sp.x, y0 = sp.y; let lastX = x0, lastY = y0;
+    await animP(0.4, k => {
+      const end = this.slotPx(Math.max(0, this.dice.indexOf(t)), this.dice.length), e = ease.inOut(k), cx = lerp(x0, end.x, 0.5), cy = Math.min(y0, end.y) - 90;
+      const a = (1 - e) * (1 - e), b = 2 * (1 - e) * e, c = e * e;
+      t.x = x0 * a + cx * b + end.x * c; t.y = y0 * a + cy * b + end.y * c; t.s = lerp(s0, this.sizePx, e) * (k > 0.85 ? 1 + 0.12 * Math.sin((k - 0.85) / 0.15 * Math.PI) : 1);
+      this.sparks.emit(this.L.at(lerp(lastX, t.x, 0.5), lerp(lastY, t.y, 0.5), 1), V3(0, 0, 0), this.L.px(R(3, 5)), '#c8d8ff', 0.25); lastX = t.x; lastY = t.y;
+    });
+    cue('click', 0.35); t.busy = false; return t;
   }
 
   /** remove the last die (or index i) with a shrink-out */
@@ -123,7 +148,7 @@ export class DiceTray {
   async launch(values: number[], o: LaunchOpts): Promise<Die3D[]> {
     const ts = this.dice.splice(0, this.dice.length), out: Die3D[] = [], kept = (o.kept || []).map(k => ({ p: k.p.clone(), q: k.q.clone() }));
     this.flying = out;
-    const from = o.from || V3(lerp(FIELD.x0, FIELD.x1, 0.35), 2.4, FIELD.z1 + 0.9), st = o.stagger ?? 0.07, dist = o.dist ?? 5;
+    const from = o.from || V3(lerp(FIELD.x0, FIELD.x1, 0.35), 2.4, FIELD.z1 + 0.9), st = o.stagger ?? 0.07, dist = o.dist ?? 5, rate = o.rate ?? 1;
     // pre-simulate every die (targets: a small FIELD around the point; restored after)
     const recs: ThrowRec[] = [], saved = { ...FIELD };
     ts.forEach((_, i) => {
@@ -136,6 +161,8 @@ export class DiceTray {
     let longest = 0;
     ts.forEach((t, i) => {
       const d = t.die, rec = recs[i];
+      // the pluck: the die hops up out of the queue first (reads as taken from the tray), then the hand-over
+      const pluck = () => { t.busy = true; const y0 = t.y, s0 = t.s; void animP(PLUCK, k => { t.y = y0 - 14 * Math.sin(k * Math.PI * 0.5); t.s = s0 * (1 + 0.22 * k); }).then(go); };
       const go = () => {
         // hand-over: the world pose covering the same pixels, same on-screen orientation
         const h = uiToWorld(t.x, t.y, t.s, DIE, dist), qW = uiQuatToWorld(this.L.shownQuat(d.root));   // fx4: the shown pose includes the layer tilt
@@ -143,11 +170,11 @@ export class DiceTray {
         d.mesh.castShadow = true;
         prependLeg(rec, h.pos, qW, h.scale);
         rec.rel = 0;
-        playThrow(d, rec, values[i] ?? 1, o.eye);
+        playThrow(d, rec, values[i] ?? 1, o.eye, rate);
         this.sparks.burst(this.L.at(t.x, t.y, 1), 10, this.L.px(200), this.L.px(5), t.special ? SPECIALS[t.special].glow : '#fff0c0', { life: 0.35 });
       };
-      const delay = i * st; longest = Math.max(longest, delay + rec.dur + (LEG_S));
-      if (delay <= 0) go(); else void wait(delay).then(go);
+      const delay = i * st; longest = Math.max(longest, delay + PLUCK + (rec.dur + LEG_S) / rate);
+      if (delay <= 0) pluck(); else void wait(delay).then(pluck);
       out.push(d);
     });
     await wait(longest + 0.05);
@@ -180,7 +207,7 @@ export class DiceTray {
 }
 
 // ---------------------------------------------------------------- the hand-over leg in front of a recorded throw
-const LEG_S = 0.26;
+const LEG_S = 0.2, PLUCK = 0.07;
 /** Prepend a swoop from the hand-over pose to the recorded throw's first frame (60 Hz frames), with a scale ease (rec.s0 → 1). */
 function prependLeg(rec: ThrowRec, p0: THREE.Vector3, q0: THREE.Quaternion, s0: number) {
   const f = rec.f, p1 = V3(f[0], f[1], f[2]), q1 = new THREE.Quaternion(f[3], f[4], f[5], f[6]);

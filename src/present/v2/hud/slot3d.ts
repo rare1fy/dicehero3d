@@ -18,7 +18,15 @@ import { cue } from '../../../audio/cues';
 
 export type SkillKind = 'basic' | 'same' | 'straight' | 'array';
 export interface SlotDef { name: string; kind: SkillKind; tag: string; tagCol: string; /** tier-3 icon (升级版), if any */ up?: string; /** badge override ('handful' = 1–3 loose dice) */ badge?: string }
-export interface SlotState { lit: boolean; tier: number; dead: boolean; ready: boolean; value?: number; targetKind?: string; targetId?: string; /** what the value is (damage = no mark) */ valKind?: 'dmg' | 'armor' | 'barrier' | 'heal'; all?: boolean; ultimate?: boolean; extra?: Glyph | null; /** rogue v4: this strike's combo bonus and whether it is the last strike */ combo?: { pct: number; last: boolean } | null }
+export interface SlotState { lit: boolean; tier: number; dead: boolean; ready: boolean; value?: number; targetKind?: string; targetId?: string; /** what the value is (damage = no mark) */ valKind?: 'dmg' | 'armor' | 'barrier' | 'heal'; all?: boolean; ultimate?: boolean; extra?: Glyph | null; /** rogue v4: this strike's combo bonus and whether it is the last strike */ combo?: { pct: number; last: boolean } | null; /** warrior v4 (UX_V3 §8): the kill line / the guard line under the play button */ line?: WarriorLine | null }
+export type WarriorLine = { kind: 'kill'; act: boolean } | { kind: 'guard'; armor: number; incoming: number; full: boolean };
+/** engine OptionV4 → the line a warrior play button shows: 铁壁 = armour vs this turn's incoming (完防 ✓); a killing hit = 斩首 / 斩杀再动 */
+export function warriorLine(v4: { kills?: number[]; killAct?: boolean; guard?: { armor: number; incoming: number; full: boolean } } | undefined, guardPlay: boolean): WarriorLine | null {
+  if (!v4) return null;
+  if (guardPlay && v4.guard && v4.guard.incoming > 0) return { kind: 'guard', armor: v4.guard.armor, incoming: v4.guard.incoming, full: v4.guard.full };
+  if (v4.kills?.length) return { kind: 'kill', act: !!v4.killAct };
+  return null;
+}
 
 const GOLD = 0xd8a040, GOLD2 = 0xffb02a, PALE = 0x8adcf0, IRON = 0x5a5866;
 const TAG_COL: Record<string, string> = { 单体: '#f0e6d0', 控制: '#6ae0ff', 弹射: '#ffd84a', 爆发: '#ff9a40', 补骰: '#7ae07a', 防御: '#a8b8cc', 横扫: '#ffb050', 吸血: '#ff7a7a', 处决: '#ff6060', 群毒: '#8ae05a' };
@@ -28,7 +36,7 @@ export class Slot3D {
   root = new THREE.Group(); iconG = new THREE.Group(); pp: PixPlate; private fx = new THREE.Group(); private lampsPix: PixModel; private icon: THREE.Object3D; private iconUp: THREE.Object3D | null = null;
   private shadow: THREE.Mesh; private ring: THREE.Mesh; private outer: THREE.Mesh; private rays = new THREE.Group(); private halo: THREE.Mesh;
   private lampBar = new THREE.Group(); private lamps: THREE.Mesh[] = []; private lampOn: THREE.MeshBasicMaterial; private lampOff: THREE.MeshBasicMaterial; private badge: THREE.Object3D;
-  tag: Pane; val: Pane; tgt: Pane; ext: Pane; cmb: Pane;
+  tag: Pane; val: Pane; tgt: Pane; ext: Pane; cmb: Pane; ln: Pane;
   /** current / target px pose and morph */
   cx = 0; cy = 0; size = 80; tx = 0; ty = 0; ts = 80; big = 0; tBig = 0; dim = 0; tDim = 0; vis = 0; tVis = 1;
   st: SlotState = { lit: false, tier: 0, dead: false, ready: false }; press = 0; aimK = 0; k = 1;
@@ -53,7 +61,7 @@ export class Slot3D {
     this.badge = patternBadge(def.badge || def.kind); this.badge.scale.multiplyScalar(0.3); this.fx.add(this.badge);
     this.icon = skillIcon(def.name); this.iconG.add(this.icon);
     L.scene.add(this.root, this.iconG);
-    this.tag = ov.pane(9); this.val = ov.pane(15); this.tgt = ov.pane(15); this.ext = ov.pane(15); this.cmb = ov.pane(15);
+    this.tag = ov.pane(9); this.val = ov.pane(15); this.tgt = ov.pane(15); this.ext = ov.pane(15); this.cmb = ov.pane(15); this.ln = ov.pane(15);
   }
   setDef(def: SlotDef) {
     if (def.name === this.def.name && def.kind === this.def.kind && def.up === this.def.up && def.badge === this.def.badge) { this.def = def; return; }
@@ -144,5 +152,5 @@ export class Slot3D {
   }
   private paintFront(B: number, tier: number) { paintSlotFront(this, B, tier); }
   hideAll() { this.tVis = 0; }
-  dispose() { this.L.scene.remove(this.root, this.iconG); this.pp.dispose(); for (const p of [this.tag, this.val, this.tgt, this.ext, this.cmb]) this.ov.drop(p); }
+  dispose() { this.L.scene.remove(this.root, this.iconG); this.pp.dispose(); for (const p of [this.tag, this.val, this.tgt, this.ext, this.cmb, this.ln]) this.ov.drop(p); }
 }

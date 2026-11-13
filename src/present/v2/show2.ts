@@ -47,6 +47,7 @@ import { KIND_CN, type SkillKind } from './skills';
 import { BattleHud, skillTag, skillUp, extraGlyph } from './hud/hud';
 import { throwPlan, simTo, nearestDie } from './hud/diceArc';
 import type { SlotDef, SlotState, TipDef } from './hud/skillBar';
+import { warriorLine } from './hud/slot3d';
 import type { FoeView } from './hud/plates';
 import { HeroFx } from './heroFx';   // fx4
 import { playDeath, lastHit } from './death';   // fx4
@@ -67,7 +68,7 @@ const GAIN_CN: Record<GainReason, string> = { behead: '斩首', guard: '格挡',
 const NODE_SCENE: Record<string, string> = { normal: 'n_trail', elite: 'n_lumber', shop: 'c_merchant', midBoss: 'b_lich' };
 const NODE_CN: Record<string, [string, string]> = { normal: ['雾林小径', '普通战 · 两波'], elite: ['废弃伐木场', '精英 · 狼人首领'], midBoss: ['墓园祭坛', '首领 · 枯骨巫妖'], shop: ['林边货车', '商人'] };
 const CLASS_IDS: ClassId[] = ['warrior', 'mage', 'rogue'];
-const ROMAN = ['', 'I', 'II', 'III'];
+const ROMAN = ['', 'I', 'II', 'III', 'IV'];
 const gainSpecial = (r: GainReason): SpecialId | undefined => (r === 'fury' || r === 'furyUlt' ? 'fury' : r === 'shadow' || r === 'precise' || r === 'mark' ? 'shadowres' : r === 'titan' ? 'titan' : undefined);
 const hex = (s: string) => parseInt(s.slice(1), 16);
 
@@ -482,13 +483,13 @@ export class V2Show {
         for (const s of stay) { const d = this.dice.get(s.uid)!; d.setSuit(this.skinFor(s.kind)); if (d.value !== s.value || !keptSet.has(s.uid)) { d.setValue(s.value, d.topIdx, d.topTurns); fxSparks(d.root.position, 0xc8b0ff, 8, 2, { life: 0.35 }); } d.glow = 0; d.lift = 0; }
         if (!fresh.length) { while (this.tray.count) void this.tray.drop(); return; }
         this.reconcileTray(fresh.length, fresh.map(d => uiSpecial(d.kind)));
-        await wait(0.3); this.hero!.toss(); await wait(0.12);
+        await wait(0.08); this.hero!.toss(); await wait(0.06);   // user 11-13: 「吐骰子的过程过慢」 (was 0.3 + 0.12)
         this.flying = true;
         // UX_V3 §1b 骰场: the new dice land in the free sockets of the dais (dice staying on the field keep theirs); the throws are
         // simulated in the field's unit frame and mapped into the world by the field (diceField.ts)
         const plan = throwPlan(this.field, fresh.length, stay.map(s => this.dice.get(s.uid)!));
         this.tray.dice.slice(0, fresh.length).forEach((t, i) => this.field.track(t.die, plan.slots[i] ?? 0));
-        const ds = await this.tray.launch(fresh.map(d => d.value), { eye: EYE, kept: plan.kept, stagger: 0.09, targets: plan.targets, targetR: 0.1, from: this.field.c.clone().add(V3(-2.2, 2.4, 1.6)) });
+        const ds = await this.tray.launch(fresh.map(d => d.value), { eye: EYE, kept: plan.kept, stagger: 0.06, rate: 1.2, targets: plan.targets, targetR: 0.1, from: this.field.c.clone().add(V3(-2.2, 2.4, 1.6)) });
         this.flying = false;
         ds.forEach((d, i) => { const s = fresh[i]; if (!s) { d.dispose(); return; } d.uid = s.uid; this.dice.set(s.uid, d); });
       });
@@ -529,7 +530,7 @@ export class V2Show {
   private condense(src: THREE.Vector3, sp?: SpecialId) {
     return this.flow.step('earn', async () => {
       const onField = this.endDone ? this.dice.size : 0;
-      if (this.tray.count + onField >= 6) {
+      if (this.tray.earnedCount + onField >= 6) {
         const p = this.tray.slotPx(Math.min(5, this.tray.count), Math.min(6, this.tray.count + 1)), w = this.L.at(p.x, p.y, 2);
         this.tray.sparks.burst(w, 18, this.L.px(220), this.L.px(5), '#ff9a40', { life: 0.5 });
         const to = this.hero!.chest(); fxSparks(to, 0xff7a30, 20, 4, { life: 0.5 }); fxGlow(to, 0xff7a30, 1.8, 0.4, 3); cue('roar', 0.3);
@@ -556,8 +557,11 @@ export class V2Show {
     this.clearSel();
     const p = this.flow.step('end.vanish', async () => {
       let any = false;
-      for (const [u, d] of [...this.dice]) if (!stay.has(u)) { any = true; fxSmoke(d.root.position, 0x6a5a7a, 3, { alpha: 0.35 }); anim(0.3, k => d.root.scale.setScalar(Math.max(0.01, 1 - k)), () => d.dispose()); this.dice.delete(u); }
-      if (any) await this.flow.beat(0.35);
+      // user 11-13: 「回合末没用的骰子 / 挣到的骰子和队列要有往返的交互」 — the dice that do not stay fly back into the prep tray (next
+      // turn's dice: the turn start throws them out again), one after another, instead of fading on the field
+      let j = 0;
+      for (const [u, d] of [...this.dice]) if (!stay.has(u)) { any = true; const at = d.root.position.clone(); fxSparks(at, 0xc8d8ff, 5, 2, { life: 0.3 }); d.dispose(); this.dice.delete(u); void this.tray.recall(at, j++ * 0.06); }
+      if (any) await this.flow.beat(0.32 + j * 0.06);
     });
     this.endKeep = keep;
     return p;
@@ -917,7 +921,7 @@ export class V2Show {
       const fx = row ? row.def.tiers[o.tier!]?.effects || [] : [], all = fx.some(e => e.t === 'dmg' && e.target === 'all');
       const value = pv ? pv.total || pv.armor || pv.barrier || pv.heal : 0, valKind = !pv || pv.total ? 'dmg' as const : pv.armor ? 'armor' as const : pv.barrier ? 'barrier' as const : 'heal' as const;
       const oc = (o as { v4?: { comboPct?: number; lastStrike?: boolean } }).v4, combo = this.cls === 'rogue' && oc?.comboPct != null ? { pct: oc.comboPct, last: !!oc.lastStrike } : null;
-      states.push({ lit: true, tier: pv?.ultimate ? 3 : tier, dead: false, ready: true, value, valKind, all, ultimate: !!pv?.ultimate, extra: extraGlyph(fx), combo, targetKind: tid != null ? b.enemy(tid)?.ct : '', targetId: tid != null ? b.enemy(tid)?.cfgId : '' });
+      states.push({ lit: true, tier: pv?.ultimate ? 3 : tier, dead: false, ready: true, value, valKind, all, ultimate: !!pv?.ultimate, extra: extraGlyph(fx), combo, line: this.cls === 'warrior' ? warriorLine((o as { v4?: Parameters<typeof warriorLine>[0] }).v4, lo === 'guard' || (ref === 'basic' && !lo && b.cls.basicAttack.name === '铁壁')) : null, targetKind: tid != null ? b.enemy(tid)?.ct : '', targetId: tid != null ? b.enemy(tid)?.cfgId : '' });
       this.slotAll[si] = all; anyLit = true; topTier = Math.max(topTier, pv?.ultimate ? 4 : tier);
     });
     this.sel = this.sel.filter(u => this.dice.has(u));

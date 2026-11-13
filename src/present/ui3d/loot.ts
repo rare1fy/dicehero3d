@@ -4,7 +4,7 @@
 // Overkill adds a second, red-gold burst. Experience: cyan light points (no body, never land) drift into the hero, then into the
 // class emblem next to the flask, whose bar fills.
 import * as THREE from 'three';
-import { scene, V3, R, TAU } from '../engine/world';
+import { scene, view, V3, R, TAU } from '../engine/world';
 import { ease, lerp, after } from '../engine/clock';
 import { PADD, TILE } from '../engine/particles';
 import { UiLayer, uiToWorld, worldToUi } from './layer';
@@ -111,7 +111,14 @@ export class Loot {
         c.ang += dt * 2.2; c.p.y = COIN_R;
         if (Math.random() < dt * 1.5) PADD.emit({ p: c.p.clone().add(V3(0, 0.12, 0)), s0: 0.14, s1: 0, life: 0.25, c0: new THREE.Color(0xffffff), bright: 2.2, tile: TILE.flare });
         const order = this.coins.filter(o => o.state === 'lie').indexOf(c);
-        if (c.t > 0.55 + Math.max(0, order) * 0.04) { c.state = 'go'; c.t = 0; c.from.copy(c.p); c.mid.copy(c.p).lerp(tgt, 0.45); c.mid.y = Math.max(c.p.y, tgt.y) + 2.4; }
+        if (c.t > 0.55 + Math.max(0, order) * 0.04) {
+          c.state = 'go'; c.t = 0; c.from.copy(c.p); c.mid.copy(c.p).lerp(tgt, 0.45); c.mid.y = Math.max(c.p.y, tgt.y) + 2.4;
+          // user 11-14: 「飞金币的路线现在飞出屏幕了」 — the purse sits at the top edge, so the raised control point went off screen. A Bézier
+          // stays inside the hull of its three points, and from / purse are on screen: pull the control point toward the straight line
+          // until it projects inside the screen with a margin, so the whole flight stays in view
+          const line = c.from.clone().lerp(tgt, 0.5), m = Math.max(24, view.h * 0.07);
+          for (let j = 0; j < 14; j++) { const s = worldToUi(c.mid); if (s.z < 1 && s.y >= m && s.x >= m && s.x <= view.w - m) break; c.mid.lerp(line, 0.22); }
+        }
       } else if (c.state === 'go') {
         const k = Math.min(1, c.t / 0.62), e = ease.inCubic(k) * 0.7 + k * 0.3, a = (1 - e) * (1 - e), b = 2 * (1 - e) * e, cc = e * e;
         c.p.set(c.from.x * a + c.mid.x * b + tgt.x * cc, c.from.y * a + c.mid.y * b + tgt.y * cc, c.from.z * a + c.mid.z * b + tgt.z * cc); c.ang += dt * 14;
