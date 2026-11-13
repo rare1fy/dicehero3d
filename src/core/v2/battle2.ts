@@ -1488,7 +1488,8 @@ export class Battle2 {
       v = Math.ceil(v - 1e-9);
     }
     let rem = Math.max(0, v), byBarrier = 0, byArmor = 0;
-    if (p.barrier > 0 && rem > 0) { byBarrier = Math.min(p.barrier, rem); p.barrier -= byBarrier; rem -= byBarrier; }
+    // v4.3 (杀戮尖塔): damage over time (poison, burn) goes past both armor and the mage's barrier
+    if (!isDot && p.barrier > 0 && rem > 0) { byBarrier = Math.min(p.barrier, rem); p.barrier -= byBarrier; rem -= byBarrier; }
     if (!isDot && p.armor > 0 && rem > 0) { byArmor = Math.min(p.armor, rem); p.armor -= byArmor; rem -= byArmor; }
     if (byBarrier) s.echo += byBarrier;
     const before = p.hp;

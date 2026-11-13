@@ -40,7 +40,7 @@ export function dieGeometry(size: number, bevel = 0): THREE.BufferGeometry {
     poly(pts, N, uvs);
   }
   if (b > 0) {
-    const UI = 0.06;   // chamfers sample 6% inside the tile border (past a 1-texel painted bevel at 24 texels, inside the 6-texel glow frame at 80)
+    const UI = 0.06;   // chamfers sample 6% inside the tile border: the outermost texel ring at 24 texels (R6 numeral faces: the highlight / glow ring), past the 1-texel painted bevel of the 48-texel v1 faces
     // 12 edge strips: faces f < g with perpendicular normals; uv from face f's border
     for (let f = 0; f < 6; f++) for (let g = f + 1; g < 6; g++) {
       const Nf = FACE_N[f], Ng = FACE_N[g]; if (Math.abs(Nf.dot(Ng)) > 0.5) continue;

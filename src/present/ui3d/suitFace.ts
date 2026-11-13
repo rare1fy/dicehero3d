@@ -3,17 +3,17 @@
 //   B: the suit icon used as pips, laid out like ordinary die pips (3 = three axes on the diagonal), on a dark stone face.
 // Special dice (怒火 / 泰坦 / 星辰 / 暗影残骰 / 金骰) mix their body colour into every face and get a glowing 1-texel frame (emissive).
 // Faces are authored at the texel size they are shown at (A 24, B 32 texels) so nearest sampling keeps clean pixel art.
-// R5 plain dice (rules v3, TARGET_MOCKUP): an 80-texel HD face sampled smoothly (mipmaps) on a chamfered block (dice/faces.ts): the value
-// face shows one big dark numeral (NUM68), the other faces show square pips; the emissive map carries a grey body so the die can be tinted
-// by its selection glow (die3d.ts) while numerals and pips stay dark.
-import { SUITS, SPECIALS, NUM45, NUM68, PIPS, suitOf, type SuitSkin, type Suit } from './suitData';
+// R6 plain dice (rules v3, TARGET_MOCKUP, UX_V3 §6b): every face shows its own numeral — one way of writing the value, no pips — painted
+// by dice/numFace.ts on a 24-art-pixel grid (nearest sampling) on a chamfered block (dice/faces.ts); the emissive map carries a grey body so
+// the die can be tinted by its selection / keep / condense glow (die3d.ts) while the numerals stay dark.
+import { SUITS, SPECIALS, NUM45, PIPS, suitOf, type SuitSkin, type Suit } from './suitData';
+import { paintNumeralFace, NUM_T } from '../dice/numFace';
 
 export const SUIT_T: Record<'A' | 'B', number> = { A: 24, B: 32 };
-/** texels per face of the HD plain dice */
-export const PLAIN_T = 80;
-/** atlas tile size for a skin, and whether it is sampled smoothly (HD plain) or nearest (pixel-art suit faces) */
+/** texels (= art pixels) per face of the plain numeral dice */
+export const PLAIN_T = NUM_T;
+/** atlas tile size for a skin (every scheme is pixel art, sampled nearest) */
 export const tileSize = (s: SuitSkin) => (s.plain ? PLAIN_T : SUIT_T[s.scheme]);
-export const smoothFaces = (s: SuitSkin) => !!s.plain;
 
 /** 6×6 icons for small pips (B, 3 / 5 / 6 pips). */
 const MINI: Record<string, string[]> = {
@@ -52,14 +52,13 @@ export function faceColour(skin: SuitSkin, v: number) {
 }
 
 /** Paint one suit face tile at x-offset ox (T texels square). g = albedo, eg = emissive (black = no glow).
- *  numeral: this is the value face (HD plain dice paint the numeral there and pips elsewhere; other schemes ignore it). */
-export function paintSuitFace(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, ox: number, T: number, value: number, skin: SuitSkin, numeral = true) {
+ *  valueFace: this is the rolled value's face (plain special dice put their small effect icon there; other schemes ignore it). */
+export function paintSuitFace(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, ox: number, T: number, value: number, skin: SuitSkin, valueFace = true) {
+  if (skin.plain) { paintNumeralFace(g, ox, 0, T, value, { special: skin.special, eg, mark: valueFace }); return; }
   const S: Suit = SUITS[suitOf(skin, value)], sp = skin.special ? SPECIALS[skin.special] : null;
   g.save(); g.translate(ox, 0); eg.save(); eg.translate(ox, 0);
   eg.fillStyle = '#000'; eg.fillRect(0, 0, T, T);
-  if (skin.plain && T >= 48) { paintPlainHD(g, eg, T, value, sp, numeral); g.restore(); eg.restore(); return; }
-  if (skin.plain) paintPlain(g, eg, T, value, sp);
-  else if (skin.scheme === 'A') paintA(g, eg, T, value, S, sp?.body);
+  if (skin.scheme === 'A') paintA(g, eg, T, value, S, sp?.body);
   else paintB(g, eg, T, value, S, skin, sp?.body);
   // hard 1-texel bevel: crisp cube edges without rounding
   g.fillStyle = 'rgba(255,255,255,0.32)'; g.fillRect(0, 0, T, 1); g.fillRect(0, 0, 1, T);
@@ -69,57 +68,6 @@ export function paintSuitFace(g: CanvasRenderingContext2D, eg: CanvasRenderingCo
     eg.fillStyle = mix(sp.glow, '#000000', 0.55); eg.fillRect(1, 1, T - 2, 1); eg.fillRect(1, T - 2, T - 2, 1); eg.fillRect(1, 1, 1, T - 2); eg.fillRect(T - 2, 1, 1, T - 2);
   }
   g.restore(); eg.restore();
-}
-
-/** rules v3: a plain bone-white face with a big dark numeral; special dice use their body colour, a light numeral and a small
- *  effect icon in the corner (怒火 → flame, 星辰 → star, 暗影 → shadow) */
-function paintPlain(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, T: number, value: number, sp: (typeof SPECIALS)[keyof typeof SPECIALS] | null) {
-  const base = sp ? mix(sp.body, '#000000', 0.1) : '#eadfc8', ink = sp ? '#fff4e0' : '#2a1c18', rim = sp ? '#07050a' : '#fffaf0';
-  g.fillStyle = base; g.fillRect(0, 0, T, T);
-  if (!sp) { g.fillStyle = mix(base, '#7a6450', 0.25); g.fillRect(1, T - 3, T - 2, 2); g.fillRect(T - 3, 1, 2, T - 2); }
-  const n = NUM45[String(value)] || NUM45['1'], cs = Math.max(2, Math.floor(T / 6.5)), w = 4 * cs, h = 5 * cs;
-  const nx = Math.round((T - w) / 2), ny = Math.round((T - h) / 2);
-  iconGrow(g, n, nx, ny, cs, 1, rim);
-  icon(g, n, nx, ny, cs, () => ink);
-  if (sp) {
-    icon(eg, n, nx, ny, cs, () => mix(sp.glow, '#000000', 0.55));
-    const key = sp.glow === SPECIALS.fury.glow ? 'rage' : sp.glow === SPECIALS.starry.glow ? 'star' : sp.glow === SPECIALS.shadowres.glow ? 'shadow' : null;
-    if (key) { const m = MINI[key]; icon(g, m, T - 8, 2, 1, ch => (ch === '.' ? null : sp.glow)); icon(eg, m, T - 8, 2, 1, ch => (ch === '.' ? null : sp.glow)); }
-  }
-}
-
-/** R5 HD plain face: warm white block (special dice: body colour + glowing frame), a big NUM68 numeral with a carved drop shade on the value
- *  face, square pips on the others. No painted bevel: the geometry has a real chamfer. */
-function paintPlainHD(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, T: number, value: number, sp: (typeof SPECIALS)[keyof typeof SPECIALS] | null, numeral: boolean) {
-  const base = sp ? mix(sp.body, '#000000', 0.05) : '#efebe2', ink = sp ? '#fff4e0' : '#1d2130', shade = sp ? mix(base, '#000000', 0.55) : mix(base, '#6a6252', 0.42);
-  g.fillStyle = base; g.fillRect(0, 0, T, T);
-  // emissive: plain dice keep a grey body (tinted by the selection glow in die3d.ts), special dice glow only on their marks
-  eg.fillStyle = sp ? '#000' : '#5c5c5c'; eg.fillRect(0, 0, T, T);
-  const glowInk = sp ? mix(sp.glow, '#000000', 0.62) : '#000';
-  const cells = (rows: string[], x: number, y: number, cw: number, chh: number, ctx: CanvasRenderingContext2D, col: string) => {
-    ctx.fillStyle = col; rows.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') ctx.fillRect(Math.round(x + c * cw), Math.round(y + r * chh), Math.ceil(cw), Math.ceil(chh)); }));
-  };
-  if (numeral) {
-    const n = NUM68[String(value)] || NUM68['1'], cw = T * 0.085, chh = T * 0.092, w = 6 * cw, h = 8 * chh;
-    const nx = (T - w) / 2, ny = (T - h) / 2, o = Math.max(2, Math.round(T * 0.03));
-    cells(n, nx + o, ny + o, cw, chh, g, shade);   // carved drop shade (down-right)
-    cells(n, nx, ny, cw, chh, g, ink);
-    cells(n, nx, ny, cw, chh, eg, glowInk);
-  } else {
-    const ps = Math.round(T * 0.15), notch = Math.max(2, Math.round(ps * 0.22)), o = Math.max(1, Math.round(T * 0.02));
-    for (const [u, v] of PIPS[value] || PIPS[1]) {
-      const x = Math.round(u * T - ps / 2), y = Math.round(v * T - ps / 2);
-      const sq = (ctx: CanvasRenderingContext2D, col: string, dx: number, dy: number) => { ctx.fillStyle = col; ctx.fillRect(x + dx + notch, y + dy, ps - 2 * notch, ps); ctx.fillRect(x + dx, y + dy + notch, ps, ps - 2 * notch); };
-      sq(g, shade, o, o); sq(g, sp ? mix(sp.glow, '#ffffff', 0.3) : '#2a2c38', 0, 0);
-      if (sp) sq(eg, glowInk, 0, 0); else sq(eg, '#000', 0, 0);
-    }
-  }
-  if (sp) {   // a glowing frame (it also lights the chamfers, which sample the tile border) + the small effect icon on the value face
-    const fw = Math.max(3, Math.round(T * 0.075));
-    for (const [ctx, c] of [[g, mix(sp.glow, '#ffffff', 0.25)], [eg, mix(sp.glow, '#000000', 0.5)]] as const) { ctx.fillStyle = c; ctx.fillRect(0, 0, T, fw); ctx.fillRect(0, T - fw, T, fw); ctx.fillRect(0, 0, fw, T); ctx.fillRect(T - fw, 0, fw, T); }
-    const key = sp.glow === SPECIALS.fury.glow ? 'rage' : sp.glow === SPECIALS.starry.glow ? 'star' : sp.glow === SPECIALS.shadowres.glow ? 'shadow' : null;
-    if (key && numeral) { const m = MINI[key], k = Math.round(T * 0.035); icon(g, m, T - fw - 2 - 6 * k, fw + 2, k, ch => (ch === '.' ? null : sp.glow)); icon(eg, m, T - fw - 2 - 6 * k, fw + 2, k, ch => (ch === '.' ? null : sp.glow)); }
-  }
 }
 
 function paintA(g: CanvasRenderingContext2D, eg: CanvasRenderingContext2D, T: number, value: number, S: Suit, body?: string) {

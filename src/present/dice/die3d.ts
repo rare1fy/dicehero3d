@@ -1,5 +1,5 @@
-// A die as a real object (v5 02e_dice.js): a block with flat chamfered edges (R5: thick, no rounding) and a painted 6-face atlas,
-// emissive numerals, identity parts, rarity trim, a glowing back-face shell for selection (bright enough to bloom), a ground anchor
+// A die as a real object (v5 02e_dice.js): a block with flat chamfered edges (R5: thick, no rounding) and a painted 6-face atlas
+// (R6 plain dice: a square pixel numeral on every face, dice/numFace.ts, nearest-sampled art pixels), emissive numerals, identity parts, rarity trim, a glowing back-face shell for selection (bright enough to bloom), a ground anchor
 // (`foot`, optional glow ring) and a badge anchor above the die, and the motion modes the battle uses:
 //   hidden → play (recorded throw playback) → rest (on the field; lifts and tilts toward the camera when selected) ⇄ fly (tweens)
 import * as THREE from 'three';
@@ -9,7 +9,7 @@ import { dieDef } from '../../core/data';
 import { paintFace, famKey, FAM } from './style';
 import { DIE, sigOf, extra, TRIM_MAT, trimGeometry, type DieFxKind } from './signature';
 import { dieGeometry, assignFaceValues } from './faces';
-import { paintSuitFace, tileSize, smoothFaces } from '../ui3d/suitFace';
+import { paintSuitFace, tileSize } from '../ui3d/suitFace';
 import { SPECIALS, skinFaces, type SuitSkin } from '../ui3d/suitData';
 import '../ui3d/models3dGallery';   // registers __dh.models3d() (debug gallery of the R5 UI models)
 
@@ -104,13 +104,11 @@ export class Die3D {
     this.setFilter();
     this.faceVals = assignFaceValues(skin ? skinFaces(skin) : dieDef(this.defId).faces, v, top); this.paint();
   }
-  /** HD plain faces sample smoothly (mipmaps, anisotropy); pixel-art faces stay nearest */
+  /** every face is pixel art on the art-pixel grid (UX_V3 §6b): nearest sampling, no mipmaps, so each texel stays a crisp square */
   private setFilter() {
-    const smooth = !!this.suit && smoothFaces(this.suit);
     for (const t of [this.tex, this.etex]) {
-      const want = smooth ? THREE.LinearMipmapLinearFilter : THREE.NearestFilter;
-      if (t.minFilter === want) continue;
-      t.minFilter = want; t.magFilter = smooth ? THREE.LinearFilter : THREE.NearestFilter; t.generateMipmaps = smooth; t.anisotropy = smooth ? 4 : 1; t.dispose(); t.needsUpdate = true;
+      if (t.minFilter === THREE.NearestFilter && t.magFilter === THREE.NearestFilter && !t.generateMipmaps) continue;
+      t.minFilter = THREE.NearestFilter; t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.anisotropy = 1; t.dispose(); t.needsUpdate = true;
     }
   }
   /** A glowing ring on the ground under the die (null = off). Colour values > 1 bloom. B can also hang its own marker on `foot`. */
@@ -130,14 +128,15 @@ export class Die3D {
     const g = this.tex.userData.canvas.getContext('2d') as CanvasRenderingContext2D, eg = this.etex.userData.canvas.getContext('2d') as CanvasRenderingContext2D;
     this.faceVals.forEach((v, i) => {
       const turns = i === this.topIdx ? this.topTurns : 0;
-      const num = i === this.topIdx;
-      if (!turns) { paintSuitFace(g, eg, i * T, T, v, s, num); return; }
-      const tg = scratch(T, 0), te = scratch(T, 1); paintSuitFace(tg.g, te.g, 0, T, v, s, num);
-      for (const [ctx, src] of [[g, tg.c], [eg, te.c]] as const) { ctx.save(); ctx.translate(i * T + T / 2, T / 2); ctx.rotate(-turns * Math.PI / 2); ctx.drawImage(src, -T / 2, -T / 2, T, T); ctx.restore(); }
+      const top = i === this.topIdx;   // the value face (special dice put their small effect icon there)
+      if (!turns) { paintSuitFace(g, eg, i * T, T, v, s, top); return; }
+      const tg = scratch(T, 0), te = scratch(T, 1); paintSuitFace(tg.g, te.g, 0, T, v, s, top);
+      for (const [ctx, src] of [[g, tg.c], [eg, te.c]] as const) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.translate(i * T + T / 2, T / 2); ctx.rotate(-turns * Math.PI / 2); ctx.drawImage(src, -T / 2, -T / 2, T, T); ctx.restore(); }
     });
     this.tex.needsUpdate = true; this.etex.needsUpdate = true;
+    // near-matte (R6): a glossy top face caught the moon's specular and lifted the dark numeral to mid blue; flat tones read as pixel art
     const sp = s.special ? SPECIALS[s.special] : null, m = this.mat;
-    m.roughness = sp?.metal ? 0.3 : 0.55; m.metalness = sp?.metal ? sp.metal * 0.5 : 0; m.opacity = 1; m.transparent = false;
+    m.roughness = sp?.metal ? 0.3 : s.plain ? 0.92 : 0.55; m.metalness = sp?.metal ? sp.metal * 0.5 : 0; m.opacity = 1; m.transparent = false;
     m.emissiveIntensity = 1.6; m.needsUpdate = true;
   }
 
@@ -205,8 +204,8 @@ export function updateDice(dt: number, rdt: number) {
     const pulse = 0.85 + 0.15 * Math.sin(clock.rtime * 5 + d.id);
     d.omat.opacity = damp(d.omat.opacity, d.glow ? Math.min(1, d.glow * 0.85) * pulse : 0, 12, rdt); d.omat.color.copy(d.glowCol).multiplyScalar(1.9); d.outline.visible = d.omat.opacity > 0.02;
     if (d.suit?.plain && !d.suit.special) {
-      // HD plain dice: the body takes on the glow colour (albedo tint, adds no light, so it never blooms the numeral away) plus a
-      // faint emissive breath through the grey body of the emissive map; numerals and pips stay dark
+      // plain numeral dice: the body takes on the glow colour (albedo tint, adds no light, so it never blooms the numeral away) plus a
+      // faint emissive breath through the grey body of the emissive map; the numerals stay dark
       const k = Math.min(1, d.glow) * 0.3; d.mat.color.setRGB(1, 1, 1).lerp(d.glowCol, k);
       d.mat.emissive.copy(d.glowCol); d.mat.emissiveIntensity = d.glow * (0.05 + 0.03 * Math.sin(clock.rtime * 6));
     } else {

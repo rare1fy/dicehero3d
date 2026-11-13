@@ -16,6 +16,7 @@ import { TopLeft } from './topLeft';
 import { StatusRows } from './status';
 import { FieldMarks } from './fieldMarks';
 import type { Glyph } from './draw';
+import { setGrid, GRID } from '../../ui3d/pixelGrid';
 
 /** the ≤4-char tag under each skill (UX_V3 §2) and the tier-3 upgraded icon */
 const TAGS: Record<string, string> = { 奥术弹: '单体', 冰锥: '控制', 闪电链: '弹射', 陨石: '爆发', 劈砍: '单体', 顺劈斩: '横扫', 盾墙: '防御', 狂血: '吸血', 袖箭: '补骰', 背刺: '处决', 影步: '补骰', 毒雾: '群毒',
@@ -55,20 +56,22 @@ export class BattleHud {
   W = 1280; H = 720; k = 1;
   constructor(private L: UiLayer, ov: Overlay) {
     this.bar = new SkillBar(L, ov); this.reroll = new RerollButton(L, ov); this.chant = new ChantButton(L, ov);
-    this.plates = new FoePlates(ov); this.top = new TopLeft(L, ov); this.status = new StatusRows(ov); this.marks = new FieldMarks();
+    this.plates = new FoePlates(ov); this.top = new TopLeft(L, ov); this.status = new StatusRows(ov, L); this.marks = new FieldMarks();
   }
-  /** the HUD frame: a 16:9 region inside the safe area (wider screens keep the extra width outside it), k = px per reference px */
+  /** the HUD frame: the whole safe area — the left group anchors to its left edge, the right group to its right edge (user: 「两边UI的位置
+   *  要根据屏幕的宽度适配」), k = px per reference px (from the height, capped by the width) */
   frame = { L0: 0, R0: 1280, k: 1, B: 720, top: 0 };
   layout(W: number, H: number, flask: HeartFlask, tray: DiceTray, loot: Loot) {
     const sa = safeInsets(), sw = W - sa.l - sa.r, sh = H - sa.t - sa.b;
-    const k = Math.min(1.6, sh / 720, sw / 1280), rw = 1280 * k, L0 = sa.l + (sw - rw) / 2, R0 = L0 + rw;
+    const k = Math.min(1.6, sh / 720, sw / 1280), L0 = sa.l, R0 = W - sa.r;
+    setGrid(sh, this.L.dpr || 1);
     this.W = W; this.H = H; this.k = k; this.frame = { L0, R0, k, B: sa.t + sh, top: sa.t };
     const X = (x: number) => L0 + x * k, R = (x: number) => R0 - x * k, Y = (y: number) => sa.t + y * k;   // R(x) = x ref px in from the right
     // UX_V3 §1b: thumbs — reroll ≈ (left + 200, 560), play button ≈ (right − 200, 548), chant ≥ 64 from the right at y ≈ 400
     this.top.place(X(116), Y(42), k); loot.purse = this.top.purse(); loot.emblem = this.top.purse(); loot.bagPx = 40 * k;
     this.reroll.place(X(200), Y(560), 124 * k, k);
-    // the flask sits low and left of the arc's middle so the dice land above the HUD and the debuff row clears the skill slots
-    flask.place(X(540), Y(626), 136 * k); this.status.place(X(540), Y(632), 120 * k, k);
+    // left player zone (user: 「血瓶在中间感觉好孤独」): reroll + flask + status rows stacked to the flask's right, all on the left
+    flask.place(X(350), Y(626), 136 * k); this.status.place(X(350), Y(632), 120 * k, k); this.status.stack = true;
     this.chant.place(R(118), Y(400), 104 * k); this.chant.k = k;
     this.bar.layout(W, H, k, R0, sa.t); this.plates.k = k; this.bar.arrow.k = k;
     // the prep area: an irregular cluster above-left of the hero, over the reroll's top edge (no base)

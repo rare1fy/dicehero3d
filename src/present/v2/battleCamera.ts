@@ -1,47 +1,80 @@
+// Battle staging (R6S, user 2026-11-13 evening: the horizontal line-up and a visible dice dais looked odd — 「站位还是按以前那种」,
+// 「场景里不要丢个一个骰子的台面」). Back to the classic line-up: the hero front-left, the enemies across from him up the path.
+// What stays from R6S:
+//   - the camera keeps its classic angle, and only pulls back (same pitch, higher and farther) when a big enemy or its plate would
+//     leave the frame (「遇到大型敌人的时候，镜头得要再高一些，确保可以显示完整敌人」);
+//   - dice land in fixed, invisible sockets on the ground in a screen band right of the hero and below the enemies, so they never
+//     sit on a character (diceField.ts). The sockets are placed from screen space after each framing.
 import * as THREE from 'three';
 import type { BattleActor } from '../bestiary/battle';
 
-export const HERO_POS = new THREE.Vector3(-3.6, 0, 0.5);
-const LANES = [[-1.15, -2.0], [1.25, -2.8], [3.25, -3.4], [-3.4, -3.0]];
-export function foePosition(lane: number, boss: boolean) {
-  const p = LANES[lane % LANES.length];
-  return new THREE.Vector3(boss ? 0 : p[0], 0, boss ? -2.7 : p[1]);
+export const HERO_POS = new THREE.Vector3(-2.9, 0, 2.6);
+/** the classic lanes up the path (no distance rule any more: enemies stand at their lane from the start) */
+const LANES: Array<[number, number]> = [[0.9, -2.4], [-1.5, -3.0], [2.9, -3.2], [-3.3, -2.3], [1.0, -4.6]];
+const BOSS_AT: [number, number] = [0.4, -3.9];
+export function foePosition(lane: number, boss: boolean, _withBoss = false) {
+  if (boss) return new THREE.Vector3(BOSS_AT[0], 0, BOSS_AT[1]);
+  const p = LANES[Math.max(0, lane) % LANES.length];
+  return new THREE.Vector3(p[0], 0, p[1]);
 }
-export interface FramingSubject { box: THREE.Box3; hero?: boolean; cardWidth?: number }
-export function actorSubject(a: BattleActor, home: THREE.Vector3, hero = false): FramingSubject {
-  a.root.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(a.root).translate(home.clone().sub(a.root.position));
-  box.min.y = Math.min(box.min.y, home.y);
-  if (hero) box.max.y += 0.9; // 职业状态也在取景内。
-  return { box, hero, cardWidth: a.width > 2 ? 200 : 150 };
-}
-export interface CameraFit { eye: THREE.Vector3; look: THREE.Vector3; fov: number; distance: number; pitch: number; fits: boolean }
+/** where an entering enemy starts its walk: further up the path */
+export function entranceFrom(to: THREE.Vector3) { return new THREE.Vector3(to.x, 0, to.z - 4.2); }
 
-// 固定俯角下求透视安全区的可行交集：模型八个角 + 头牌像素留白。
-// 小怪取最近的可行镜头；大模型最多 45°，距离限定 13～36。
-export function fitBattleCamera(subjects: FramingSubject[], width: number, height: number, k: number, shift = 0): CameraFit {
-  const large = subjects.some(s => !s.hero && s.box.getSize(new THREE.Vector3()).y > 3.0);
-  const pitch = large ? 45 : 40, a = pitch * Math.PI / 180, up = new THREE.Vector3(0, Math.cos(a), -Math.sin(a));
-  const back = new THREE.Vector3(0, Math.sin(a), Math.cos(a)), fov = 36, focal = height / (2 * Math.tan(fov * 0.86 * Math.PI / 360));
-  const left = (width - 1280 * k) / 2, top = Math.max(0, height - 720 * k);
-  let result!: CameraFit;
-  for (let distance = 13; distance <= 36; distance += 0.2) {
-    let xlo = -Infinity, xhi = Infinity, ylo = -Infinity, yhi = Infinity;
-    for (const s of subjects) {
-      const pad = s.hero ? 24 : (s.cardWidth ?? 150) / 2 + 12;
-      for (const x of [s.box.min.x, s.box.max.x]) for (const y of [s.box.min.y, s.box.max.y]) for (const z of [s.box.min.z, s.box.max.z]) {
-        const p = new THREE.Vector3(x, y, z), depth = Math.max(0.1, distance - p.dot(back)), py = p.dot(up);
-        const t = top + (s.hero ? 110 : 100 + 104) * k, b = top + (s.hero ? 545 : 380) * k;
-        xlo = Math.max(xlo, x - (left + (s.hero ? 350 : 1280 - 80 - pad) * k - width / 2) * depth / focal);
-        xhi = Math.min(xhi, x - (left + (s.hero ? 100 : 80 + pad) * k - width / 2) * depth / focal);
-        ylo = Math.max(ylo, py + (t - height / 2 + shift) * depth / focal);
-        yhi = Math.min(yhi, py + (b - height / 2 + shift) * depth / focal);
-      }
-    }
-    const fits = xlo <= xhi && ylo <= yhi, cx = (xlo + xhi) / 2, cy = (ylo + yhi) / 2;
-    const look = up.clone().multiplyScalar(cy); look.x = cx;
-    result = { eye: look.clone().addScaledVector(back, distance), look, fov, distance, pitch, fits };
+/** reference-px budget for the plate above an enemy (intent + HP bar + status row) */
+const PLATE_PX = 92;
+export interface FramingSubject { box: THREE.Box3; hero?: boolean; platePx?: number; plateW?: number }
+export function actorSubject(a: BattleActor, home: THREE.Vector3, hero = false): FramingSubject {
+  const w = Math.max(0.8, a.width) / 2, top = a.top + (hero ? 0.85 : 0.3);
+  const box = new THREE.Box3(new THREE.Vector3(home.x - w, Math.min(0, home.y), home.z - w), new THREE.Vector3(home.x + w, home.y + top, home.z + w));
+  // big enemies (bosses) also have the boss bar at the top of the screen, and their own plate sits lower on the body: budget less
+  return hero ? { box, hero } : { box, platePx: a.top > 2.8 ? 36 : PLATE_PX };
+}
+
+/** dice sockets: screen band (fractions of H / W) and the die's on-screen size (reference px at 1280×720; ≥ 72 required) */
+export const BANDS = { diceY: 0.655, diceX: 0.6, top: 0.09 };
+export const DIE_PX = 64;
+/** the classic battle camera (R5): eye / look / fov as the director takes them */
+const EYE0 = new THREE.Vector3(0.3, 13.4, 14.9), LOOK0 = new THREE.Vector3(0, -0.6, -3.6), FOV0 = 36;
+
+export interface CameraFit { eye: THREE.Vector3; look: THREE.Vector3; fov: number; pitch: number; distance: number; fits: boolean;
+  /** the dice sockets: centre on the ground and scale (1 = a 0.8 m die) */
+  field: { c: THREE.Vector3; s: number } }
+export interface FitOpts { W: number; H: number; k: number; shift?: number; portrait?: boolean; leftPx?: number; rightPx?: number }
+
+const _cam = new THREE.PerspectiveCamera(), _p = new THREE.Vector3();
+function setCam(eye: THREE.Vector3, look: THREE.Vector3, o: FitOpts) {
+  _cam.fov = FOV0 * (o.portrait ? 1 : 0.86); _cam.aspect = o.W / o.H; _cam.near = 0.1; _cam.far = 200;
+  _cam.position.copy(eye); _cam.up.set(0, 1, 0); _cam.lookAt(look); _cam.updateProjectionMatrix(); _cam.updateMatrixWorld();
+}
+/** screen y (px from the top) of a world point under the temp camera */
+function screenY(p: THREE.Vector3, o: FitOpts) { _p.copy(p).project(_cam); return (1 - _p.y) / 2 * o.H - (o.shift ?? 0); }   // the director lifts the image by shift px
+
+export function fitBattle(subjects: FramingSubject[], o: FitOpts): CameraFit {
+  const back = EYE0.clone().sub(LOOK0), topPx = o.H * BANDS.top;
+  let m = 1, eye = EYE0.clone(), fits = false;
+  for (; m <= 1.4; m += 0.03) {
+    eye = LOOK0.clone().addScaledVector(back, m); setCam(eye, LOOK0, o);
+    fits = subjects.every(s => {
+      const plate = (s.platePx ?? 0) * o.k, b = s.box;
+      for (const x of [b.min.x, b.max.x]) for (const z of [b.min.z, b.max.z]) if (screenY(_p.set(x, b.max.y, z), o) - plate < topPx) return false;
+      return true;
+    });
     if (fits) break;
   }
-  return result;
+  const pitch = Math.atan2(eye.y - LOOK0.y, Math.hypot(eye.x - LOOK0.x, eye.z - LOOK0.z)) * 180 / Math.PI;
+  return { eye, look: LOOK0.clone(), fov: FOV0, pitch, distance: eye.distanceTo(LOOK0), fits, field: placeField(eye, LOOK0, o, subjects) };
+}
+
+/** user 2026-11-13: 「骰子就落在以前那个位置吧先，玩家和敌人之间」 — the sockets sit on the path halfway between the hero and the
+ *  front-most enemy (x = the path centre); the scale makes a die DIE_PX reference px on screen at that depth */
+function placeField(eye: THREE.Vector3, look: THREE.Vector3, o: FitOpts, subjects: FramingSubject[]) {
+  setCam(eye, look, o);
+  const hero = subjects.find(s => s.hero), foes = subjects.filter(s => !s.hero);
+  const heroZ = hero ? (hero.box.min.z + hero.box.max.z) / 2 : 2.6;
+  const foeZ = foes.length ? Math.max(...foes.map(f => f.box.max.z)) : -2.0;
+  const c = new THREE.Vector3(1.3, 0, (heroZ + foeZ) / 2);   // right of the hero column so a full row never sits on him
+  const fwd = look.clone().sub(eye).normalize(), vf = _cam.fov * Math.PI / 180, focal = (o.H / 2) / Math.tan(vf / 2);
+  let s = 1;
+  for (let i = 0; i < 3; i++) { const dep = c.clone().setY(0.4 * s).sub(eye).dot(fwd); s = DIE_PX * o.k * dep / (0.8 * focal); }
+  return { c, s };
 }

@@ -70,7 +70,7 @@ export const SPECIALS: Record<SpecialId, Special> = {
 };
 
 /** How a die model is skinned with suits. */
-export interface SuitSkin { cls: ClassId; scheme: FaceScheme; special?: SpecialId; /** rules v3: no suits, faces show only a big numeral (special dice keep their body + a small effect icon) */ plain?: boolean }
+export interface SuitSkin { cls: ClassId; scheme: FaceScheme; special?: SpecialId; /** rules v3 / R6: no suits, every face shows its own square pixel numeral (dice/numFace.ts; special dice keep their body, glowing frame and a small effect icon) */ plain?: boolean }
 export function skinFaces(s: SuitSkin): number[] { return s.special ? SPECIALS[s.special].faces : [1, 2, 3, 4, 5, 6]; }
 export function suitOf(s: SuitSkin, v: number): SuitId {
   const sp = s.special ? SPECIALS[s.special] : null;
@@ -86,21 +86,6 @@ export const NUM45: Record<string, string[]> = {
   '4': ['#..#', '#..#', '####', '...#', '...#'],
   '5': ['####', '#...', '###.', '...#', '###.'],
   '6': ['.##.', '#...', '###.', '#..#', '.##.'],
-};
-
-/** R5 HD numerals for plain dice (TARGET_MOCKUP: one big dark numeral on a white block): 6×8 cells, 2-cell strokes, only horizontal /
- *  vertical runs (no stair-stepped diagonals), corners notched. Drawn at ~6×7 texels per cell on an 80-texel face. */
-export const NUM68: Record<string, string[]> = {
-  '0': ['.####.', '######', '##..##', '##..##', '##..##', '##..##', '######', '.####.'],
-  '1': ['.###..', '####..', '..##..', '..##..', '..##..', '..##..', '######', '######'],
-  '2': ['.####.', '######', '....##', '.#####', '#####.', '##....', '######', '######'],
-  '3': ['#####.', '######', '....##', '.#####', '.#####', '....##', '######', '#####.'],
-  '4': ['##..##', '##..##', '##..##', '######', '######', '....##', '....##', '....##'],
-  '5': ['######', '######', '##....', '#####.', '######', '....##', '######', '#####.'],
-  '6': ['.####.', '#####.', '##....', '#####.', '######', '##..##', '######', '.####.'],
-  '7': ['######', '######', '....##', '....##', '....##', '....##', '....##', '....##'],
-  '8': ['.####.', '######', '##..##', '.####.', '######', '##..##', '######', '.####.'],
-  '9': ['.####.', '######', '##..##', '######', '.#####', '....##', '.#####', '.####.'],
 };
 
 /** Pip centres for values 1..6 on a unit face (scheme B), the usual die layout. */

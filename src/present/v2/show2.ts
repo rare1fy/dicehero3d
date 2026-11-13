@@ -36,7 +36,7 @@ import { popPix } from './pix';
 import { uiSpecial, tabletRow, BASIC_ROW, lampsFor, recordBotTurn, gotoNode, type BotAct } from './adapt';
 import { KIND_CN, type SkillKind } from './skills';
 import { BattleHud, skillTag, skillUp, extraGlyph } from './hud/hud';
-import { freeSlots, simTo, nearestDie, sizeRestingDie } from './hud/diceArc';
+import { throwPlan, simTo, nearestDie } from './hud/diceArc';
 import type { SlotDef, SlotState, TipDef } from './hud/skillBar';
 import type { FoeView } from './hud/plates';
 import { HeroFx } from './heroFx';   // fx4
@@ -44,7 +44,8 @@ import { playDeath, lastHit } from './death';   // fx4
 import { HpDisplay, type FoeDisp } from './hpDisplay';
 import { displayTarget, canAim, displayPreview, modelHit } from './targeting';
 import { statusFlight } from './statusFlight';
-import { HERO_POS, foePosition, actorSubject, fitBattleCamera, type FramingSubject } from './battleCamera';
+import { HERO_POS, foePosition, entranceFrom, actorSubject, fitBattle, type FramingSubject, type CameraFit } from './battleCamera';
+import { DiceField } from './diceField';
 
 const EYE = V3(0.3, 13.4, 14.9), LOOK = V3(0, -0.6, -3.6);   // mutable in place by cam() (tuning)
 /** R5 (UX_V3 §1b): tighter than the old 42° so the dice on the near arc are ≥ 72 px on screen */
@@ -92,6 +93,8 @@ export class V2Show {
   private giveUp: Pane; private endPane: Pane; private giveUpRect: Rect | null = null;
   /** v4 (SHOW3 #14): every move of a die between the field and the prep tray goes through this ordered queue */
   flow = new DiceFlow(); private endDone = false;
+  /** R6S 骰场: the stone dais with six sockets in front of everyone (dice land only there) */
+  field = new DiceField(); private camDist = 0; private pre = new Map<number, { a: BattleActor; lane: number }>();
 
   constructor(private platform: Platform) {
     const L = this.L, skin: SuitSkin = { cls: 'warrior', scheme: 'A', plain: true };
@@ -107,9 +110,8 @@ export class V2Show {
     this.tablet.onPick = (i) => this.playRow(i);
     this.hud.chant.onTap = () => this.act({ k: 'end' });
     this.hud.reroll.onTap = () => this.act({ k: 'reroll', uids: this.sel.slice() });
-    Object.assign(FIELD, { x0: -2.6, x1: 4.6, z0: -0.6, z1: 2.2 });   // R5: around the low dice arc (throws aim at arc slots, hud/diceArc.ts)
     throwHooks.impact = (d, v) => { cue('clack', Math.min(1, v / 9)); if (v > 3) fxSmoke(V3(d.root.position.x, 0.06, d.root.position.z), 0x6a6878, 2, { s: 0.2, alpha: 0.3, up: 0.4 }); };
-    throwHooks.landed = d => { d.fx('land'); if (this.mode === 'battle') sizeRestingDie(d, this.hud.k); };
+    throwHooks.landed = d => { d.fx('land'); this.field.landed(d); };
     onUpdate((dt) => this.frame(dt));
     platform.onPointer(ev => this.pointer(ev.type, ev.x, ev.y));
     platform.onResize(() => this.layout());
@@ -126,6 +128,7 @@ export class V2Show {
     this.hud.layout(W, H, this.flask, this.tray, this.loot);
     this.mech.place(-500, -500, 3); this.tablet.place(W - 260 * k, H * 0.42, 250 * k);
     CAM.shift = W > H ? Math.round(H * 0.06) : 0;
+    if (this.mode === 'battle' && this.hero && this.b) { this.reframePending = true; void this.reframe(true, 0); }
     if (this.screen.on) this.reopen?.();
   }
   private reopen: (() => void) | null = null;
@@ -181,7 +184,8 @@ export class V2Show {
 
   // ------------------------------------------------------------ nodes
   private cleanupWorld() {
-    this.entrances = []; this.framing.clear(); this.reframePending = false; this.targetUid = null; this.hud.plates.clear();
+    this.entrances = []; this.framing.clear(); this.reframePending = false; this.targetUid = null; this.hud.plates.clear(); this.field.show(false);
+    for (const p of this.pre.values()) p.a.dispose(); this.pre.clear();
     for (const d of [...this.dice.values()]) d.dispose(); this.dice.clear(); this.sel = []; this.keep = null;
     for (const a of this.foes.values()) a.dispose(); this.foes.clear(); this.disp.clear();
     for (const p of this.plates.values()) this.ov.drop(p); this.plates.clear();
@@ -193,8 +197,8 @@ export class V2Show {
     this.cleanupWorld();
     this.stage = showStage(SCENES.find(s => s.id === id)!, { combat: true });
     this.hero = new BattleActor(this.cls); this.hero.place(HERO_POS.clone(), Math.PI); this.hero.faceToward(V3(0, 0, -3)); heroReadable(this.hero);
-    const fit = fitBattleCamera([actorSubject(this.hero, HERO_POS, true), { box: new THREE.Box3(V3(-2, 0, -3), V3(2, 2.6, -1)) }], this.ov.w, this.ov.h, this.hud.k, CAM.shift);
-    EYE.copy(fit.eye); LOOK.copy(fit.look); BATTLE_FOV = fit.fov; shot('battle', staticShot(EYE, LOOK, BATTLE_FOV), { cut: true });
+    const fit = this.fitNow([{ box: new THREE.Box3(V3(-0.2, 0, -1.6), V3(4.6, 2.0, 0)), platePx: 92, plateW: 170 }]);
+    this.applyFit(fit); shot('battle', staticShot(EYE, LOOK, BATTLE_FOV), { cut: true });
   }
   async nextNode(): Promise<void> {
     const run = this.run!; const ph = run.s.phase;
@@ -217,7 +221,8 @@ export class V2Show {
     this.tray.fill(3);
     const [t, sub] = NODE_CN[node.kind] || ['', '']; this.banner.show(t, sub, 1.4);
     this.log.push(`node ${node.idx} ${node.kind}`);
-    after(0.9, () => this.runEvents(b.start()));
+    const evs = b.start(); this.planOpening(b); this.field.show(true);
+    after(0.9, () => this.runEvents(evs));
   }
 
   // ------------------------------------------------------------ the event queue
@@ -434,11 +439,12 @@ export class V2Show {
         if (!fresh.length) { while (this.tray.count) void this.tray.drop(); return; }
         this.reconcileTray(fresh.length, fresh.map(d => uiSpecial(d.kind)));
         await wait(0.3); this.hero!.toss(); await wait(0.12);
-        const kept = stay.map(s => this.dice.get(s.uid)!).map(d => ({ p: d.home.clone(), q: d.homeQ.clone() }));
         this.flying = true;
-        // UX_V3 §1b: the new dice land in the free slots of the smile arc (dice staying on the field keep theirs)
-        const targets = freeSlots(stay.length + fresh.length, kept.map(k => k.p), this.hud.frame);
-        const ds = await this.tray.launch(fresh.map(d => d.value), { eye: EYE, kept, stagger: 0.09, targets, targetR: 0.1 });
+        // UX_V3 §1b 骰场: the new dice land in the free sockets of the dais (dice staying on the field keep theirs); the throws are
+        // simulated in the field's unit frame and mapped into the world by the field (diceField.ts)
+        const plan = throwPlan(this.field, fresh.length, stay.map(s => this.dice.get(s.uid)!));
+        this.tray.dice.slice(0, fresh.length).forEach((t, i) => this.field.track(t.die, plan.slots[i] ?? 0));
+        const ds = await this.tray.launch(fresh.map(d => d.value), { eye: EYE, kept: plan.kept, stagger: 0.09, targets: plan.targets, targetR: 0.1, from: this.field.c.clone().add(V3(-2.2, 2.4, 1.6)) });
         this.flying = false;
         ds.forEach((d, i) => { const s = fresh[i]; if (!s) { d.dispose(); return; } d.uid = s.uid; this.dice.set(s.uid, d); });
       });
@@ -446,21 +452,25 @@ export class V2Show {
     }
     if (e.reason === 'flip') { for (const s of e.dice) { const d = this.dice.get(s.uid); if (d) { d.setValue(s.value, d.topIdx, d.topTurns); fxSparks(d.root.position, 0x8ad8ff, 10, 3, { life: 0.4 }); } } return; }
     // reroll / spawn / return: (re)thrown from above the near edge, avoiding the dice at rest
-    const ids = new Set(e.dice.map(s => s.uid));
-    const kept = [...this.dice.values()].filter(d => d.mode === 'rest' && !ids.has(d.uid!)).map(d => ({ p: d.home.clone(), q: d.homeQ.clone() }));
+    const ids = new Set(e.dice.map(s => s.uid)), F = this.field;
+    const restD = [...this.dice.values()].filter(d => d.mode === 'rest' && !ids.has(d.uid!));
     const spawn = e.reason === 'spawn';
-    const from = spawn && this.hero ? this.hero.home.clone().add(V3(0.7, 0.45, -0.2)) : V3(lerp(FIELD.x0, FIELD.x1, 0.35), 2.4, FIELD.z1 + 0.9);
-    // UX_V3 §1b / 2.1: a rerolled die bounces up and lands back on its own spot; new dice take free arc slots
-    const free = freeSlots(kept.length + e.dice.length, kept.map(k => k.p), this.hud.frame);
+    // UX_V3 §1b / 2.1: a rerolled die bounces up and lands back in its own socket; new dice take free sockets (all in the unit frame)
     const inPlace = e.dice.map(s => { const d = this.dice.get(s.uid); return !!d && d.mode === 'rest' && e.reason === 'reroll'; });
-    const targets = e.dice.map((s, i) => { const d = this.dice.get(s.uid); return inPlace[i] ? d!.home.clone() : free.shift() ?? d?.home.clone() ?? V3(0, 0.4, 1); });
-    const recs = simTo(targets, kept, i => (inPlace[i] ? targets[i].clone().add(V3(0, 1.5, 0.35)) : from), 0.1); let dur = 0;
+    const own = e.dice.map((s, i) => (inPlace[i] ? this.dice.get(s.uid)! : null));
+    const free = F.freeSlots(inPlace.filter(x => !x).length, [...restD, ...own.filter((d): d is Die3D => !!d)]);
+    const slots = own.map(d => (d ? F.slotIndex(d) : free.shift() ?? 0));
+    const targets = slots.map(i => F.toUnit(F.slot(i)));
+    const kept = restD.map(d => ({ p: F.toUnit(d.home).setY(0.4), q: d.homeQ.clone() }));
+    const from = spawn && this.hero ? this.hero.home.clone().add(V3(0.7, 0.45, -0.2)) : F.slot(2).add(V3(-2.2, 2.0, 1.6).multiplyScalar(F.s));
+    const fromU = F.toUnit(from);
+    const recs = simTo(targets, kept, i => (inPlace[i] ? targets[i].clone().add(V3(0, 1.5, 0.35)) : fromU), 0.1); let dur = 0;
     const go = async () => {
     e.dice.forEach((s, i) => {
       let d = this.dice.get(s.uid);
       if (!d) { d = new Die3D('standard', { suit: this.skinFor(s.kind) }); d.uid = s.uid; this.dice.set(s.uid, d); if (e.reason === 'spawn') { d.glow = 0.8; d.glowCol.set(0xb860ff); } }
       else d.setSuit(this.skinFor(s.kind));
-      d.root.position.copy(from); playThrow(d, recs[i], s.value, EYE); dur = Math.max(dur, recs[i].rel + recs[i].dur);
+      F.track(d, slots[i]); d.root.position.copy(from); playThrow(d, recs[i], s.value, EYE); dur = Math.max(dur, recs[i].rel + recs[i].dur);
     });
     if (spawn && this.hero) { fxSmoke(this.hero.home.clone().add(V3(0.4, 0.08, 0)), 0x2a1838, 6, { s: 0.35, alpha: 0.55, up: 0.6 }); cue('magic', 0.5); }   // UX_V3 §8: the shadow die rises out of the hero's shadow (no text)
     cue('whoosh', 0.6); await wait(dur + 0.05);
@@ -580,13 +590,15 @@ export class V2Show {
   private async spawnFoe(uid: number, by?: number) {
     const en = this.b!.enemy(uid); if (!en) return;
     const def = ROSTER.find(d => d.id === en.cfgId) ? en.cfgId : 'forest_ghoul';
-    const boss = en.rank === 'midBoss' || en.rank === 'boss', lane = boss ? -1 : this.freeLane();
-    const a = new BattleActor(def), to = foePosition(Math.max(0, lane), boss);
+    const pre = this.pre.get(uid); if (pre) this.pre.delete(uid);
+    const boss = en.rank === 'midBoss' || en.rank === 'boss', lane = pre ? pre.lane : boss ? -1 : this.freeLane();
+    const withBoss = !boss && this.b!.alive().some(x => x.uid !== uid && (x.rank === 'midBoss' || x.rank === 'boss'));
+    const a = pre ? pre.a : new BattleActor(def), to = foePosition(Math.max(0, lane), boss, withBoss); a.root.visible = true;
     this.foes.set(uid, a); const d = this.display.seed(this.b!, uid, Math.max(0, lane), boss, this.batch.slice(this.bi + 1)); this.disp.set(uid, d);
     a.place(to); a.faceToward(this.hero!.home); a.update(0); this.framing.set(uid, actorSubject(a, to)); this.reframePending = true;
     if (boss) { // 留场骰期间镜头须锁定，先把首领可能召唤的完整阵位纳入安全区。
       const cfg = enemyCfgV2(en.cfgId).summons;
-      if (cfg) { const minion = new BattleActor(cfg.minionId); for(let i=1;i<=3;i++) { const pos=foePosition(i,false); minion.place(pos); minion.faceToward(this.hero!.home); minion.update(0); this.framing.set(-i,actorSubject(minion,pos)); } minion.dispose(); }
+      if (cfg) { const minion = new BattleActor(cfg.minionId); for(let i=1;i<=3;i++) { const pos=foePosition(i,false,true); minion.place(pos); minion.faceToward(this.hero!.home); minion.update(0); this.framing.set(-i,actorSubject(minion,pos)); } minion.dispose(); }
     }
     this.targetUid = displayTarget(this.disp, this.targetUid);
     this.plates.set(uid, this.ov.pane(5));
@@ -596,7 +608,7 @@ export class V2Show {
       fxRing(V3(to.x, 0.05, to.z), COL.green, 2, { life: 0.8, width: 0.15, fill: 0.3 });
       await animP(0.7, k => { a.home.y = lerp(-1.8, 0, ease.outBack(k)); }); a.roar(); d.ready = true;
     } else {
-      a.place(to.clone().add(V3(0, 0, -4.2))); a.faceToward(to);
+      a.place(entranceFrom(to)); a.faceToward(to);
       a.walkK = 1; const from = a.home.clone(); await animP(0.75, k => { a.home.lerpVectors(from, to, ease.inOut(k)); }); a.walkK = 0; a.faceToward(this.hero!.home); d.ready = true;
     }
     if (en.ct === 'guardian' && !this.tauntSeen) { this.tauntSeen = true; popPix('嘲讽', a.head().add(V3(0, 0.5, 0)), { color: '#8ac8ff', h: 0.48, life: 1.6 }); }
@@ -876,14 +888,36 @@ export class V2Show {
   }
   private lampsMax = 1;
 
-  private async reframe() {
-    if (!this.reframePending || !this.hero || this.sel.length || this.drag || this.dice.size) return;
+  // ------------------------------------------------------------ R6S: stage bands, dice field, camera (battleCamera.ts / diceField.ts)
+  private fitNow(extra: FramingSubject[] = []): CameraFit {
+    const subs = [actorSubject(this.hero!, this.hero!.home, true), ...this.framing.values(), ...extra];
+    return fitBattle(subs, { W: this.ov.w, H: this.ov.h, k: this.hud.k, shift: CAM.shift, portrait: this.ov.h > this.ov.w });
+  }
+  private applyFit(fit: CameraFit) { EYE.copy(fit.eye); LOOK.copy(fit.look); BATTLE_FOV = fit.fov; this.camDist = fit.distance; this.field.place(fit.field.c, fit.field.s); }
+  /** before the opening walk-in: build the enemies at their stand points (hidden) so the camera frames the final line-up once */
+  private planOpening(b: Battle2) {
+    for (const p of this.pre.values()) p.a.dispose(); this.pre.clear();
+    const live = b.alive(), anyBoss = live.some(e => e.rank === 'midBoss' || e.rank === 'boss'); let lane = 0;
+    for (const en of live) {
+      const def = ROSTER.find(d => d.id === en.cfgId) ? en.cfgId : 'forest_ghoul', boss = en.rank === 'midBoss' || en.rank === 'boss', ln = boss ? -1 : lane++;
+      const a = new BattleActor(def), to = foePosition(Math.max(0, ln), boss, anyBoss && !boss);
+      a.place(to); a.faceToward(this.hero!.home); a.update(0); a.root.visible = false;
+      this.pre.set(en.uid, { a, lane: ln }); this.framing.set(en.uid, actorSubject(a, to));
+    }
+    this.applyFit(this.fitNow()); shot('battle', staticShot(EYE, LOOK, BATTLE_FOV), { cut: true }); this.reframePending = false;
+  }
+  /** UX_V3 §1b: reframe only at entrances, summons / new waves and big deaths, never while the player is picking or aiming; dice
+   *  resting on the dais move with it. force (resize): at once. */
+  private async reframe(force = false, dur = 0.6) {
+    if (!this.reframePending || !this.hero) return;
+    if (!force && (this.sel.length || this.drag || this.flying)) return;
     this.reframePending = false;
-    const fit = fitBattleCamera([actorSubject(this.hero, this.hero.home, true), ...this.framing.values()], this.ov.w, this.ov.h, this.hud.k, CAM.shift);
-    const from = EYE.clone(), look = LOOK.clone();
-    EYE.copy(fit.eye); LOOK.copy(fit.look); BATTLE_FOV = fit.fov;
-    await animP(0.6, t => shot('battle', staticShot(from.clone().lerp(EYE, ease.inOut(t)), look.clone().lerp(LOOK, ease.inOut(t)), BATTLE_FOV), { cut: true }));
-    await wait(0.02); // 最终相机矩阵落定后才反算骰子落点。
+    const fit = this.fitNow(), from = EYE.clone(), look = LOOK.clone();
+    EYE.copy(fit.eye); LOOK.copy(fit.look); BATTLE_FOV = fit.fov; this.camDist = fit.distance;
+    const mv = this.field.moveTo(fit.field.c, fit.field.s, this.dice.values(), dur);
+    if (dur <= 0) { shot('battle', staticShot(EYE, LOOK, BATTLE_FOV), { cut: true }); await mv; return; }
+    await Promise.all([mv, animP(dur, t => shot('battle', staticShot(from.clone().lerp(EYE, ease.inOut(t)), look.clone().lerp(LOOK, ease.inOut(t)), BATTLE_FOV), { cut: true }))]);
+    await wait(0.02);
   }
   private chooseTarget(uid: number, ref?: RowRef) {
     const b = this.b!;

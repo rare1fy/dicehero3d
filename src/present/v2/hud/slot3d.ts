@@ -6,7 +6,11 @@ import * as THREE from 'three';
 import type { UiLayer } from '../../ui3d/layer';
 import { lampMat, Spring, UiSparks } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
-import { octPlate, glowRing, skillIcon, patternBadge, modelLook, type Plate } from './models';
+import { glowRing, skillIcon, patternBadge, modelLook } from './models';
+import { PixPlate } from './pixPlate';
+import { lampRow } from './pixParts';
+import { GRID, PAL } from '../../ui3d/pixelGrid';
+import type { PixModel } from '../../ui3d/pixMesh';
 import { pill, label, glyph, rr, type Glyph, type G } from './draw';
 import { lerp, ease } from '../../engine/clock';
 import { cue } from '../../../audio/cues';
@@ -20,7 +24,7 @@ const TAG_COL: Record<string, string> = { 单体: '#f0e6d0', 控制: '#6ae0ff', 
 export const tagColor = (t: string) => TAG_COL[t] || '#f0e6d0';
 
 export class Slot3D {
-  root = new THREE.Group(); iconG = new THREE.Group(); plate: Plate; private icon: THREE.Object3D; private iconUp: THREE.Object3D | null = null;
+  root = new THREE.Group(); iconG = new THREE.Group(); pp: PixPlate; private fx = new THREE.Group(); private lampsPix: PixModel; private icon: THREE.Object3D; private iconUp: THREE.Object3D | null = null;
   private shadow: THREE.Mesh; private ring: THREE.Mesh; private outer: THREE.Mesh; private rays = new THREE.Group(); private halo: THREE.Mesh;
   private lampBar = new THREE.Group(); private lamps: THREE.Mesh[] = []; private lampOn: THREE.MeshBasicMaterial; private lampOff: THREE.MeshBasicMaterial; private badge: THREE.Object3D;
   tag: Pane; val: Pane; tgt: Pane; ext: Pane; cmb: Pane;
@@ -29,19 +33,21 @@ export class Slot3D {
   st: SlotState = { lit: false, tier: 0, dead: false, ready: false }; press = 0; aimK = 0; k = 1;
   private lift = 4; private shownTier = 0; private bump = new Spring(500, 18); private popT = 1; private flashT = 0; private t = Math.random() * 6; private wave = 1;
   constructor(private L: UiLayer, private ov: Overlay, public def: SlotDef, private sparks: UiSparks) {
-    this.plate = octPlate({ rim: IRON }); this.root.add(this.plate.root);
-    this.halo = glowRing(0xffc040, 0.9, 1.22, 8, Math.PI * 2, Math.PI / 8); this.halo.position.z = -0.1; this.root.add(this.halo);
-    this.ring = glowRing(0x40e0ff, 1.12, 1.24, 72); this.ring.rotation.x = -1.18; this.ring.position.set(0, -0.32, 0); this.root.add(this.ring);
-    this.outer = glowRing(0xffa030, 1.28, 1.34, 8, Math.PI * 2, Math.PI / 8); this.outer.position.z = -0.05; this.root.add(this.outer);
+    // R6: the pixel plate (28 cells idle, 20 shrunk, 66×56 the play button, 48×40 two buttons side by side); root unit = 1 CSS px
+    this.pp = new PixPlate([[28, 28], [20, 20], [66, 56], [48, 40]], { rim: PAL.iron, face: PAL.face }); this.root.add(this.pp.root, this.fx);
+    this.lampsPix = lampRow(3, 3, 1); this.pp.root.add(this.lampsPix);
+    this.halo = glowRing(0xffc040, 0.9, 1.22, 8, Math.PI * 2, Math.PI / 8); this.halo.position.z = -0.1; this.fx.add(this.halo);
+    this.ring = glowRing(0x40e0ff, 1.12, 1.24, 72); this.ring.rotation.x = -1.18; this.ring.position.set(0, -0.32, 0); this.fx.add(this.ring);
+    this.outer = glowRing(0xffa030, 1.28, 1.34, 8, Math.PI * 2, Math.PI / 8); this.outer.position.z = -0.05; this.fx.add(this.outer);
     for (let i = 0; i < 8; i++) { const sp = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(PALE).multiplyScalar(1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); const a = i * Math.PI / 4; sp.position.set(Math.cos(a) * 1.18, Math.sin(a) * 1.18, -0.1); sp.rotation.z = a - Math.PI / 2; this.rays.add(sp); }
-    this.root.add(this.rays);
-    this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false })); this.shadow.position.z = 0.33; this.root.add(this.shadow);
+    this.fx.add(this.rays);
+    this.shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4, depthWrite: false })); this.shadow.position.z = 0.33; this.fx.add(this.shadow);
     // lamps: a dark bar on the top edge with three lamps
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.2, 0.12), new THREE.MeshToonMaterial({ color: 0x14121c })); this.lampBar.add(bar);
     this.lampOn = lampMat(0x6ae8ff, 2.2); this.lampOff = new THREE.MeshBasicMaterial({ color: 0x3a3a48, toneMapped: false });
     for (let i = 0; i < 3; i++) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.08, 12).rotateX(Math.PI / 2), this.lampOff); l.position.set((i - 1) * 0.19, 0, 0.08); this.lampBar.add(l); this.lamps.push(l); }
-    this.lampBar.position.set(0, 0.3, 0.36); this.root.add(this.lampBar);
-    this.badge = patternBadge(def.badge || def.kind); this.badge.scale.multiplyScalar(0.3); this.root.add(this.badge);
+    this.lampBar.position.set(0, 0.3, 0.36); this.fx.add(this.lampBar);
+    this.badge = patternBadge(def.badge || def.kind); this.badge.scale.multiplyScalar(0.3); this.fx.add(this.badge);
     this.icon = skillIcon(def.name); this.iconG.add(this.icon);
     L.scene.add(this.root, this.iconG);
     this.tag = ov.pane(9, true); this.val = ov.pane(15, true); this.tgt = ov.pane(15, true); this.ext = ov.pane(15, true); this.cmb = ov.pane(15, true);
@@ -50,7 +56,7 @@ export class Slot3D {
     if (def.name === this.def.name && def.kind === this.def.kind && def.up === this.def.up && def.badge === this.def.badge) { this.def = def; return; }
     this.def = def; this.iconG.remove(this.icon); this.icon = skillIcon(def.name); this.iconG.add(this.icon);
     if (this.iconUp) { this.iconG.remove(this.iconUp); this.iconUp = null; }
-    this.root.remove(this.badge); this.badge = patternBadge(def.badge || def.kind); this.badge.scale.multiplyScalar(0.3); this.root.add(this.badge); this.tag.key = '';
+    this.fx.remove(this.badge); this.badge = patternBadge(def.badge || def.kind); this.badge.scale.multiplyScalar(0.3); this.fx.add(this.badge); this.tag.key = '';
   }
   set(s: SlotState) {
     const was = this.st; this.st = s;
@@ -74,24 +80,27 @@ export class Slot3D {
     const B = this.big, tier = s.lit ? Math.max(1, s.tier) : 0, bp = this.bump.step(0, dt), on = this.vis > 0.02;
     this.root.visible = this.iconG.visible = on;
     // plate pose: a little wider when it is the play button; pressed while aiming
-    L.at(this.cx, this.cy, -this.press * 6, this.root.position);
-    const sc = L.px(this.size) / 2 * (1 + bp * 0.012) * (1 - this.press * 0.05) * Math.max(0.01, this.vis);
-    this.root.scale.set(sc * (1 + B * 0.16), sc * (1.04 - B * 0.06), sc);
-    // rim / face by state
-    const rimC = new THREE.Color(B > 0.5 ? (tier >= 3 ? PALE : tier === 2 ? GOLD2 : GOLD) : s.ready && !s.dead ? 0xc8963a : IRON);   // Figma 附录 A: 可用 = gold rim
-    if (s.dead) rimC.setHex(0x3a3842);
-    this.plate.rim.color.copy(rimC).multiplyScalar(1 - this.dim * 0.45);
-    this.plate.rim.emissive.setHex(B > 0.5 ? (tier >= 3 ? 0x2a7aa0 : 0xff9a20) : 0x000000).multiplyScalar(B * (0.3 + 0.2 * Math.sin(this.t * 4) + this.flashT * 0.6));
-    this.plate.face.color.setHex(B > 0.5 ? 0x2a2634 : 0x2e2a38).multiplyScalar(1 - this.dim * 0.5);
-    (this.halo.material as THREE.MeshBasicMaterial).opacity = B * (0.35 + 0.2 * Math.sin(this.t * 3) + this.flashT * 0.5); this.halo.visible = B > 0.05;
-    (this.halo.material as THREE.MeshBasicMaterial).color.setHex(tier >= 3 ? 0x80e0ff : 0xffb040);
+    // R6: root unit = 1 CSS px; the pixel plate in art pixels (front face at z = 0), the older radius-1 extras in fx
+    L.at(this.cx, this.cy, 0, this.root.position); this.root.scale.setScalar(L.px(1));
+    const sc = this.size / 2 * (1 + bp * 0.012) * Math.max(0.01, this.vis), uc = GRID.uc;
+    this.fx.scale.set(sc * (1 + B * 0.16), sc * (1.04 - B * 0.06), sc); this.fx.position.z = -0.34 * sc;
+    this.pp.root.scale.setScalar(uc); this.pp.pressK = Math.min(1, this.press);
+    const pv = this.pp.use(sc * 2 * (1 + B * 0.16) / uc, sc * 2 * (1.04 - B * 0.06) / uc);
+    // rim / face by state (Figma 附录 A: 可用 = gold rim; dead = grey)
+    this.pp.setRim(s.dead ? PAL.dead : B > 0.5 ? (tier >= 3 ? PAL.pale : tier === 2 ? PAL.goldHot : PAL.gold) : s.ready ? PAL.gold : PAL.iron);
+    this.pp.dim(1 - this.dim * 0.45, B > 0.5 ? 1 + B * (0.12 + 0.1 * Math.sin(this.t * 4) + this.flashT * 0.5) : 1);
+    this.pp.glowK = B * (0.55 + 0.2 * Math.sin(this.t * 3) + this.flashT * 0.5); this.pp.glowCol.setHex(tier >= 3 ? 0x80e0ff : 0xffb040);
+    this.pp.outerK = B > 0.05 && tier >= 2 ? B * (0.5 + 0.3 * Math.sin(this.t * 6)) + this.flashT * 0.4 : 0; this.pp.outerCol.setHex(tier >= 3 ? 0x9ae8ff : 0xffa030);
+    this.pp.update(); this.halo.visible = false; this.outer.visible = false;
+    // pixel lamps on the top edge (big only): lit = tier
+    this.lampsPix.visible = B > 0.3; this.lampsPix.position.set(0, pv.H / 2 - 1, 1); this.lampsPix.scale.setScalar(Math.max(0.01, B) * (1 + B * 0.6));
+    for (let i = 0; i < 3; i++) this.lampsPix.setPal(1 + i, i < tier ? (tier >= 3 ? PAL.pale : PAL.cyan) : PAL.dead, i < tier ? 2.2 : 1);
     this.ring.visible = B > 0.05; this.ring.rotation.z = this.t * 0.8; (this.ring.material as THREE.MeshBasicMaterial).opacity = B * (0.65 + 0.2 * Math.sin(this.t * 5)) + this.aimK * 0.3;
     (this.ring.material as THREE.MeshBasicMaterial).color.setHex(this.aimK > 0.5 ? 0xff8a30 : 0x40e0ff);
-    this.outer.visible = B > 0.05 && tier >= 2; (this.outer.material as THREE.MeshBasicMaterial).opacity = B * (0.5 + 0.3 * Math.sin(this.t * 6)) + this.flashT * 0.4;
     this.rays.visible = B > 0.05 && tier >= 3; this.rays.rotation.z = this.t * 0.4; this.rays.scale.setScalar(0.9 + 0.1 * Math.sin(this.t * 7) + (1 - this.wave) * 0.6);
     for (const r of this.rays.children) ((r as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = B * (0.8 - (1 - this.wave) * 0.3);
     // lamps (big only) and the badge (bottom edge when small, bottom-left corner when big; never scaled up)
-    this.lampBar.visible = B > 0.3; this.lampBar.scale.setScalar(Math.max(0.01, B));
+    this.lampBar.visible = false;
     this.lamps.forEach((l, i) => { l.material = i < tier ? this.lampOn : this.lampOff; });
     const bs = 0.44 / (1 + B * 0.6); this.badge.scale.setScalar(bs); this.badge.position.set(lerp(0, -0.6, B), lerp(-0.8, -0.36, B), 0.42);
     // the floating icon: lift by state (dim 4 / ready 7 / tier 12 / 16 / 22 px), bob, spin on activation, tier-3 upgrade
@@ -101,7 +110,7 @@ export class Slot3D {
     const isz = Math.min(B > 0.5 ? 74*this.k : Infinity, this.size * lerp(0.56, 0.62, B) * (s.lit ? [1, 1.06, 1.12, 1.2][Math.min(3, tier)] : 1) * Math.max(0.01, this.vis) * (s.dead ? 0.8 : 1 - this.dim * 0.12));
     const ix = this.cx, iy = this.cy - lerp(this.lift * 0.4, this.size * 0.27, B) - (this.lift * 0.6 + pop + bob)*this.k;
     // in front of the plate face (front ≈ 0.17 × size) by the lift: the perspective shows the gap
-    L.at(ix, iy, 0, this.iconG.position); this.iconG.position.z = L.px(this.size * 0.17 + isz * 0.16 + this.lift * 0.8);
+    L.at(ix, iy, 0, this.iconG.position); this.iconG.position.z = L.px(isz * 0.16 + this.lift * 0.8 * this.k);
     const want = tier >= 3 && B > 0.5 && this.def.up ? 1 : 0;
     if (want && !this.iconUp) { this.iconUp = skillIcon(this.def.up!); this.iconG.add(this.iconUp); }
     this.icon.visible = !(want && this.iconUp); if (this.iconUp) this.iconUp.visible = !!want;
@@ -143,7 +152,7 @@ export class Slot3D {
     this.ext.at(this.cx + this.size * 0.66 - 18, this.cy - this.size * 0.22 - 18); this.ext.scale = this.k; this.ext.alpha = ex && on ? Math.max(0, B * 2 - 1) : 0; this.ext.visible = this.ext.alpha > 0.02;
   }
   hideAll() { this.tVis = 0; }
-  dispose() { this.L.scene.remove(this.root, this.iconG); for (const p of [this.tag, this.val, this.tgt, this.ext, this.cmb]) this.ov.drop(p); }
+  dispose() { this.L.scene.remove(this.root, this.iconG); this.pp.dispose(); for (const p of [this.tag, this.val, this.tgt, this.ext, this.cmb]) this.ov.drop(p); }
 }
 
 /** a small beast head (red eyes, ears) for the target portrait */

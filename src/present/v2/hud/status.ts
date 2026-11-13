@@ -3,6 +3,7 @@
 // soft fading line under each row (gold left, red right). Also the flask's HP number (crisp, big) and the DoT forecast handed to the
 // flask (poison + burn that tick at turn end).
 import type { Overlay, Pane } from '../overlay';
+import type { UiLayer } from '../../ui3d/layer';
 import { statusIcon, fadeLine, label, type Glyph, type G } from './draw';
 import { ST_GLYPH } from './plates';
 import type { StatusV2 } from '../../../core/v2/types';
@@ -12,12 +13,15 @@ interface Ico { g: Glyph; col: string; n: number | string; frac: number }
 
 export class StatusRows {
   private left: Pane; private right: Pane; private hp: Pane; x = 525; y = 605; k = 1; on = false; size = 134;
-  constructor(ov: Overlay) { this.left = ov.pane(7, true); this.right = ov.pane(7, true); this.hp = ov.pane(8, true); }
+  /** left player zone: both rows to the flask's right, buffs on top, debuffs below */
+  stack = false;
+  constructor(ov: Overlay, public L?: UiLayer) { this.left = ov.pane(7, true); this.right = ov.pane(7, true); this.hp = ov.pane(8, true); }
   place(x: number, y: number, size: number, k: number) { this.x = x; this.y = y; this.size = size; this.k = k; }
   landing(type: StatusV2, p: PlayerView) {
     const good = type === 'berserk', list = p.statuses.filter(s => good ? s.type === 'berserk' : s.type !== 'berserk');
     const index = list.findIndex(s => s.type === type), slot = Math.min(2, index < 0 ? list.length : index);
     const gap = this.size*0.5+6*this.k;
+    if (this.stack) return { x: this.x + gap + (30 + slot * 52) * this.k, y: this.y + (good ? -40 : 34) * this.k };
     return { x: this.x+(good ? -1 : 1)*(gap+(30+slot*52)*this.k), y: this.y-1*this.k };
   }
   /** returns the HP the DoTs will take at turn end (for the flask's cut) */
@@ -37,7 +41,7 @@ export class StatusRows {
       const show = list.slice(0, list.length > 3 ? 2 : 3), more = list.length - show.length;
       pn.paint([badRow, show.map(i => i.g + i.n + ':' + i.frac.toFixed(2)).join(','), more].join('|'), rw, rh, (g: G, kk) => {
         fadeLine(g, 0, rh - 8, rw, kk, badRow ? 'rgba(255,60,50,0.75)' : 'rgba(255,200,110,0.75)', 2);
-        const n = show.length + (more ? 1 : 0), x0 = badRow ? 30 : rw - 30 - (n - 1) * step;
+        const n = show.length + (more ? 1 : 0), x0 = badRow || this.stack ? 30 : rw - 30 - (n - 1) * step;
         show.forEach((ic, i) => statusIcon(g, x0 + i * step, 30, 24, kk, { glyph: ic.g, col: ic.col, arc: badRow ? '#ff3a2a' : '#ffd890', frac: ic.frac, n: ic.n, bad: badRow }));
         if (more) label(g, `+${more}`, x0 + show.length * step, 30, 20, kk, { col: badRow ? '#ffb0a0' : '#ffe6b0' });
       });
@@ -45,7 +49,8 @@ export class StatusRows {
     };
     row(this.left, buffs, false); row(this.right, bad, true);
     const gap = this.size * 0.5 + 6 * k;   // from the flask centre to the inner end of each row
-    this.left.at(this.x - gap - rw * k + (rw * k - rw) / 2, this.y - rh / 2 + 6 * k); this.right.at(this.x + gap + (rw * k - rw) / 2, this.y - rh / 2 + 6 * k);
+    if (this.stack) { const ox = this.x + gap + (rw * k - rw) / 2, oy = (rh * k - rh) / 2; this.left.at(ox, this.y - rh * k + oy - 2 * k); this.right.at(ox, this.y + oy - 6 * k); }
+    else { this.left.at(this.x - gap - rw * k + (rw * k - rw) / 2, this.y - rh / 2 + 6 * k); this.right.at(this.x + gap + (rw * k - rw) / 2, this.y - rh / 2 + 6 * k); }
     // the HP number on the flask
     const t = String(Math.max(0, Math.round(shownHp))), w = 110, h = 60, low = p.hp / Math.max(1, p.maxHp) < 0.3;
     this.hp.paint('hp' + t + low, w, h, (g: G, kk) => label(g, t, w / 2, h / 2, 44, kk, { col: low ? '#ffd0c8' : '#ffffff', sw: 6 }));

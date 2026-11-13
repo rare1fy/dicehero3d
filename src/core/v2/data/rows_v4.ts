@@ -60,10 +60,10 @@ export const V4_ROWS: RowDef[] = [
   // ── 嗜血狂战：斩或挡
   row({
     id: 'w4_loose', name: '铁壁', classId: 'warrior', basic: true, cond: { t: 'any', min: 1, max: 3 }, tierRule: { steps: S_ONE, maxDice: 3 }, icon: { kind: 'one' },
-    tiers: ladder({ single: { fx: [armorX(1.05)] } }),   // v4.2: design ×1.5 / II ×2.0 → ×1.05 / ×1.4 (armor now blocks every direct hit)
+    tiers: ladder({ single: { fx: [armorX(0.9)] } }),   // v4.3: design ×1.5 / II ×2.0 → ×0.9 / ×1.2 (user pick: ×0.6 with HP 90; v4.2 had ×1.05 / ×1.4 with HP 80)
     maxLevel: 2,
-    levelUp: { 2: r => mapTiers(r, list => list.map(e => (e.t === 'armor' ? { ...e, mul: 1.4 } : e))) },
-    levelDesc: ['护甲 = 点数和 × 1.4（原 × 1.05）', '—'],
+    levelUp: { 2: r => mapTiers(r, list => list.map(e => (e.t === 'armor' ? { ...e, mul: 1.2 } : e))) },
+    levelDesc: ['护甲 = 点数和 × 1.2（原 × 0.9）', '—'],
   }),
   row({
     id: 'w4_same', name: '顺劈斩', classId: 'warrior', cond: same, tierRule: { steps: S_SAME }, icon: { kind: 'same' },

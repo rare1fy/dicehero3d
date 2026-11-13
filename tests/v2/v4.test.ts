@@ -456,3 +456,16 @@ describe('v4.2 刀鞘开局 2', () => {
     for (const k of sheathCards) expect(k).toMatchObject({ from: 3 });
   });
 });
+
+describe('v4.3 持续伤害无视屏障', () => {
+  it("poison and burn go past both armor and the mage's barrier", () => {
+    const b = mk('mage', [['forest_ghoul']]);
+    b.s.player.statuses.push({ type: 'poison', value: 4 }, { type: 'burn', value: 3 });
+    const hp = b.s.player.hp;
+    const ev = b.endTurn().events;   // a hold: barrier from the chant, then the enemy turn ticks the player's DoT
+    expect(of(ev, 'chant')[0].barrier).toBeGreaterThan(0);   // the barrier was up while the DoT ticked (it clears at the next turn start)
+    const dots = of(ev, 'playerHit').filter(h => h.isDot);
+    expect(dots.map(h => [h.dmg, h.byBarrier, h.byArmor, h.hpDmg])).toEqual([[4, 0, 0, 4], [3, 0, 0, 3]]);
+    expect(b.s.player.hp).toBe(hp - 7);
+  });
+});
