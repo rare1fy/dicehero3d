@@ -74,6 +74,12 @@
   - 用户调好的值已设为默认：镜头俯角 30.4、距离 0.81、看点 Z −4.1 Y −0.6、视野 41；UI 镜距 27、转角 1.00、摆动 0.070；血瓶厚 1.75；技能间距 1.00。
   - 技能栏间距加大：待机 112、两个出牌按钮之间 160、缩小那排 80。
   - 长按说明 `hud/holdTips.ts` 覆盖：正负状态牌、血瓶、重投、结束回合 / 吟唱、骰子队列、钱袋、敌人牌。按住 0.4 秒出说明，松手按钮不触发；非按钮点一下也出说明，3 秒后消失。show2 只加了一行入口 `this.hud.tips.pointer(...)`。
+- 11-14 凌晨，接手停掉的 fx5 和音频子代理：
+  - FX 一批 `24cf37f`。技能编排表、新动作和特效的细节见 `reports/fx_report.md`；在它之上补了持续状态动画 `statusAura.ts`、敌人法术 `fx/foeSpells.ts`、反噬，以及吟唱 / 屏障 / 完防 / 再动这几拍的接线。
+  - 音频：
+    - 音效 `sfx/gen_v2.py` 重新开跑（两个低优先级 worker，日志在 `out_dicehero_v2/logs/genL_r3_p*.log`），跑完执行 `bash post_ready.sh`。
+    - 语音 `voice/gen_dicehero_v2.py all` 已跑完，55 条。
+    - 挑选页：`python pick_server.py 8820`（sfx 目录下用 voice 的 .venv 跑），打开 http://127.0.0.1:8820/ 。用户选完保存到 `sfx/out_dicehero_v2/choices.json`，再按选择实装进 `src/audio/audio.ts`。**不要用和弦或上行音阶**，连续触发的声音也不要逐次升调（`count` cue 现在就是逐次升调，实装时要改掉）。
 - 还差（HUD）：遗物底座换像素外壳；技能图标按格子重画。
 
 ## 5. 剩下的活（按优先级）
