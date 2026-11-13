@@ -48,6 +48,14 @@
   - 斩杀线 / 完防线：SlotState 加 `line?: { kind: 'kill' | 'guard'; on: boolean }`。
   - `hud/pixCoin.ts` 没人用，可以删。
 
+## 4c. 主机化外壳（2026-11-13 夜，主会话 liufengyun-7d；并行会话 liufengyun-da 管 hud / ui3d / dice / heroPose / bactor / fieldMarks / targeting / hpDisplay）
+- 已推到 GitHub `rare1fy/dicehero3d`。提交只 add 自己的路径；show2.ts 常有子代理的半成品，用「HEAD 版 + 只叠自己的改动 → `git hash-object -w` + `git update-index --cacheinfo`」暂存。
+- `meta/`：`menu.ts`（菜单套件，石板灰 + 金，真实时间）、`screens.ts`（标题 / 暂停 / 设置 / 操作 / 制作人员 / 确认）、`prefs.ts`、`save.ts`、`pauseBtn.ts`、`dieTip.ts`（长按骰子说明）、**`classPick.ts`**（选职业：名牌 + 焦点方框，点 / Enter 拉近镜头，右侧倾斜的 3D 介绍卡，`8cb9292`）、**`titleScene.ts`**（标题：林间营地夜景、三英雄围火、火上悬浮发光石骰，先「按任意键开始」再出菜单，`d5d8dc4`）。
+- 规则 v4.4（`5afd8db`）：狂战散骰不限颗数（用户：「战士大于3颗骰子的散骰触发不了」），模拟初始 79% → 81%，成型 100%。
+- 试玩构建：`dist/v44/`（从已提交的 HEAD 干净构建：`git archive HEAD` 到 scratchpad，给 `../pxui` 和 `node_modules` 建目录联接再 `vite build`）。
+- 后台子代理（简报在本目录）：音频 `AUDIO_BRIEF.md`（挑选页端口 8820，选择写 `sfx/out_dicehero_v2/choices.json`）、地图选路 `MAP_BRIEF.md`（改 core 的 run2 / bot2 / sim、`meta/mapScreen.ts`、show2 的 nextNode / 营火）、战斗演出 `FX_BRIEF.md`（`skillStage.ts`、`fx/**`、`battle.ts`）。验收后主会话提交。
+- 下一批 meta：图鉴、构筑查看、结算统计、新手提示、手柄战斗操作。
+
 ## 5. 剩下的活（按优先级）
 ### A. 战斗修补（任务单 `R6S.md` 的第 2、3 条；站位 / 骰场 / 镜头那第 1 条已经由主会话做完）
 Codex 做过一半（`hpDisplay.ts`、`targeting.ts`、`barrierDome.ts`、`statusFlight.ts`、`scenes/battleGlow.ts`，进度见 `fix6_report.md` 和 `FIX6.md`），**先构建截图核实每条现在的实际效果，没做到的补上**：
