@@ -89,7 +89,7 @@ export class V2Show {
   private screenResolve: ((v: number) => void) | null = null;
   /** rules v3: the four skill slots (散骰 / 同点 / 连环 / 阵列) and the lit cards; slotRefs[i] = the engine ref of slot i */
   private slotRefs: RowRef[] = []; private readyWas: boolean[] = []; private hoverUid: number | null = null; private slotAll: boolean[] = [];
-  private drag: { i: number; x0: number; y0: number; moved: boolean; foe: number | null } | null = null;
+  private drag: { i: number; x0: number; y0: number; moved: boolean; foe: number | null; held: number; tip: boolean } | null = null;
   private giveUp: Pane; private endPane: Pane; private giveUpRect: Rect | null = null;
   /** v4 (SHOW3 #14): every move of a die between the field and the prep tray goes through this ordered queue */
   flow = new DiceFlow(); private endDone = false;
@@ -943,6 +943,8 @@ export class V2Show {
   // ------------------------------------------------------------ per frame
   private frame(dt: number) {
     const t = clock.time;
+    // R7B #6 (user: 「放大的技能按钮长按不动的时候要出 tips 才行吧」): holding the play button still for 0.4 s opens its tip
+    const D = this.drag; if (D && !D.moved && !D.tip) { D.held += dt; if (D.held >= 0.4 && this.hud.bar.tips[D.i]) { D.tip = true; this.hud.bar.tipOn = D.i; this.hud.bar.endAim(); cue('tick', 0.4); } }
     this.hero?.update(dt); for (const a of this.foes.values()) a.update(dt); for (const a of this.picks) a.update(dt);
     for (const d of this.dice.values()) if(d.mode==='rest') d.foot.position.y=0.012;
     if (this.display.state) Object.assign(this.display.state.player, this.pd);
@@ -1017,7 +1019,7 @@ export class V2Show {
     if (type !== 'down') return false;
     if (this.giveUpRect && !this.busy) { const r = this.giveUpRect; if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { this.clearSel(); this.act({ k: 'end' }); return true; } }
     const bar = this.hud.bar, ci = bar.hitButton(x, y);
-    if (ci >= 0 && !this.busy) { this.drag = { i: ci, x0: x, y0: y, moved: false, foe: null }; bar.aiming = ci; cue('click', 0.4); return true; }
+    if (ci >= 0 && !this.busy) { this.drag = { i: ci, x0: x, y0: y, moved: false, foe: null, held: 0, tip: false }; bar.aiming = ci; cue('click', 0.4); return true; }
     const si = bar.hitSlot(x, y); if (si >= 0) { bar.toggleTip(si); return true; }
     if (bar.tipOn >= 0) bar.toggleTip(bar.tipOn);
     const ri = this.hud.top.hitRelic(x, y); if (ri >= 0) { this.hud.top.toggleTip(ri); cue('click', 0.4); return true; } this.hud.top.closeTip();
@@ -1035,7 +1037,7 @@ export class V2Show {
     if (!s || !s.st.lit) { this.drag = null; bar.endAim(); this.hud.plates.preview = null; return true; }
     const all = !!this.slotAll[D.i], upField = all && y < this.ov.h * 0.62;
     if (type === 'move') {
-      if (Math.hypot(x - D.x0, y - D.y0) > 14) D.moved = true;
+      if (Math.hypot(x - D.x0, y - D.y0) > 8) { D.moved = true; if (D.tip) { D.tip = false; bar.tipOn = -1; } }
       if (D.moved) {
         const foe = this.pickFoe(x, y); D.foe = foe;
         const allowed = foe != null && canAim(b, foe, this.slotRefs[D.i], this.sel);
@@ -1050,6 +1052,7 @@ export class V2Show {
     }
     if (type === 'up' || type === 'cancel') {
       this.drag = null; bar.endAim(); this.hud.plates.preview = null;
+      if (D.tip) { bar.tipOn = -1; return true; }   // R7B #6: let go after reading the long-press tip = nothing played
       if (type === 'cancel') return true;
       if (!D.moved) { if (bar.hitButton(x, y) === D.i) this.playSlot(D.i); return true; }
       const foe = this.pickFoe(x, y);

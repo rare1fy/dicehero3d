@@ -36,7 +36,7 @@ export class PixModel extends THREE.Group {
  * 挤出一张 W×H 的像素画。at(x, y)：x 向右、y 向下（第 0 行在最上）。模型中心在正面中心的 (0, 0)，z 从 0（底）到 h（正面），
  * 1 格 = 1 单位；调用方再按「1 格 = 1 美术像素」缩放。pals[g] = 每个色组的初始调色板。
  */
-export function buildPix(W: number, H: number, at: (x: number, y: number) => PCell | null, pals: number[][], o: { side?: SideFn; bands?: number[]; transparent?: boolean } = {}) {
+export function buildPix(W: number, H: number, at: (x: number, y: number) => PCell | null, pals: number[][], o: { side?: SideFn; bands?: number[]; transparent?: boolean; back?: { g: number; t: number } } = {}) {
   const D = (() => { let m = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = at(x, y); if (c) m = Math.max(m, c.h); } return m; })();
   const M = new PixModel(W, H, D), n = pals.length;
   const P: number[][] = Array.from({ length: n }, () => []), T: number[][] = Array.from({ length: n }, () => []), I: number[][] = Array.from({ length: n }, () => []);
@@ -53,6 +53,16 @@ export function buildPix(W: number, H: number, at: (x: number, y: number) => PCe
       const c = cell(x, y); if (!c) { x++; continue; }
       let e = x + 1; while (e < W) { const d = cell(e, y); if (!d || d.g !== c.g || d.t !== c.t || d.h !== c.h) break; e++; }
       quad(c.g, c.t, [X(x), Y(y + 1), c.h], [X(e), Y(y + 1), c.h], [X(e), Y(y), c.h], [X(x), Y(y), c.h]);
+      x = e;
+    }
+  }
+  // back cap (o.back): a flat face at z = 0 facing −z, so a model turned over (UI buttons flip) is closed, not hollow
+  if (o.back) for (let y = 0; y < H; y++) {
+    let x = 0;
+    while (x < W) {
+      if (!cell(x, y)) { x++; continue; }
+      let e = x + 1; while (e < W && cell(e, y)) e++;
+      quad(o.back.g, o.back.t, [X(x), Y(y), 0], [X(e), Y(y), 0], [X(e), Y(y + 1), 0], [X(x), Y(y + 1), 0]);
       x = e;
     }
   }

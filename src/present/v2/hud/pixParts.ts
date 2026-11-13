@@ -26,7 +26,7 @@ export function octPlatePix(W: number, H: number, o: { D?: number; rim?: number[
   };
   const gold = Math.max(2, Math.round(D * 0.38));
   const model = buildPix(W, H, at, [o.rim ?? PAL.gold, o.face ?? PAL.face, o.body ?? PAL.stoneDark, [0x0a0710, 0x0a0710, 0x0a0710, 0x0a0710, 0x0a0710]], {
-    bands: [D - 2 - gold],
+    bands: [D - 2 - gold], back: { g: G_BODY, t: 3 },
     // the outer wall: the rim colour two tones down on top, the dark stone body below (a gold-trimmed thick slab)
     side: (c, _x, _y, dir, z0) => (c.g === G_INK && c.h === D - 2 ? (z0 >= D - 2 - gold ? { g: G_RIM, t: dir === 2 ? 2 : dir === 3 ? 4 : 3 } : { g: G_BODY, t: dir === 2 ? 1 : dir === 3 ? 3 : 2 }) : null),
   });

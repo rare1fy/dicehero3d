@@ -8,6 +8,7 @@ import { Spring, UiSparks } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
 import { glowRing } from './models';
 import { PixPlate } from './pixPlate';
+import { Flip } from './flip';
 import { lampRow } from './pixParts';
 import { markPix, rerollRows, numeralDie, setNumeralTop } from './pixMarks';
 import { GRID, PAL, ramp } from '../../ui3d/pixelGrid';
@@ -24,13 +25,14 @@ export class RerollButton {
   root = new THREE.Group(); private pp: PixPlate; private mark: PixModel; private markG = new THREE.Group(); private orbit: THREE.Mesh;
   private lamps: PixModel | null = null; private lampN = 0;
   private dice: THREE.Mesh[] = []; private diceG = new THREE.Group(); private sparks: UiSparks; private press = new Spring(420, 20); private down = false; private t = 0; private litK = 0;
-  private turn = 0; private turnT = 0;
+  private turn = 0; private turnT = 0; private flip = new Flip(); private markB: PixModel;
   private price: Pane; x = 0; y = 0; sizePx = 130; k = 1;
   v: RerollView = { free: 0, blood: null, can: false, sel: 0, maxLamps: 1 };
   onTap: () => void = () => {};
   constructor(private L: UiLayer, ov: Overlay) {
     this.pp = new PixPlate([[40, 40]], { rim: PAL.gold, face: PAL.face }); this.root.add(this.pp.root);
     this.mark = markPix(rerollRows(), PAL.gold, 4); this.markG.add(this.mark); this.pp.root.add(this.markG);
+    this.markB = markPix(rerollRows(), PAL.gold, 4); this.markB.rotation.x = Math.PI; this.pp.root.add(this.markB);
     this.orbit = glowRing(0xffc848, 1.38, 1.44, 96); this.orbit.rotation.x = -1.05; this.orbit.rotation.y = 0.25; this.root.add(this.orbit);
     for (let i = 0; i < 6; i++) { const d = numeralDie(); d.visible = false; this.diceG.add(d); this.dice.push(d); }
     this.root.add(this.diceG);
@@ -48,7 +50,7 @@ export class RerollButton {
   }
   tap() {
     if (!this.v.can || !this.v.sel) { cue('deny', 0.4); return; }
-    this.press.kick(-6); this.sparks.burst(this.L.at(this.x, this.y, 3), 18, this.L.px(240), this.L.px(5), this.v.free > 0 ? 0xffd060 : 0xff3a2a, { life: 0.4 }); this.onTap();
+    this.press.kick(-6); this.flip.spin(); this.sparks.burst(this.L.at(this.x, this.y, 3), 18, this.L.px(240), this.L.px(5), this.v.free > 0 ? 0xffd060 : 0xff3a2a, { life: 0.4 }); this.onTap();
   }
   private setLamps(n: number) {
     if (n === this.lampN && this.lamps) return;
@@ -60,6 +62,7 @@ export class RerollButton {
   private buildMark(Wc: number) {
     this.markW = Wc; this.markG.remove(this.mark); this.mark.dispose();
     const R = Math.max(12, Math.round(Wc * 0.62) - 6); this.mark = markPix(rerollRows(R, Math.round(R / 3), 3), PAL.gold, 4); this.markG.add(this.mark);
+    this.pp.root.remove(this.markB); this.markB.dispose(); this.markB = markPix(rerollRows(R, Math.round(R / 3), 3), PAL.gold, 4); this.markB.rotation.x = Math.PI; this.pp.root.add(this.markB);
   }
   update(dt: number) {
     this.t += dt; const L = this.L, v = this.v, bloodMode = v.free <= 0 && v.blood != null, lit = v.can && v.sel > 0, uc = GRID.uc;
@@ -69,6 +72,8 @@ export class RerollButton {
     L.at(this.x, this.y, 0, this.root.position); this.root.scale.setScalar(L.px(uc));
     const p = this.press.step(this.down ? -1 : 0, dt); this.pp.pressK = Math.max(0, Math.min(1, -p));
     const pv = this.pp.use(Wc, Wc);
+    this.markB.position.z = -pv.o.D - 0.5;
+    const fa = this.flip.step(dt); this.pp.root.rotation.x = fa; this.pp.root.position.z = this.flip.lift(pv.H, pv.o.D);
     // colours: gold normally, blood red when paying HP, dark when spent
     const spent = !v.can;
     this.pp.setRim(spent ? PAL.dead : bloodMode ? PAL.blood : PAL.gold); this.pp.setFace(spent ? DEAD_FACE : bloodMode ? BLOOD_FACE : PAL.face);

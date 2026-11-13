@@ -7,6 +7,7 @@ import type { UiLayer } from '../../ui3d/layer';
 import { Spring, UiSparks } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
 import { PixPlate } from './pixPlate';
+import { Flip } from './flip';
 import { STAR_ROWS, HOURGLASS_ROWS } from './pixParts';
 import { markPix, chantRingPix } from './pixMarks';
 import { GRID, PAL, ramp } from '../../ui3d/pixelGrid';
@@ -21,7 +22,7 @@ const RIM = { cyan: ramp(0x40a8d0, { hi: 0x9ae8ff }), white: ramp(0xd8e4f0, { hi
 
 export class ChantButton {
   root = new THREE.Group(); private pp: PixPlate; private ring: PixModel | null = null; private star: PixModel; private hourglass: PixModel; private ringW = 0;
-  private sparks: UiSparks; private press = new Spring(420, 20); private down = false; private t = 0;
+  private sparks: UiSparks; private flip = new Flip(); private starB: PixModel; private glassB: PixModel; private press = new Spring(420, 20); private down = false; private t = 0;
   x = 0; y = 0; sizePx = 120; k = 1; v: ChantView = { ring: 0, live: false, struck: false, keep: false, risk: 0 }; private txt: Pane | null = null;
   onTap: () => void = () => {};
   constructor(private L: UiLayer, ov?: Overlay) {
@@ -29,6 +30,9 @@ export class ChantButton {
     this.pp = new PixPlate([[34, 34]], { rim: RIM.cyan, face: FACE }); this.root.add(this.pp.root);
     this.star = markPix(STAR_ROWS, PAL.pale, 4); this.hourglass = markPix(HOURGLASS_ROWS, SAND, 4);
     this.pp.root.add(this.star, this.hourglass);
+    // the back face (seen mid-flip): the same mark, upright once turned over
+    this.starB = markPix(STAR_ROWS, PAL.iron, 4); this.glassB = markPix(HOURGLASS_ROWS, PAL.iron, 4);
+    for (const m of [this.starB, this.glassB]) { m.rotation.x = Math.PI; this.pp.root.add(m); }
     L.scene.add(this.root); this.sparks = new UiSparks(L.scene, 40);
   }
   place(x: number, y: number, sizePx: number) { this.x = x; this.y = y; this.sizePx = sizePx; }
@@ -39,7 +43,7 @@ export class ChantButton {
     if ((type === 'up' || type === 'cancel') && this.down) { this.down = false; if (type === 'up' && h) this.tap(); return true; }
     return false;
   }
-  tap() { if (!this.v.live) { cue('deny', 0.4); return; } this.press.kick(-6); this.sparks.burst(this.L.at(this.x, this.y, 3), 18, this.L.px(220), this.L.px(5), 0x60e0ff, { life: 0.4 }); cue('magic', 0.5); this.onTap(); }
+  tap() { if (!this.v.live) { cue('deny', 0.4); return; } this.press.kick(-6); this.flip.over(); this.sparks.burst(this.L.at(this.x, this.y, 3), 18, this.L.px(220), this.L.px(5), 0x60e0ff, { life: 0.4 }); cue('magic', 0.5); this.onTap(); }
   private buildRing(Wc: number) {
     if (this.ring) { this.pp.root.remove(this.ring); this.ring.dispose(); }
     const R = Math.max(14, Math.round(Wc * 0.62)) & ~1; this.ring = chantRingPix(R, 2, PAL.cyan, 3); this.ringW = Wc; this.pp.root.add(this.ring);
@@ -49,6 +53,7 @@ export class ChantButton {
     const Wc = Math.max(16, Math.round(this.sizePx / uc)); this.pp.ensure(Wc, Wc); if (Wc !== this.ringW) this.buildRing(Wc);
     L.at(this.x, this.y, 0, this.root.position); this.root.scale.setScalar(L.px(uc));
     this.pp.pressK = Math.max(0, Math.min(1, -p)); const pv = this.pp.use(Wc, Wc), sink = -2 - 0.5 * this.pp.pressK * pv.o.D;
+    const fa = this.flip.step(dt); this.pp.root.rotation.x = fa; this.pp.root.position.z = this.flip.lift(pv.H, pv.o.D);
     const mage = v.mage !== false, chantable = mage && v.live && !v.struck, full = v.ring >= 3 && chantable, high = v.live && v.risk >= 8;
     const ring = this.ring!; ring.visible = mage; ring.position.z = sink + 0.5;
     for (let i = 0; i < 3; i++) {
@@ -56,6 +61,7 @@ export class ChantButton {
       ring.setPal(1 + i, pal, full || (on && chantable) ? 2 : 1); ring.tint(1 + i, next && !on ? 0.45 + 0.3 * Math.sin(this.t * 4) : 1);
     }
     this.star.visible = mage; this.star.position.z = sink + 1; this.star.setPal(0, v.live ? PAL.pale : PAL.dead, v.live ? 1 + (v.keep ? 0.5 + 0.5 * Math.sin(this.t * 6) : 0.2) : 1);
+    this.starB.visible = mage; this.glassB.visible = !mage; this.starB.position.z = this.glassB.position.z = -pv.o.D - 0.5;
     this.hourglass.visible = !mage; this.hourglass.position.z = sink + 1; this.hourglass.setPal(0, v.live ? SAND : PAL.dead);
     const rim = !mage ? (v.live ? (v.urgent ? RIM.hot : RIM.sand) : PAL.dead) : v.keep ? RIM.white : high ? (Math.sin(this.t * 10) > 0 ? RIM.violet : RIM.plum) : full ? PAL.goldHot : v.live ? RIM.cyan : PAL.dead;
     this.pp.setRim(rim); this.pp.dim(v.live ? 1 : 0.75);
