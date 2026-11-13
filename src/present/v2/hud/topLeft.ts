@@ -7,7 +7,7 @@ import type { UiLayer } from '../../ui3d/layer';
 import { UiSparks, Spring } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
 import { relicModel, relicPedestal, glowRing, modelLook } from './models';
-import { paintCells, textCellsW, textCellsH, labelFp, bigFp, digitCellsW, DIGIT_CELLS_H } from '../../ui3d/pixDraw';
+import { paintCells, textCellsW, textCellsH, labelFp, bigFp, digitCellsW, DIGIT_CELLS_H, PANEL } from '../../ui3d/pixDraw';
 import { INK } from './pixIcons';
 
 function slab(w: number, h: number, r: number, depth: number, mat: THREE.Material) {
@@ -68,7 +68,7 @@ export class TopLeft {
     const r = this.relics[this.tipOn];
     if (vis && r) {
       const fp = labelFp(), bf = Math.max(fp, bigFp() >> 1), d = r.desc.slice(0, 20), tw = Math.max(textCellsW(r.name, bf), textCellsW(d, fp)) + 8, th = textCellsH(bf) + textCellsH(fp) + 9;
-      paintCells(this.tip, 'rt' + r.id + fp, tw, th, pen => { pen.box(0, 0, tw, th, { fill: 'rgba(18,16,28,0.92)', line: INK, rim: '#a8742a', hi: null, cut: 2 }); pen.text(r.name, 4, 3, { col: '#ffe6a0', fp: bf }); pen.text(d, 4, 5 + textCellsH(bf), { col: '#e8dcc8', fp }); });
+      paintCells(this.tip, 'rt2' + r.id + fp, tw + 1, th + 2, pen => { const P = PANEL.tip; pen.panel(0, 0, tw, th + 1, P, 2); pen.text(r.name, 4, 3, { col: P.title, fp: bf }); pen.rect(4, 4 + textCellsH(bf), tw - 8, 1, P.edge!); pen.text(d, 4, 6 + textCellsH(bf), { col: P.text, fp }); });
       this.tip.at(r.x - 20, r.y + 24 * k); this.tip.visible = true;
     } else this.tip.visible = false;
   }

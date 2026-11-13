@@ -9,7 +9,7 @@ import { UiSparks } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
 import { Slot3D, type SlotDef, type SlotState } from './slot3d';
 import { AimArrow } from './arrow';
-import { paintCells, textCellsW, textCellsH, labelFp, bigFp, cutMask, cutDist, type PixPen } from '../../ui3d/pixDraw';
+import { paintCells, textCellsW, textCellsH, labelFp, bigFp, cutMask, cutDist, PANEL, type PixPen } from '../../ui3d/pixDraw';
 import { INK } from './pixIcons';
 import { paintNumeralFace } from '../../dice/numFace';
 import { cue } from '../../../audio/cues';
@@ -101,14 +101,16 @@ export class SkillBar {
   private drawTip() {
     const i = this.tipOn, td = this.tips[i], s = this.slots[i];
     if (!this.on || !td || !s) { this.tip.visible = false; return; }
-    const fp = labelFp(), bf = Math.max(fp, bigFp() >> 1), lh = textCellsH(fp) + 1, w = Math.max(textCellsW(td.title, bf), ...td.lines.map(l => textCellsW(l, fp))) + 8, h = textCellsH(bf) + 7 + td.lines.length * lh;
-    paintCells(this.tip, 'tip' + i + td.title + td.lines.join('|') + fp, w, h, pen => {
-      pen.box(0, 0, w, h, { fill: 'rgba(18,16,28,0.92)', line: INK, rim: '#a8742a', hi: null, cut: 2 });
-      pen.text(td.title, 4, 3, { col: '#ffe6a0', fp: bf });
-      td.lines.forEach((l, j) => pen.text(l, 4, 5 + textCellsH(bf) + j * lh, { col: '#e8dcc8', fp }));
+    const fp = labelFp(), bf = Math.max(fp, bigFp() >> 1), lh = textCellsH(fp) + 1, w = Math.max(textCellsW(td.title, bf), ...td.lines.map(l => textCellsW(l, fp))) + 8, h = textCellsH(bf) + 8 + td.lines.length * lh;
+    paintCells(this.tip, 'tip2' + i + td.title + td.lines.join('|') + fp, w + 1, h + 1, pen => {
+      const P = PANEL.tip; pen.panel(0, 0, w, h, P, 2);
+      pen.text(td.title, 4, 3, { col: P.title, fp: bf });
+      pen.rect(4, 4 + textCellsH(bf), w - 8, 1, P.edge!);   // a 1u rule under the title
+      td.lines.forEach((l, j) => pen.text(l, 4, 6 + textCellsH(bf) + j * lh, { col: P.text, fp }));
     });
     const tw = this.tip.w, th = this.tip.h;
-    this.tip.at(Math.round(Math.max(8, s.cx - tw + 40)), Math.round(Math.max(8, s.cy - s.size * 0.6 - th - 10))); this.tip.visible = true;
+    // right edge a little left of the slot's centre: clear of the end-turn button and its label above the thumb column
+    this.tip.at(Math.round(Math.max(8, s.cx - tw - s.size * 0.1)), Math.round(Math.max(8, s.cy - s.size * 0.6 - th - 10))); this.tip.visible = true;
   }
 }
 

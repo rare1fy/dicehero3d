@@ -13,7 +13,7 @@ import { lampRow } from './pixParts';
 import { markPix, rerollRows, numeralDie, setNumeralTop } from './pixMarks';
 import { GRID, PAL, ramp } from '../../ui3d/pixelGrid';
 import type { PixModel } from '../../ui3d/pixMesh';
-import { paintCells, digitCellsW } from '../../ui3d/pixDraw';
+import { paintCells, digitCellsW, PANEL } from '../../ui3d/pixDraw';
 import { pixGlyph, INK } from './pixIcons';
 import { cue } from '../../../audio/cues';
 
@@ -102,10 +102,10 @@ export class RerollButton {
     });
     this.sparks.update(dt);
     // the HP price (warrior) above the button: a pixel plaque (drop + digits)
-    const show = bloodMode && v.blood != null && v.can, txt = v.blood ? `-${v.blood}` : '0', cw = 15 + digitCellsW(txt) + 3, ch = 13;
-    paintCells(this.price, 'p' + txt, cw, ch, pen => {
-      pen.box(0, 0, cw, ch, { fill: 'rgba(30,8,12,0.9)', line: INK, rim: '#a02a24', hi: null, cut: 2 });
-      pixGlyph(pen, 'drop', 2, 2, { col: '#e02a2a' }); pen.digits(txt, 13, 3, { col: '#ffd0c8', shadow: null });
+    const show = bloodMode && v.blood != null && v.can, txt = v.blood ? `-${v.blood}` : '0', cw = 17 + digitCellsW(txt) + 4, ch = 15;
+    paintCells(this.price, 'p2' + txt, cw + 1, ch + 1, pen => {
+      pen.panel(0, 0, cw, ch, PANEL.danger, 2);
+      pixGlyph(pen, 'drop', 3, 3, { col: '#e02a2a' }); pen.digits(txt, 14, 4, { col: '#ffd0c8', shadow: null });
     });
     this.price.at(Math.round(this.x - this.price.w / 2), Math.round(this.y - this.sizePx * 0.62 - this.price.h - 2 * uc)); this.price.visible = show && this.root.visible;
   }

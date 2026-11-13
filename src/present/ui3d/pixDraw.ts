@@ -1,10 +1,13 @@
 // R6 高清像素 2D 画笔（UX_V3 §6b）：在 overlay 画布上按「美术像素格」作画。1 格 = GRID.u 个设备像素（整数），所以每格边缘锐利；
 // 只画横平竖直和 1:1 台阶，平涂 2～4 档，1u 深色描边、1u 高光。文字：粗体方正数字（pixDigits）+ Fusion Pixel 12px 中文（v2/pix.ts，
 // 每个字体像素 = 整数个设备像素）。所有坐标、尺寸单位都是「格」。
-import { GRID } from './pixelGrid';
+import { GRID, type PanelStyle } from './pixelGrid';
 import { eachDigitCell, digitsW, DIGIT_H } from './pixDigits';
 import { drawPix, pixW, PIX_H } from '../v2/pix';
 import type { Pane } from '../v2/overlay';
+export { PANEL, panelWith, type PanelStyle } from './pixelGrid';
+/** 面板内容区相对面板左上的偏移（格）：外线 + 斜面 (+ 内沿) */
+export const panelInset = (s: PanelStyle) => (s.accent ? 3 : 2);
 
 export type G2 = CanvasRenderingContext2D;
 export type Mask = (x: number, y: number) => boolean;
@@ -50,6 +53,22 @@ export class PixPen {
     } else this.fill(ix, iy, iw, ih, inner, o.fill);
     if (o.hi) this.fill(ix, iy, iw, 1, (i, j) => inner(i, j), o.hi);
     if (o.lo) this.fill(ix, iy + ih - 1, iw, 1, (i) => inner(i, ih - 1), o.lo);
+  }
+  /**
+   * 共用面板（PANEL，见 pixelGrid.ts）：1u 黑外线 → 1u 斜面（左上亮、右下暗）→ 可选 1u 语义内沿 → 板面；板下 1u 落影。
+   * 落影画在 (x+1, y+1) 的同形上，所以调用方给面板留出右下各 1 格（w、h 是不含落影的尺寸）。cut = 切角格数（1:1 台阶）。
+   */
+  panel(x: number, y: number, w: number, h: number, s: PanelStyle, cut = 2) {
+    const outer = cutMask(w, h, cut), ring1 = cutMask(w - 2, h - 2, Math.max(0, cut - 1));
+    if (s.drop) this.fill(x + 1, y + 1, w, h, (i, j) => outer(i, j) && !outer(i - 1, j - 1), s.drop);
+    this.fill(x, y, w, h, (i, j) => outer(i, j) && !ring1(i - 1, j - 1), s.line);
+    const iw = w - 2, ih = h - 2, ic = Math.max(0, cut - 1), d = cutDist(iw, ih, ic);
+    // the bevel = the outermost inner ring: light on the top / left halves, dark on the bottom / right (a chiselled slab)
+    this.fill(x + 1, y + 1, iw, ih, ring1, (i, j) => {
+      if (d(i, j) === 0) return (i + j) * 2 < iw + ih - 2 ? s.edge ?? s.fill : s.shade ?? s.fill;
+      if (s.accent && d(i, j) === 1) return s.accent;
+      return s.fill;
+    });
   }
   /** 像素图标：rows 每个字符一格，pal 给颜色（'.' 或未定义 = 透明）；outline = 先把每格外扩 1 格画一遍深色描边 */
   icon(rows: string[], x: number, y: number, pal: Record<string, string>, o: { outline?: string | null; scale?: number; shadow?: string | null } = {}) {

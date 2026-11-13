@@ -3,7 +3,7 @@
 // 用法：pixGlyph(pen, 'sword', x, y, { col }) —— (x, y) = 图标左上（格），描边在外面 1 格；pixGlyphC 以中心定位。
 // 另有 3×5 小数字（角标层数 / 回合数，pixSmallDigits）和状态小牌（八角框 + 图标 + 角标，pixStatusChip）。
 import type { Glyph } from './draw';
-import type { PixPen } from '../../ui3d/pixDraw';
+import { PANEL, type PixPen } from '../../ui3d/pixDraw';
 import { mixHex, cssHex } from '../../ui3d/pixelGrid';
 
 export type PixGlyph = Glyph | 'excl' | 'coin' | 'dice';
@@ -306,8 +306,8 @@ export const CHIP = 13;
  * (x, y) = 左上（格）。
  */
 export function pixStatusChip(pen: PixPen, kind: PixGlyph, x: number, y: number, o: { col?: string; rim: string; n?: number | string; body?: string; hi?: string | null; nCol?: string }) {
-  pen.box(x, y, CHIP, CHIP, { fill: o.body ?? 'rgba(14,10,22,0.86)', line: INK, rim: o.rim, hi: null, cut: 3 });
-  if (o.hi) pen.fill(x + 3, y + 1, CHIP - 6, 1, () => true, o.hi);
+  // the shared panel slab (PANEL), no inner rim (the 9x9 icon needs the room): the semantic colour is the lit bevel
+  pen.panel(x, y, CHIP, CHIP, { ...PANEL.normal, accent: null, edge: o.rim, drop: null }, 3);
   pixGlyph(pen, kind, x + 2, y + 2, { col: o.col });
   if (o.n != null && o.n !== '') { const t = String(o.n); pixSmallDigits(pen, t, x + CHIP - 1, y + CHIP - 5, { col: o.nCol ?? '#ffffff', align: 'right' }); }
 }

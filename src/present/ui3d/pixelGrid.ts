@@ -77,3 +77,33 @@ export const PAL = {
   violet: ramp(0x9a50e0, { hi: 0xd8a8ff, dark: 0x140626 }),
   white: ramp(0xe8f0f8, { hi: 0xffffff }),
 };
+
+// ---------------------------------------------------------------- the shared 2D panel style（用户 11-13：「像素风UI面板都做得太丑了，主机游戏，参考一下我的世界地下城」）
+// 《我的世界：地下城》的面板做法（只借做法）：近黑的石板底（不透明度高，不靠半透明糊在场景上）、1u 纯黑外线、
+// 1u 斜面（左上亮一档、右下暗一档，像一块凿出来的石板）、底下 1u 落影让面板「抬起来」；颜色克制，金色只给可操作 / 聚焦。
+// 语义色只走 1u 内沿（accent）：正面 = 金、负面 = 血红、类别标签 = 类别色。标题字用暖白，正文米白，次要信息灰紫。
+// 菜单（meta/**）和战斗 HUD 共用这一套：pen.panel(x, y, w, h, PANEL.xxx)。
+export interface PanelStyle {
+  /** 板面 */ fill: string;
+  /** 1u 外线 */ line: string;
+  /** 斜面：左上亮边 / 右下暗边（null = 不画） */ edge: string | null; shade: string | null;
+  /** 1u 语义内沿（null = 没有） */ accent: string | null;
+  /** 板下 1u 落影（null = 不抬起） */ drop: string | null;
+  /** 文字：标题 / 正文 / 次要 */ title: string; text: string; sub: string;
+}
+export const PANEL = {
+  /** 普通面板（敌人牌意图、数值胶囊、标签、状态牌的底） */
+  normal: { fill: '#1c1a24', line: '#050308', edge: '#34303f', shade: '#121018', accent: null, drop: 'rgba(0,0,0,0.55)', title: '#fff4dc', text: '#ece6f2', sub: '#a89cb8' } as PanelStyle,
+  /** 聚焦 / 可操作：金沿 + 暖底（菜单的焦点项、出牌按钮的数值胶囊） */
+  focus: { fill: '#2c2418', line: '#050308', edge: '#5a4a2c', shade: '#18120a', accent: '#f0c050', drop: 'rgba(0,0,0,0.55)', title: '#fffaf0', text: '#fff4dc', sub: '#d8c090' } as PanelStyle,
+  /** 正面状态（护甲、屏障、狂暴）：金沿 */
+  good: { fill: '#24201a', line: '#050308', edge: '#463c2a', shade: '#14100a', accent: '#c89a40', drop: 'rgba(0,0,0,0.5)', title: '#fff0d0', text: '#f0e6d4', sub: '#b8a888' } as PanelStyle,
+  /** 危险 / 负面状态 / 攻击意图：血红沿 + 暗红底 */
+  danger: { fill: '#24121a', line: '#050308', edge: '#44222a', shade: '#140810', accent: '#b8302a', drop: 'rgba(0,0,0,0.5)', title: '#ffe0d8', text: '#f4dcd8', sub: '#c8948c' } as PanelStyle,
+  /** 禁用：灰沿，字暗 */
+  disabled: { fill: '#18171e', line: '#050308', edge: '#26242e', shade: '#0e0d12', accent: '#3e3a48', drop: 'rgba(0,0,0,0.4)', title: '#8a8494', text: '#7a7486', sub: '#5e5a68' } as PanelStyle,
+  /** 提示框（tips）：比普通深一档，青铜细沿，标题暖金 */
+  tip: { fill: '#121016', line: '#050308', edge: '#2a2632', shade: '#08070a', accent: '#8a6a3a', drop: 'rgba(0,0,0,0.6)', title: '#ffd884', text: '#ece6f2', sub: '#a89cb8' } as PanelStyle,
+};
+/** a panel with a different accent (category tags, intent kinds): same slab, only the 1u inner rim changes */
+export const panelWith = (base: PanelStyle, accent: string | null, extra: Partial<PanelStyle> = {}): PanelStyle => ({ ...base, accent, ...extra });

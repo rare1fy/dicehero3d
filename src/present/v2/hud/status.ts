@@ -7,7 +7,7 @@ import type { UiLayer } from '../../ui3d/layer';
 import type { Glyph } from './draw';
 import { ST_GLYPH } from './plates';
 import type { StatusV2 } from '../../../core/v2/types';
-import { paintCells, digitCellsW, DIGIT_CELLS_H, type PixPen } from '../../ui3d/pixDraw';
+import { paintCells, digitCellsW, DIGIT_CELLS_H, PANEL, type PixPen } from '../../ui3d/pixDraw';
 import { GRID } from '../../ui3d/pixelGrid';
 import { pixGlyph, INK } from './pixIcons';
 
@@ -19,13 +19,12 @@ const CH = 15, STEP = 17, ROW_W = 3 * STEP + 1, ROW_H = CH + 4;
 
 function chip(pen: PixPen, x: number, y: number, ic: Ico, bad: boolean) {
   if (bad) {   // square, red rim, the top-right corner knocked off (裂角)
-    pen.box(x, y, CH, CH, { fill: 'rgba(40,10,14,0.9)', line: INK, rim: '#b0302a', hi: null, cut: 1 });
+    pen.panel(x, y, CH, CH, PANEL.danger, 1);
     const u = pen.u, X = (c: number) => (pen.ox + c) * u, Y = (r: number) => (pen.oy + r) * u;
     pen.g.clearRect(X(x + CH - 3), Y(y), 3 * u, u); pen.g.clearRect(X(x + CH - 2), Y(y + 1), 2 * u, u); pen.g.clearRect(X(x + CH - 1), Y(y + 2), u, u);
     pen.cell(x + CH - 4, y, INK); pen.cell(x + CH - 3, y + 1, INK); pen.cell(x + CH - 2, y + 2, INK); pen.cell(x + CH - 1, y + 3, INK);
   } else {
-    pen.box(x, y, CH, CH, { fill: 'rgba(46,34,26,0.9)', line: INK, rim: '#c89a40', hi: null, cut: 4 });
-    pen.fill(x + 4, y + 2, CH - 8, 1, () => true, 'rgba(255,230,170,0.22)');
+    pen.panel(x, y, CH, CH, PANEL.good, 4);
   }
   pixGlyph(pen, ic.g as never, x + 3, y + 2, { col: ic.col });
   const t = String(ic.n); if (!t) return;
