@@ -35,6 +35,7 @@ import { saveRun, clearRun, loadRun } from './meta/save';
 import { PauseButton } from './meta/pauseBtn';
 import { DieTip } from './meta/dieTip';
 import { ClassPick } from './meta/classPick';
+import { TitleScene, TITLE_SPOTS, TITLE_FACE } from './meta/titleScene';
 import { safeInsets } from './hud/hud';
 import type { Ev2, GainReason } from '../../core/v2/events2';
 import type { ClassId, DieKind, StatusV2 } from '../../core/v2/types';
@@ -107,6 +108,7 @@ export class V2Show {
     this.loot = new Loot(L, 'warrior'); this.mech = new ClassMech(L, skin);
     this.banner = new Banner(this.ov); this.toast = new Toast(this.ov); this.screen = new Screen(this.ov);
     this.menu = new Menu(this.ov); this.pauseBtn = new PauseButton(this.ov); this.dieTip = new DieTip(this.ov); loadPrefs();
+    this.titleScene = new TitleScene(this.ov);
     this.classPick = new ClassPick({ L: this.L, ov: this.ov, menu: this.menu, scene: SCENE, actors: () => this.picks, pick: c => this.pick(c), back: () => this.toTitle() });
     this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10);
     this.giveUp = this.ov.pane(11, true); this.endPane = this.ov.pane(11);
@@ -126,19 +128,20 @@ export class V2Show {
   }
 
   // ------------------------------------------------------------ meta screens (console shell: title / pause / settings / save)
-  menu: Menu; pauseBtn: PauseButton; paused = false; classPick: ClassPick;
+  menu: Menu; pauseBtn: PauseButton; paused = false; classPick: ClassPick; titleScene: TitleScene;
   private host(): MetaHost {
     return { menu: this.menu, newRun: () => { this.menu.close(); this.classSelect(); }, continueRun: () => this.continueRun(), toTitle: () => this.toTitle(),
+      titleBack: () => { this.menu.close(); this.titleScene.unpress(); },
       abandonRun: () => { clearRun(); this.toTitle(); }, resume: () => this.resume() };
   }
   /** title screen over the forest path, the camera drifting slowly */
   title() {
     this.mode = 'title'; this.paused = false; this.result = null; this.botBusy = false; this.screen.close(); this.reopen = null; if (this.classPick.on) this.classPick.close(); this.cleanupWorld(); GRADE.desat = 0;
     this.hudRun(false); this.hudBattle(false); this.pauseBtn.show(false); FX.speed = SPEEDS[PREFS.speed];
-    this.stage = showStage(SCENES.find(s => s.id === 'n_trail')!);
-    this.picks = CLASS_IDS.map((c, i) => { const a = new BattleActor(c); a.place(V3(-2.6 + i * 2.6, 0, -1.2 - (i === 1 ? 0.6 : 0))); a.faceToward(V3(-2.6 + i * 2.6, 0, 12)); return a; });
-    shot('title', staticShot(V3(4.6, 3.2, 9.5), V3(-0.4, 1.7, -1.0), 38), { cut: true });
-    titleMenu(this.host());
+    // the camp at night: the heroes round a dying fire, the sigil die over the embers (meta/titleScene.ts); any key → the menu
+    this.stage = showStage(SCENES.find(s => s.id === 'c_camp')!);
+    this.picks = CLASS_IDS.map(c => { const [x, z] = TITLE_SPOTS[c], a = new BattleActor(c); a.place(V3(x, 0, z)); a.faceToward(TITLE_FACE); return a; });
+    this.titleScene.enter(() => titleMenu(this.host()));
   }
   private continueRun() {
     const run = loadRun(); if (!run) { this.toast.show('没有可继续的存档'); titleMenu(this.host()); return; }
@@ -173,6 +176,7 @@ export class V2Show {
     if (this.mode === 'battle' && this.hero && this.b) { this.reframePending = true; void this.reframe(true, 0); }
     if (this.screen.on) this.reopen?.();
     if (this.classPick.on) this.classPick.relayout();
+    if (this.titleScene.on) this.titleScene.paint();
   }
   private reopen: (() => void) | null = null;
   private get k() { return Math.min(1, this.ov.h / 720); }
@@ -191,6 +195,7 @@ export class V2Show {
     this.hudRun(false); this.hudBattle(false);
     this.stage = showStage(SCENES.find(s => s.id === 'n_trail')!);
     this.picks = CLASS_IDS.map((c, i) => { const a = new BattleActor(c); a.place(V3(-3.4 + i * 3.4, 0, 0.6)); a.faceToward(V3(-3.4 + i * 3.4, 0, 12)); return a; });
+    this.titleScene.exit();
     // user: 「不要常显介绍面板，点一个职业再拉近，然后出介绍的UI面板」 → meta/classPick.ts (name plates, zoom, tilted info card)
     this.screen.close(); this.reopen = null; this.L.on = true; this.flask.root.visible = false;   // the info card lives in the UI 3D layer (nothing else of it shows here)
     this.classPick.focus = Math.max(0, CLASS_IDS.indexOf(this.cls)); this.classPick.open();
@@ -202,7 +207,7 @@ export class V2Show {
   private startRun(run: Run2, logLine: string) {
     const c = run.s.classId;
     if (this.classPick.on) this.classPick.close();
-    this.flask.root.visible = true;
+    this.titleScene.exit(); this.flask.root.visible = true;
     this.menu.close(); this.screen.close(); this.reopen = null; cue('select', 0.8); void audio.unlock().then(() => audio.playMusic('bgm_battle', 0.6));
     this.cls = c; this.run = run; this.result = null; this.tauntSeen = false; this.paused = false; FX.speed = SPEEDS[PREFS.speed];
     const skin: SuitSkin = { cls: c, scheme: 'A', plain: true };
@@ -978,6 +983,7 @@ export class V2Show {
     const t = clock.time;
     this.menu.update(clock.rdt); tickPrefs(); this.pollStart(); this.dieHold();
     if (this.classPick.on) this.classPick.tick();
+    this.titleScene.tick();
     if (this.paused) FX.speed = 0;
     this.pauseBtn.show(!this.menu.on && (this.mode === 'battle' || this.mode === 'shop' || this.mode === 'choice'));
     // R7B #6 (user: 「放大的技能按钮长按不动的时候要出 tips 才行吧」): holding the play button still for 0.4 s opens its tip
@@ -1054,6 +1060,7 @@ export class V2Show {
   private swipe: { on: boolean; seen: Set<number>; t: number; x: number; y: number; die: Die3D; tip: boolean } | null = null;
   private pointer(type: string, x: number, y: number): boolean {
     if (type === 'down') void audio.unlock();
+    if (this.mode === 'title' && this.titleScene.on && !this.titleScene.pressed) { if (type === 'up') this.titleScene.press(); return true; }
     if (this.mode === 'select' && this.classPick.on) return this.classPick.pointer(type, x, y);
     if (this.menu.on) return this.menu.pointer(type, x, y);
     if (this.pauseBtn.on && this.pauseBtn.hit(x, y)) { if (type === 'down') this.pauseBtn.press(true); else if (type === 'up') { this.pauseBtn.press(false); this.pause(); } else if (type === 'cancel') this.pauseBtn.press(false); return true; }
@@ -1125,6 +1132,7 @@ export class V2Show {
   private bindKeys() {
     if (typeof window === 'undefined' || !window.addEventListener) return;
     window.addEventListener('keydown', e => {
+      if (this.mode === 'title' && this.titleScene.on && !this.titleScene.pressed) { if (!e.repeat) { e.preventDefault(); this.titleScene.press(); } return; }
       if (this.mode === 'select' && this.classPick.on && !this.menu.on) {
         const ck = ({ arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', enter: 'ok', ' ': 'ok', escape: 'back', backspace: 'back' } as const)[e.key.toLowerCase() as 'a'];
         if (ck) { e.preventDefault(); this.classPick.key(ck); } return;

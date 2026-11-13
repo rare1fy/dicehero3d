@@ -17,6 +17,8 @@ export interface MetaHost {
   /** close the pause menu and go on */
   resume(): void;
   /** codex (图鉴) / current build — optional screens */
+  /** Esc / B on the title list: back to the 「按任意键开始」 attract state */
+  titleBack?(): void;
   openCodex?(back: () => void): void;
   openBuild?(back: () => void): void;
 }
@@ -32,7 +34,7 @@ export function titleMenu(h: MetaHost, focus?: string) {
   if (h.openCodex) items.push({ kind: 'btn', id: 'codex', label: '图鉴', sub: '职业技能 · 骰子 · 遗物 · 敌人', on: () => h.openCodex!(() => titleMenu(h, 'codex')) });
   items.push({ kind: 'btn', id: 'set', label: '设置', on: () => settingsMenu(h, () => titleMenu(h, 'set')) });
   items.push({ kind: 'btn', id: 'cred', label: '制作人员', on: () => creditsMenu(h, () => titleMenu(h, 'cred')) });
-  h.menu.open({ title: '六面史诗', subtitle: '第一章 · 幽暗森林', items, layout: 'title', dim: 0.12 }, focus);
+  h.menu.open({ title: '六面史诗', subtitle: '第一章 · 幽暗森林', items, layout: 'title', dim: 0.12, onBack: h.titleBack }, focus);
 }
 
 export function pauseMenu(h: MetaHost, focus?: string) {
