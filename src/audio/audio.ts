@@ -96,7 +96,7 @@ const H: Partial<Record<Cue, (k: number, x?: number) => void>> = {
   deny: () => audio.any('ui_tap', { gain: 0.6, rate: 0.6 }),
   click: () => audio.any('ui_tap', { gain: 0.6 }),
   coin: () => audio.any('coins', { gain: 0.5 }),
-  win: () => { audio.any('pickup', { gain: 0.8, rate: 1.0, jitter: 0 }); audio.tone(523, 0.4, { gain: 0.15, type: 'triangle' }); audio.tone(659, 0.4, { gain: 0.15, type: 'triangle', delay: 0.15 }); audio.tone(784, 0.8, { gain: 0.18, type: 'triangle', delay: 0.3 }); },
+  win: () => { audio.any('pickup', { gain: 0.8, rate: 1.0, jitter: 0 }); },   // user 11-13: the C–E–G reward chord was annoying, removed
   lose: () => { audio.tone(220, 1.2, { to: 110, gain: 0.3, type: 'sawtooth' }); },
   shatter: k => { audio.any('shatter', { gain: 0.6 + k * 0.3, rate: 1.1 - k * 0.2 }); },
   summon: () => { audio.any('goblin', { gain: 0.7, rate: 0.8 }); audio.noise(0.8, { from: 150, to: 900, gain: 0.25, type: 'lowpass' }); },

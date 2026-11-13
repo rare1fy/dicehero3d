@@ -1,6 +1,7 @@
 // Platform layer: pxui's platform (browser / WeChat / Douyin, picked at runtime) plus the few extras the game needs.
 // Game code never touches window/document directly; anything platform-specific goes through here.
 import { createPlatform, type PxPlatform } from 'pxui/platform/index.js';
+import { landscapeOnPortrait } from './rotate';
 
 /** The global object: GameGlobal in mini-games, globalThis elsewhere (also the worker sandbox). */
 export const G: any = typeof GameGlobal !== 'undefined' ? GameGlobal : globalThis;
@@ -26,6 +27,7 @@ export function makeCanvas(w: number, h: number): any {
 
 export function initPlatform(): Platform {
   const p = createPlatform() as Platform;
+  landscapeOnPortrait(p);
   const mini = p.name === 'wx' ? wx : p.name === 'tt' ? tt : null;
   p.vibrate = (level: VibeLevel) => {
     try {

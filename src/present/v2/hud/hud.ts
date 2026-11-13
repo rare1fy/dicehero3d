@@ -17,6 +17,7 @@ import { StatusRows } from './status';
 import { FieldMarks } from './fieldMarks';
 import type { Glyph } from './draw';
 import { setGrid, GRID } from '../../ui3d/pixelGrid';
+import { turnInsets } from '../../../platform/rotate';
 
 /** the ≤4-char tag under each skill (UX_V3 §2) and the tier-3 upgraded icon */
 const TAGS: Record<string, string> = { 奥术弹: '单体', 冰锥: '控制', 闪电链: '弹射', 陨石: '爆发', 劈砍: '单体', 顺劈斩: '横扫', 盾墙: '防御', 狂血: '吸血', 袖箭: '补骰', 背刺: '处决', 影步: '补骰', 毒雾: '群毒',
@@ -37,10 +38,10 @@ export function extraGlyph(fx: Effect[]): Glyph | null {
   return null;
 }
 
-/** CSS env(safe-area-inset-*) in px (browser; 0 elsewhere) */
+/** CSS env(safe-area-inset-*) in px (browser; 0 elsewhere), turned into game space when the canvas is rotated (platform/rotate.ts) */
 let insets: { l: number; r: number; t: number; b: number } | null = null;
 export function safeInsets() {
-  if (insets) return insets;
+  if (insets) return turnInsets(insets);
   insets = { l: 0, r: 0, t: 0, b: 0 };
   try {
     if (typeof document === 'undefined' || !document.body) return insets;
@@ -48,7 +49,7 @@ export function safeInsets() {
     document.body.appendChild(d); const cs = getComputedStyle(d);
     insets = { l: parseFloat(cs.paddingLeft) || 0, r: parseFloat(cs.paddingRight) || 0, t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0 }; d.remove();
   } catch { /* no DOM */ }
-  return insets;
+  return turnInsets(insets);
 }
 
 export class BattleHud {
