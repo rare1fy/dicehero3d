@@ -5,6 +5,7 @@ import { Action, rot, mov, curve, snap } from '../actors/rig';
 import { V3 } from '../engine/world';
 import { CELL } from './kit';
 import type { ModelDef } from './models';
+import { isGripHero, poseHero } from './heroPose';
 
 const HUNCH: Record<string, number> = { forest_ghoul: 0.4, fig_ghoul: 0.35, forest_old_willow: 0.3, elite_alpha_wolf: 0.25, forest_moss_golem: 0.1, boss_coven_matriarch: 0.12 };
 const BIG: Record<string, number> = { boss_ancient_treant: 1.7, boss_root_colossus: 1.5, forest_moss_golem: 1.25, forest_treant: 1.2, boss_lich_forest: 1.2 };
@@ -18,7 +19,7 @@ export class BActor extends Actor {
     super();
     const v = def.build(), lv = v as unknown as { u?: number; p?: number; k?: number; extent?: { top: number; width: number } };
     this.cx = lv.u ?? lv.k ?? v.s; this.cy = lv.p ?? lv.k ?? v.s;
-    const r = v.build({ glow: def.glow ?? 1.9, jitter: 0, self: (def.self ?? 0.06) + 0.2, rim: 1.7, edge: 0.13 });
+    const r = v.build({ glow: def.glow ?? 1.35, jitter: 0, self: (def.self ?? 0.06) + 0.1, rim: 1.1, edge: 0.13 });   // 2026-11-13: 1.9 / +0.2 / 1.7 blew out white faces (user)
     if (lv.extent && lv.extent.top > 0) { this.top = lv.extent.top; this.width = lv.extent.width; }   // moulded figures measure their meshes
     else { let maxY = 0, maxX = 0; for (const c of v.cells.values()) { maxY = Math.max(maxY, c.y + 1); maxX = Math.max(maxX, Math.abs(c.x + 0.5) + 0.5); } this.top = maxY * this.cy; this.width = maxX * 2 * this.cx; }
     this.height = Math.min(this.top, 6);
@@ -26,7 +27,10 @@ export class BActor extends Actor {
     this.slow = BIG[def.id] ?? 1; this.hunch = HUNCH[def.id] ?? 0;
     this.armed = !!r.bones.weapon && r.bones.weapon.children.length > 0;
   }
-  weapon() { return this.bones.weapon ? this.bones.weapon.localToWorld(V3(0, 0, 8 * this.cx)) : this.chest(); }
+  weapon() {
+    const tip = this.def.id === 'mage' ? 22 : this.def.id === 'rogue' ? 10 : this.def.id === 'warrior' ? 17 : 8;
+    return this.bones.weapon ? this.bones.weapon.localToWorld(V3(0, this.def.id === 'warrior' ? -3 * this.cy : 0, tip * this.cx)) : this.chest();
+  }
   head() { return this.local(0, this.top + 0.3, 0); }
   chest() { return this.local(0, this.top * 0.55, 0.3); }
   attack(dist?: number) { return this.play(new Action('attack', (this.def.attack === 'slam' ? 1.3 : this.def.attack === 'shoot' ? 1.2 : this.def.attack === 'dual' ? 0.9 : 1.0) * this.slow, 0.5, dist != null ? { dist } : {})); }
@@ -39,6 +43,7 @@ export class BActor extends Actor {
     const b = this.bones, t = this.t / this.slow, a = this.act, k = a ? a.k : 0, n = a?.name ?? '', d = this.def, kind = d.kind;
     const br = Math.sin(t * 2.2);
     this.off.set(0, 0, 0);
+    if (isGripHero(d.id)) { poseHero(d.id, b, t, a, this.off); return; }
     // ---- idle base per kind
     if (kind === 'quad') {
       rot(b.chest, br * 0.02, 0, 0); rot(b.neck, -0.05 + Math.sin(t * 0.7) * 0.05, Math.sin(t * 0.5) * 0.25, 0); rot(b.jaw, 0.05 + Math.max(0, Math.sin(t * 1.5)) * 0.1, 0, 0);

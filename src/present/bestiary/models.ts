@@ -38,6 +38,18 @@ function claws(v: V, A: Anchors, side: 1 | -1, c: Col, n = 3, len = 2) {
 }
 
 // ================================================================== classes
+/** 三职业的闭合握拳：柄穿过拳心，握点位于柄体素中心；武器只随手腕转动。 */
+function heroGrip(v: V, at: [number, number, number], side: 'R' | 'L', glove: Col, knuckle: Col) {
+  const [x, y, z] = at, hand = `hand${side}`, weapon = side === 'R' ? 'weapon' : 'offhand';
+  v.bone(weapon, hand, x + 0.5, y + 0.5, z + 0.5);
+  for (const [key, cell] of v.cells) if (cell.part === hand) v.cells.delete(key);
+  v.part(hand);
+  for (let xx = x - 1; xx <= x + 1; xx++) for (let yy = y - 1; yy <= y + 1; yy++) for (let zz = z - 1; zz <= z + 1; zz++) {
+    if (xx === x && yy === y) continue; // 保留穿过拳头的整根柄，不覆盖武器体素。
+    v.set(xx, yy, zz, xx === x + (side === 'R' ? -1 : 1) ? knuckle : glove);
+  }
+}
+
 function warrior(): V {
   // 嗜血狂战 — a dwarf in heavy plate: horned great-helm open at the face, a braided ginger beard over the breastplate, huge
   // pauldrons, a red tabard, gauntlets and sabatons, a two-handed axe
@@ -67,7 +79,11 @@ function warrior(): V {
     .box(-3, A.headY0 - 10, A.faceZ + 1, -2, A.headY0 - 10, A.faceZ + 1, GOLD).box(1, A.headY0 - 10, A.faceZ + 1, 2, A.headY0 - 10, A.faceZ + 1, GOLD)
     .box(-1, A.headY0, A.faceZ + 2, 0, A.headY0, A.faceZ + 2, 0x3a1a10).symBox(5, A.headY0 - 1, A.faceZ - 3, 5, A.headY0 + 2, A.faceZ, BEARD);
   axe(v, A, { len: 20, blade: 8, haft: P.WOOD_D, metal: STD, edge: STL });
+  // 握住柄的下段，拳后只留短柄尾，举斧时不顶入护腕。
+  for (const [key, cell] of v.cells) if (cell.part === 'weapon' && cell.z < A.wR[2] - 2) v.cells.delete(key);
+  v.part('weapon').set(A.wR[0], A.wR[1], A.wR[2] - 2, GOLD);
   v.part('weapon').box(A.wR[0], A.wR[1] + 2, A.wR[2] + 14, A.wR[0], A.wR[1] + 3, A.wR[2] + 16, GOLD);
+  heroGrip(v, A.wR, 'R', STD, ST);
   return v;
 }
 
@@ -92,10 +108,15 @@ function mage(): V {
   v.part('jaw').box(-3, A.headY0 - 1, A.faceZ, 2, A.headY0 + 2, A.faceZ + 1, WHITE).box(-3, A.headY0 - 6, A.faceZ, 2, A.headY0 - 2, A.faceZ + 1, WHITE)
     .box(-2, A.headY0 - 11, A.faceZ, 1, A.headY0 - 7, A.faceZ + 1, WHITE).box(-1, A.headY0 - 12, A.faceZ, 0, A.headY0 - 12, A.faceZ, 0xc8ccd8).box(-1, A.headY0 + 2, A.faceZ + 1, 0, A.headY0 + 2, A.faceZ + 1, 0x8a6a5a);
   // tall staff: silver bands, a crescent cradle and a star crystal
-  const top = staff(v, A, { len: 24, wood: 0x6a4a3a, back: 8 });
+  const top = staff(v, A, { len: 18, wood: 0x6a4a3a, back: 16 });
   v.part('weapon').box(top[0], top[1], top[2] - 8, top[0], top[1], top[2] - 8, SIL).box(top[0], top[1] - 3, top[2] - 1, top[0], top[1] + 3, top[2] - 1, SIL)
     .box(top[0], top[1] - 3, top[2], top[0], top[1] - 3, top[2] + 1, SIL).box(top[0], top[1] + 3, top[2], top[0], top[1] + 3, top[2] + 1, SIL)
     .box(top[0] - 1, top[1] - 1, top[2] + 1, top[0] + 1, top[1] + 1, top[2] + 3, ARC, 1).box(top[0], top[1] - 2, top[2] + 2, top[0], top[1] + 2, top[2] + 2, 0xe0faff, 1);
+  heroGrip(v, A.wR, 'R', SK, SKD);
+  // 左手展开成一块掌面和一块拇指，掌心随施法手腕朝前。
+  for (const [key, cell] of v.cells) if (cell.part === 'handL') v.cells.delete(key);
+  v.part('handL').box(A.wL[0] - 1, A.handY - 1, 0, A.wL[0] + 1, A.handY + 1, 0, SK)
+    .box(A.wL[0] - 2, A.handY + 1, 0, A.wL[0] - 2, A.handY + 2, 0, SKD);
   // a spellbook on a chain at the hip
   v.part('hips').box(5, A.hipY - 4, -1, 6, A.hipY - 1, 2, 0x5a2a1a).box(5, A.hipY - 3, 3, 6, A.hipY - 2, 3, 0xe0b040);
   return v;
@@ -103,7 +124,7 @@ function mage(): V {
 
 function rogue(): V {
   // 影锋刺客 — a night-elf shinobi: dusky violet skin, long swept ears, a silver top-knot, a black mask and hood-wrap with long green
-  // tails, a dark wrapped gi with green sash and arm wraps, split-toe boots, twin short blades held reversed
+  // tails, a dark wrapped gi with green sash and arm wraps, split-toe boots, twin short blades held forward
   const v = newChar(), SK = 0x8a7ab8, SKD = 0x6a5a98, GI = 0x23232c, GI_L = 0x34343e, GREEN = 0x2ea860, GREEN_D = 0x1e7a46, SILV = 0xdfe6ee, EYE = 0xf0fff8;
   const A = biped(v, { skin: SK, legs: GI, boots: 0x16161c, hips: GI, torso: GI, chest: GI_L, belt: GREEN, sleeve: GI, fore_: GI_L, hands: 0x16161c, legH: 9, legW: 3, legD: 3, legGap: 1, hipH: 2, torsoH: 8, torsoW: 8, chestW: 10, torsoD: 6, headW: 8, headH: 8, headD: 8, armW: 3, upper: 4, fore: 4, hand: 2 });
   // crossed lapels, sash with hanging tails, wrapped shins and forearms
@@ -120,9 +141,13 @@ function rogue(): V {
     .box(-5, A.headY0 + 6, A.faceZ, 4, A.headY0 + 6, A.faceZ, GREEN).box(-5, A.headY0 - 1, -5, 4, A.headY0 - 1, A.faceZ, GREEN_D)
     .box(-8, A.headY0 + 4, -2, -6, A.headY0 + 5, 0, SK).box(-10, A.headY0 + 6, -4, -9, A.headY0 + 6, -2, SK).box(5, A.headY0 + 4, -2, 7, A.headY0 + 5, 0, SK).box(8, A.headY0 + 6, -4, 9, A.headY0 + 6, -2, SK);
   v.part('cape').box(-1, A.torsoY1 - 4, -4, 0, A.torsoY1 + 4, -4, GREEN).box(1, A.torsoY1 - 2, -5, 2, A.torsoY1 + 4, -5, GREEN_D).box(-1, A.torsoY1 - 9, -5, 0, A.torsoY1 - 5, -5, GREEN);
-  // twin short blades, reverse grip, a green-wrapped hilt
-  sword(v, A, { len: 8, blade: 0xe6f0f6, guard: 0x16161c, grip: GREEN_D });
-  sword(v, A, { len: 8, blade: 0xe6f0f6, guard: 0x16161c, grip: GREEN_D, part: 'offhand', at: A.wL });
+  // 双匕首正握；护手在拳头前一格，柄从拳心贯穿，刃完整露出。
+  for (const side of ['R', 'L'] as const) {
+    const at = side === 'R' ? A.wR : A.wL, [x, y, z] = at, part = side === 'R' ? 'weapon' : 'offhand';
+    sword(v, A, { len: 8, blade: 0xe6f0f6, guard: GREEN_D, grip: GREEN_D, part, at: [x, y, z + 1] });
+    v.part(part).set(x, y, z - 2, GREEN_D).set(x, y, z - 3, SILV);
+    heroGrip(v, at, side, 0x16161c, GI_L);
+  }
   return v;
 }
 

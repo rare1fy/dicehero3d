@@ -13,13 +13,15 @@ export class Overlay {
   get fp() { return Math.max(1, Math.round(Math.min(this.w / 640, this.h / 360) * 2) / 2) ; }
   resize(w: number, h: number, dpr: number) { this.w = w; this.h = h; this.dpr = dpr; this.cam.right = w; this.cam.bottom = -h; this.cam.updateProjectionMatrix(); for (const p of this.panes) p.key = ''; }
   panes: Pane[] = [];
-  pane(order = 0) { const p = new Pane(this, order); this.panes.push(p); return p; }
+  pane(order = 0, smooth = false) { const p = new Pane(this, order); p.smooth = smooth; this.panes.push(p); return p; }
   drop(p: Pane) { this.scene.remove(p.mesh); p.tex?.dispose(); p.mat.dispose(); this.panes = this.panes.filter(x => x !== p); }
   render(r: THREE.WebGLRenderer) { for (const p of this.panes) p.sync(); const ac = r.autoClear; r.autoClear = false; r.setRenderTarget(null); r.clearDepth(); r.render(this.scene, this.cam); r.autoClear = ac; }
 }
 
 export class Pane {
   mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; tex: THREE.CanvasTexture | null = null; w = 1; h = 1; key = ''; x = 0; y = 0; scale = 1; alpha = 1; visible = true;
+  /** R5: smooth (linear) sampling for vector-painted panes that get scaled; rot = rotation (rad) about the centre */
+  smooth = false; rot = 0;
   constructor(private ov: Overlay, order = 0) {
     this.mat = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.mat); this.mesh.renderOrder = order; ov.scene.add(this.mesh);
@@ -27,14 +29,14 @@ export class Pane {
   /** draw(g, k): k = device px per CSS px (integer-ish) */
   paint(key: string, w: number, h: number, draw: (g: CanvasRenderingContext2D, k: number) => void) {
     if (key === this.key && this.tex) return; this.key = key;
-    const k = this.ov.dpr, { c, g } = canvasOf(Math.max(1, w * k), Math.max(1, h * k)); g.imageSmoothingEnabled = false; draw(g, k);
-    this.tex?.dispose(); this.tex = new THREE.CanvasTexture(c as HTMLCanvasElement); this.tex.colorSpace = THREE.SRGBColorSpace; this.tex.minFilter = THREE.NearestFilter; this.tex.magFilter = THREE.NearestFilter; this.tex.generateMipmaps = false;
+    const k = this.ov.dpr, { c, g } = canvasOf(Math.max(1, w * k), Math.max(1, h * k)); g.imageSmoothingEnabled = this.smooth; draw(g, k);
+    this.tex?.dispose(); this.tex = new THREE.CanvasTexture(c as HTMLCanvasElement); this.tex.colorSpace = THREE.SRGBColorSpace; this.tex.minFilter = this.smooth ? THREE.LinearFilter : THREE.NearestFilter; this.tex.magFilter = this.smooth ? THREE.LinearFilter : THREE.NearestFilter; this.tex.generateMipmaps = false;
     this.mat.map = this.tex; this.mat.needsUpdate = true; this.w = w; this.h = h;
   }
   at(x: number, y: number) { this.x = x; this.y = y; return this; }
   sync() {
     this.mesh.visible = this.visible && this.alpha > 0.01 && !!this.tex;
-    this.mesh.scale.set(this.w * this.scale, this.h * this.scale, 1); this.mesh.position.set(Math.round(this.x) + this.w / 2, -(Math.round(this.y) + this.h / 2), 0); this.mat.opacity = this.alpha;
+    this.mesh.scale.set(this.w * this.scale, this.h * this.scale, 1); this.mesh.rotation.z = this.rot; this.mesh.position.set(Math.round(this.x) + this.w / 2, -(Math.round(this.y) + this.h / 2), 0); this.mat.opacity = this.alpha;
   }
   rect(): Rect { return { x: this.x, y: this.y, w: this.w, h: this.h }; }
 }

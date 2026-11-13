@@ -15,7 +15,7 @@ import { UiSparks } from './vox';
 import { SPECIALS, type SuitSkin, type SpecialId } from './suitData';
 import { cue } from '../../audio/cues';
 
-export interface TrayDie { die: Die3D; special?: SpecialId; /** current px pose (x, y, size) */ x: number; y: number; s: number; z: number; ph: number; axis: THREE.Vector3; busy: boolean; showValue: number | null }
+export interface TrayDie { die: Die3D; special?: SpecialId; /** current px pose (x, y, size) */ x: number; y: number; s: number; z: number; ph: number; axis: THREE.Vector3; busy: boolean; showValue: number | null; /** R5: seconds of cyan condense glow left */ glowT?: number }
 export interface LaunchOpts {
   /** landing points on the field (one per die; missing = anywhere on FIELD) */
   targets?: Array<THREE.Vector3 | null | undefined>;
@@ -29,6 +29,8 @@ export interface LaunchOpts {
   stagger?: number;
   /** hand-over distance in front of the camera */
   dist?: number;
+  /** R5: how far from its target a die may land (default 0.5; the FIELD box is this + 0.32) */
+  targetR?: number;
 }
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
@@ -47,7 +49,11 @@ export class DiceTray {
   get count() { return this.dice.length; }
   private skinFor(sp?: SpecialId): SuitSkin { return { ...this.skin, special: sp }; }
   /** where slot i of n sits (CSS px) */
-  slotPx(i: number, n = this.dice.length) { const gap = this.sizePx * 1.4; return { x: this.L.w / 2 + (i - (n - 1) / 2) * gap, y: this.L.h - this.bottom }; }
+  slotPx(i: number, n = this.dice.length) { if (this.slotFn) return this.slotFn(i, n); const gap = this.sizePx * 1.4; return { x: this.L.w / 2 + (i - (n - 1) / 2) * gap, y: this.L.h - this.bottom }; }
+  /** R5: the prep area's own spots (irregular cluster, no base); null = the old centred row */
+  slotFn: ((i: number, n: number) => { x: number; y: number }) | null = null;
+  /** R5: soft shadows under the floating dice, and still poses (tilted, swaying) instead of tumbling */
+  still = false; private shadows: THREE.Mesh[] = [];
 
   /** switch face scheme / class for every tray die */
   setSkin(skin: SuitSkin) { this.skin = skin; for (const t of this.dice) t.die.setSuit(this.skinFor(t.special)); }
@@ -86,7 +92,7 @@ export class DiceTray {
     if (this.dice.length >= 6) return null;
     const sp = worldToUi(from), d = this.make(special);
     const t: TrayDie = { die: d, special, x: sp.x, y: sp.y, s: 0, z: 0, ph: R(0, 6.28), axis: V3(R(0.4, 1), R(0.6, 1), R(-0.3, 0.3)).normalize(), busy: true, showValue: null };
-    this.dice.push(t); cue('reveal', 0.6);
+    this.dice.push(t); cue('reveal', 0.6); if (this.still) { t.glowT = 2.2; d.glow = 1.2; d.glowCol.set(0x40e0ff); }
     const n = this.dice.length, end = this.slotPx(n - 1, n), x0 = sp.x, y0 = sp.y, cx = lerp(x0, end.x, 0.4), cy = Math.min(y0, end.y) - 180;
     const glow = special ? SPECIALS[special].glow : '#ffe08a';
     this.sparks.burst(this.L.at(x0, y0, 2), 16, this.L.px(240), this.L.px(5), glow, { life: 0.45 });
@@ -122,7 +128,7 @@ export class DiceTray {
     const recs: ThrowRec[] = [], saved = { ...FIELD };
     ts.forEach((_, i) => {
       const tg = o.targets?.[i];
-      if (tg) Object.assign(FIELD, { x0: tg.x - 0.82, x1: tg.x + 0.82, z0: tg.z - 0.82, z1: tg.z + 0.82 });
+      const tr = (o.targetR ?? 0.5) + 0.32; if (tg) Object.assign(FIELD, { x0: tg.x - tr, x1: tg.x + tr, z0: tg.z - tr, z1: tg.z + tr });
       const r = simThrow(1, kept, from)[0]; Object.assign(FIELD, saved);
       kept.push({ p: r.pEnd.clone(), q: r.qEnd.clone() }); recs.push(r);
     });
@@ -160,8 +166,15 @@ export class DiceTray {
       if (t.showValue != null) {   // the value face toward the camera, swaying a little
         _q.copy(presentQuat(d.topIdx, d.topTurns, _q2.identity()));
         d.root.quaternion.copy(_q).premultiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(time * 1.3 + t.ph) * 0.18 - 0.2, Math.sin(time * 0.9 + t.ph) * 0.35, 0)));
+      } else if (this.still) {   // R5: a fixed tilted pose per die with a slow sway (irregular, not tumbling)
+        d.root.quaternion.setFromEuler(new THREE.Euler(-0.5 + t.axis.x * 0.5 + Math.sin(time * 0.8 + t.ph) * 0.08, t.axis.y * 1.4 + Math.sin(time * 0.6 + t.ph) * 0.15, t.axis.z * 0.6));
       } else d.root.quaternion.setFromAxisAngle(t.axis, time * 0.55 + t.ph).premultiply(_q.setFromEuler(new THREE.Euler(-0.35, 0, 0)));
+      if (t.glowT != null && t.glowT > 0) { t.glowT -= dt; d.glow = Math.max(t.special ? 0.6 : 0, Math.min(1.2, t.glowT)); d.glowCol.set(t.glowT > 0.05 ? 0x40e0ff : t.special ? SPECIALS[t.special].glow : 0x40e0ff); if (Math.random() < dt * 14) this.sparks.emit(this.L.at(t.x + R(-0.5, 0.5) * t.s, t.y + R(-0.5, 0.5) * t.s, 2), V3(0, this.L.px(40), 0), this.L.px(R(3, 6)), '#7aeaff', 0.5); }
     });
+    if (this.still) {
+      while (this.shadows.length < this.dice.length) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.5, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false })); m.userData.noTilt = true; this.L.scene.add(m); this.shadows.push(m); }
+      this.shadows.forEach((m, i) => { const t = this.dice[i]; m.visible = !!t && t.s > 2; if (!t) return; const bob = Math.sin(time * 1.7 + t.ph) * 5; this.L.at(t.x, t.y + t.s * 0.72, -4, m.position); const sz = this.L.px(t.s * (1.0 - bob * 0.01)); m.scale.set(sz, sz * 0.3, 1); (m.material as THREE.MeshBasicMaterial).opacity = 0.42 - bob * 0.012; });
+    } else for (const m of this.shadows) m.visible = false;
     this.sparks.update(dt);
   }
 }

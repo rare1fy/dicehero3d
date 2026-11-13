@@ -6,8 +6,10 @@ import { Run2 } from '../../src/core/v2/run2';
 import type { ClassId, DieKind, Face } from '../../src/core/v2/types';
 
 const F = (...vals: number[]): Face[] => vals.map(v => ({ value: v, suit: 'none' }));
+// v4 made w_v4 / m_v4 / r_v4 the default; these tests pin the v3 tablets
+const V3_TAB: Record<ClassId, string> = { warrior: 'w_v3', mage: 'm_v3', rogue: 'r_v3' };
 function mk(classId: ClassId, waves: string[][] = [['forest_ghoul', 'forest_ghoul']]) {
-  const b = new Battle2({ seed: 7, classId, loadout: loadoutB(CLASSES[classId].tablets[0]), waves, kind: 'normal' });
+  const b = new Battle2({ seed: 7, classId, loadout: loadoutB(V3_TAB[classId]), waves, kind: 'normal' });
   b.start();
   for (const e of b.s.enemies) { e.hp = e.maxHp = 999; e.distance = 5; }
   return b;
@@ -77,7 +79,7 @@ describe('v3 patterns', () => {
   });
   it('level ups only upgrade one of the 3 skills', () => {
     for (const cid of Object.keys(CLASSES) as ClassId[]) for (let seed = 1; seed <= 10; seed++) {
-      const r = new Run2({ seed, classId: cid });
+      const r = new Run2({ seed, classId: cid, tablet: V3_TAB[cid] });
       for (let i = 0; i < 3; i++) (r as unknown as { queueLevelUp(): void }).queueLevelUp();
       for (const c of r.s.queue) if (c.kind === 'levelUp') for (const k of c.cards) expect(k.kind).toBe('upgrade');
     }

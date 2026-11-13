@@ -17,14 +17,15 @@ export type Ev2 =
   | { t: 'roll'; dice: DieSnap2[]; reason: 'turn' | 'reroll' | 'spawn' | 'flip' | 'return'; kept: number[] }
   | { t: 'reroll'; uids: number[]; hpCost: number; rage: number; capped: boolean; free: boolean }
   /** v2: which row, which tier, which dice */
-  | { t: 'rowPlay'; ref: number | 'basic'; rowId: string; name: string; tier: TierName | null; count: number; uids: number[]; companions: number; target: number | null; strike: number; ultimate: boolean; combo: boolean; X: number; bonusPct: number; /** v3: special dice handed in and their damage bonus (integer %) */ special?: Array<{ uid: number; kind: DieKind; pct: number }> }
+  | { t: 'rowPlay'; ref: number | 'basic'; rowId: string; name: string; tier: TierName | null; count: number; uids: number[]; companions: number; target: number | null; strike: number; ultimate: boolean; combo: boolean; X: number; bonusPct: number; /** v3: special dice handed in and their damage bonus (integer %) */ special?: Array<{ uid: number; kind: DieKind; pct: number }>;
+      /** v4: action number, combo bonus %, 小咒 / 释放, dice refilled right after; v4.1 狂战 loose side (劈砍 / 铁壁) */ v4?: { strike: number; comboPct?: number; cast?: 'minor' | 'release'; refill?: number; loose?: 'chop' | 'guard' } }
   | { t: 'hit'; uid: number; dmg: number; absorbed: number; hpDmg: number; killed: boolean; aoe: boolean; ultimate: boolean; source: 'play' | 'cleave' | 'thorns' | 'dot' | 'detonate' }
   | { t: 'statusAdd'; who: Who; status: Status }
   | { t: 'statusTick'; who: Who; type: StatusV2; dmg: number }
   | { t: 'statusExpire'; who: Who; type: StatusV2 }
   | { t: 'armor'; who: Who; delta: number; total: number; reason: string }
   | { t: 'barrier'; delta: number; total: number }
-  | { t: 'hp'; who: 'player'; delta: number; hp: number; reason: 'heal' | 'self' | 'reroll' | 'potion' }
+  | { t: 'hp'; who: 'player'; delta: number; hp: number; reason: 'heal' | 'self' | 'reroll' | 'potion' | 'refund' }
   | { t: 'purify'; removed: StatusV2[] }
   /** v2: next turn +n dice */
   | { t: 'gainDice'; n: number; reason: GainReason; from?: number }
@@ -32,7 +33,9 @@ export type Ev2 =
   | { t: 'special'; action: 'spawn' | 'vanish' | 'transform' | 'carry'; uid: number; kind: DieKind; value: number; suit: Suit }
   | { t: 'spent'; uids: number[] }
   | { t: 'rage'; stacks: number }
-  | { t: 'chant'; ring: number; barrier: number; overcharge: number }
+  | { t: 'chant'; ring: number; barrier: number; overcharge: number; /** v4: a 小咒 was cast this turn */ minor?: boolean; /** v4: dice kept in hand */ hand?: number }
+  /** v4 狂战 血偿: blood sold this round comes back after a behead / perfect guard */
+  | { t: 'bloodRefund'; paid: number; amount: number; why: 'behead' | 'guard' }
   | { t: 'backlash'; stacks: number }
   | { t: 'overload'; turns: number }
   | { t: 'strikeGain'; n: number; reason: string }

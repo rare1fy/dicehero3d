@@ -9,6 +9,7 @@ import { Action, rot, mov, curve, snap } from '../actors/rig';
 import { V3, R } from '../engine/world';
 import { PADD, TILE } from '../engine/particles';
 import type { Cast } from '../actors/cast';
+import { isGripHero } from './heroPose';
 
 const TIP: Record<string, [number, number]> = { warrior: [17, -3], boss_lich_forest: [29, 0], lego_warrior: [9, -3], lego_lich: [19, 0], fig_warrior: [19, -3], fig_lich: [29, 0] };
 
@@ -16,6 +17,7 @@ export class BattleActor extends BActor {
   aim = 0; breath = 1; robeFire = 0; walkK = 0; running = false; private runK = 0;
   constructor(id: string | ModelDef) { super(typeof id === 'string' ? ROSTER.find(d => d.id === id)! : id); }
   weapon() {
+    if (isGripHero(this.def.id)) return super.weapon();
     const t = TIP[this.def.id];
     if (t && this.bones.weapon) return this.bones.weapon.localToWorld(V3(0, t[1] * this.cy, t[0] * this.cx));
     return this.bones.handR ? this.bones.handR.localToWorld(V3(0, -2 * this.cy, this.cx)) : this.chest();
@@ -49,7 +51,9 @@ export class BattleActor extends BActor {
       rot(b.armL, -ph * 0.7 * run, 0, 0); rot(b.hat, -0.15 * run, 0, 0);
     }
     if (this.lowHp > 0) { rot(b.spine, 0.2 * this.lowHp, 0, 0); mov(b.hips, 0, -0.05 * this.lowHp, 0); }
-    if (this.def.id === 'warrior' && this.aim > 0 && !a) { rot(b.armR, -0.5 * this.aim, 0, 0); rot(b.weapon, -0.4 * this.aim, 0, 0); }
+    if (this.def.id === 'warrior' && this.aim > 0 && !a) { rot(b.armR, -0.2 * this.aim, 0, 0); rot(b.handR, 0.1 * this.aim, 0, 0); }
+    // 三职业所有动作由共同的握持架势驱动，避免再叠加旧版肩肘和武器旋转。
+    if (isGripHero(this.def.id)) return;
     // second phase: soul fire on the robe
     if (this.robeFire > 0) {
       for (const f of this.flashMats) { const k2 = this.robeFire * ((f.m as THREE.MeshStandardMaterial).isMeshStandardMaterial ? 0.3 : 1); f.base.setRGB(0.04 * k2, (0.28 + 0.1 * Math.sin(t * 11)) * k2, 0.14 * k2); }   // plastic takes a much lighter tint

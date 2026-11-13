@@ -4,7 +4,7 @@ import { createRng, type Rng } from '../rng';
 import { matchRow, bestMatch, type Match } from './cond';
 import {
   CLASSES, CRACKED_VALUES, DROPS, ECON, ENEMY_TRAITS, FIGHT_SCALE, FURY_DIE_SUITS, JUNK, MELEE_START_DISTANCE, OVERKILL_PER_GOLD,
-  STAR_DIE_VALUES, SUMMON_MAX_TOTAL, enemyCfgV2, relicV2, slotRow,
+  STAR_DIE_VALUES, SUMMON_MAX_TOTAL, V4_PARAMS, enemyCfgV2, formsPattern, holdBarrier, relicV2, rowDef, sleeveRefill, slotRow,
 } from './data';
 import type { Ev2, GainReason, DieSnap2 } from './events2';
 import type {
@@ -21,6 +21,8 @@ export interface Battle2Setup {
   hp?: number; maxHp?: number;
   waves: string[][]; kind: FightKind;
   god?: boolean;
+  /** v4 觉醒 ids (data only in the run flow; the battle honours 'aw_endless': 刀鞘 +1 to 6, strikes from the 5th +30%) */
+  awaken?: string[];
 }
 export type RowRef = number | 'basic';
 export interface BoardRow { ref: number; tablet: number; slot: number; rowId: string; name: string; level: Level; def: RowDef }
@@ -69,6 +71,21 @@ export interface Battle2State {
   ironNext: boolean; steadyNext: boolean;
   /** v2.1 per-fight income (3.2 caps): kill gold, overflow gold, economy-relic gold, summon gold / xp */
   income: { kill: number; overflow: number; relic: number; summonGold: number; summonXp: number };
+  // ── rules v4 (CLASS_DESIGN_V4); all reset at turn start unless noted
+  /** 魔导: a 释放 (≥4 dice) happened this turn */
+  released: boolean;
+  /** 魔导 闪电链 充能: extra dice next turn (kept across the turn end, consumed at turn start) */
+  chargeNext: number;
+  /** 刺客 背刺 II: the kill refill was used this turn */
+  killRefillUsed: boolean;
+  /** 狂战 斩杀再动: used this turn, and extra uses granted this turn (顺劈斩 4+) */
+  killActs: number; killActBonus: number;
+  /** 狂战 血偿: HP sold this turn; this round had a behead / a perfect guard (incl. stun skips); the round was settled */
+  bloodPaid: number; beheadTurn: boolean; guardTurn: boolean; roundClosed: boolean;
+  /** v4 metrics: an enemy attacked (or was stunned out of acting) this round */
+  attackedTurn: boolean;
+  /** v4.2 完防 bookkeeping this round: blockable hits taken, any of them got through, a stunned / frozen enemy skipped its action */
+  roundHits: number; roundLeak: boolean; roundStun: boolean;
 }
 export interface BattleStats {
   turns: number; diceAtStart: number[]; ultimates: number; plays: number; basics: number; rows: Record<string, number>;
@@ -83,6 +100,17 @@ export interface BattleStats {
   big4Rows: Record<string, number>;
   /** income caps hit this fight */
   capHits: { overflow: boolean; relic: boolean; summon: boolean };
+  // ── v4 metrics
+  /** player turns by actions taken (index = strikes used, 0..6) */
+  strikeHist: number[];
+  /** warrior rounds: total, with a behead, with a perfect guard, either, both; blood sold / refunded; 斩杀再动 triggered */
+  rounds: number; beheadRounds: number; guardRounds: number; eitherRounds: number; bothRounds: number; bloodPaid: number; bloodRefunded: number; killActs: number;
+  /** warrior rounds where an enemy attacked (or was stunned / frozen out of acting), and how many of those had a behead or a guard */
+  attackRounds: number; eitherAttackRounds: number;
+  /** mage: 小咒 casts, releases, dice handed in by releases, pure holds; rogue: dice refilled */
+  minorCasts: number; releases: number; releaseDice: number; holds: number; refills: number;
+  /** rogue: turns whose first strike was 袖箭; v4.1 turns the 刀鞘 cap cut short (a strike was still possible) */
+  firstBasic: number; capBlocked: number;
 }
 export type KnifeShape = 'straight' | 'sameValue';
 export interface PlayOpts {
@@ -90,11 +118,22 @@ export interface PlayOpts {
   mark?: KnifeShape;
   /** 飞刀 II+: bounce the die −1 instead of +1 */
   knifeDelta?: 1 | -1;
+  /** v4.1 狂战 loose dice: 'guard' = 铁壁 (armor, the default) · 'chop' = 劈砍 (damage) */
+  loose?: 'chop' | 'guard';
 }
 export type Result2 = { ok: true; events: Ev2[] } | { ok: false; reason: string; events: Ev2[] };
 export interface Intent2 { kind: 'atk' | 'def' | 'skl' | 'mov' | 'frz' | 'curse'; text: string; value?: number; status?: StatusV2; desc?: string }
-export interface RowOption { ref: RowRef; rowId: string; name: string; ok: boolean; tier?: TierName; count?: number; reason?: 'cond' | 'strike' | 'chant' | 'none'; bestTier?: TierName | null }
-export interface Preview { total: number; hits: Array<{ uid: number; dmg: number }>; armor: number; barrier: number; heal: number; selfDmg: number; tier: TierName | null; ultimate: boolean; gainDice: number; kills: number[]; /** v3: special dice bonus in this play (integer %) */ specialPct: number }
+export interface RowOption { ref: RowRef; rowId: string; name: string; ok: boolean; tier?: TierName; count?: number; reason?: 'cond' | 'strike' | 'chant' | 'none' | 'used' | 'pattern'; bestTier?: TierName | null; /** rules v4 (ok only) */ v4?: OptionV4;
+  /** v4.1 狂战: the two loose-dice options share ref 'basic'; pass this as play(..., { loose }) */ loose?: 'chop' | 'guard' }
+/** rules v4 per-option info for the UI (core2_api.md「v4」) */
+export interface OptionV4 {
+  strike: number;
+  comboPct?: number; refill?: number; refillOnKill?: number; finisher?: boolean; lastStrike?: boolean;
+  cast?: 'minor' | 'release'; holdBarrier?: number;
+  armor?: number; kills?: number[]; killAct?: boolean; guard?: { armor: number; incoming: number; full: boolean }; bloodPending?: number;
+}
+export interface Preview { total: number; hits: Array<{ uid: number; dmg: number }>; armor: number; barrier: number; heal: number; selfDmg: number; tier: TierName | null; ultimate: boolean; gainDice: number; kills: number[]; /** v3: special dice bonus in this play (integer %) */ specialPct: number;
+  /** v4: dice added to the field right after this play (refills, 斩杀再动 fury die); extra actions granted (斩杀再动) */ spawned: number; extraAction: number }
 
 const BACKLASH_CAP = 30;
 const NEG: StatusV2[] = ['poison', 'burn', 'vulnerable', 'weak'];
@@ -103,6 +142,8 @@ const CTL_DESC: Record<string, StatusV2> = { '虚弱': 'weak', '易伤': 'vulner
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 /** v3 special die bonus (integer %) when handed in */
 export const V3_SPECIAL_PCT: Partial<Record<DieKind, number>> = { furyDie: 50, starDie: 15, shadowDie: 20 };
+/** v4: shadow dice are plain refills (no bonus); 怒火骰 also raises armor */
+export const V4_SPECIAL_PCT: Partial<Record<DieKind, number>> = { furyDie: 50, starDie: 15 };
 
 interface PlayCtx {
   row: RowDef | null; level: Level; ref: RowRef; tierName: TierName | null; tier: Tier | null;
@@ -111,6 +152,8 @@ interface PlayCtx {
   dealt: number; kills: number; firstDmg: boolean; halve: boolean;
   /** v2.2 日行 2+: burns laid by this play are held until the mage's next play resolves */
   holdBurn: boolean;
+  /** v4: special-dice share that also raises armor (怒火骰) */
+  armorPct: number;
 }
 
 // ─────────────────────────────────────────────────────────── battle
@@ -127,7 +170,10 @@ export class Battle2 {
     this.setup = setup;
     this.cls = CLASSES[setup.classId];
     this.board = buildBoard(setup.loadout);
+    this.basicRow = buildBasic(setup.loadout);
     this.v3 = this.board.some(r => r.def.tags.includes('pattern'));
+    this.v4 = this.board.some(r => r.def.tags.includes('v4'));
+    this.frozenTaken = Math.max(0, ...this.board.map(r => r.def.flags?.frozenTaken || 0));
     if (restore) {
       this.s = restore.s; this.stats = restore.stats; this.rng = createRng(restore.rngState);
       return;
@@ -148,11 +194,14 @@ export class Battle2 {
       enemies: [], waves: setup.waves.map(w => w.slice()), waveIdx: 0, targetUid: null,
       goldEarned: 0, xpEarned: 0, dieUid: 1, enemyUid: 1, hourglassUsed: false,
       wildfire: false, fieldAidUsed: 0, ironNext: false, steadyNext: false, income: { kill: 0, overflow: 0, relic: 0, summonGold: 0, summonXp: 0 },
+      released: false, chargeNext: 0, killRefillUsed: false, killActs: 0, killActBonus: 0, bloodPaid: 0, beheadTurn: false, guardTurn: false, roundClosed: false, attackedTurn: false, roundHits: 0, roundLeak: false, roundStun: false,
     };
     this.stats = {
       turns: 0, diceAtStart: [], ultimates: 0, plays: 0, basics: 0, rows: {}, bloodRerolls: 0, chantTurns: 0, combos: 0, backlashDeath: false, strikes: 0,
       preciseSpawns: 0, markSpawns: 0, sleeveSpawns: 0, spawnTurns: 0, marks: 0, mixPlays: 0, fullRingPlays: 0, fullRingDice: 0, big4: 0, big4Rows: {},
       capHits: { overflow: false, relic: false, summon: false },
+      strikeHist: [0, 0, 0, 0, 0, 0, 0], rounds: 0, beheadRounds: 0, guardRounds: 0, eitherRounds: 0, bothRounds: 0, bloodPaid: 0, bloodRefunded: 0, killActs: 0, attackRounds: 0, eitherAttackRounds: 0,
+      minorCasts: 0, releases: 0, releaseDice: 0, holds: 0, refills: 0, firstBasic: 0, capBlocked: 0,
     };
   }
 
@@ -168,12 +217,44 @@ export class Battle2 {
   talent(id: string): number { return this.setup.talents?.[id] || 0; }
   hasRelic(id: string) { return !!this.setup.relics?.includes(id); }
   strikesLeft() { return this.s.phase === 'player' ? Math.max(0, this.s.maxStrikes - this.s.strikesUsed) : 0; }
-  mustEndTurn() { return this.s.phase === 'player' && (this.strikesLeft() <= 0 || this.s.dice.length === 0); }
+  mustEndTurn() {
+    const s = this.s;
+    if (s.phase !== 'player') return false;
+    if (this.strikesLeft() <= 0 || s.dice.length === 0) return true;
+    // v4 刺客: keep going while a legal strike exists, or a free reroll could still make one (needs ≥2 dice)
+    if (this.v4 && this.cls.id === 'rogue') return !this.hasLegalPlay() && !(s.freeRerollsLeft > 0 && s.dice.length >= 2);
+    return false;
+  }
+  /** v4: any row (or the loose-dice skill) can fire with some of the dice on the field */
+  hasLegalPlay(): boolean {
+    const s = this.s;
+    if (s.phase !== 'player' || this.strikesLeft() <= 0 || !s.dice.length || !this.alive().length) return false;
+    if (!this.basicBlocked()) return true;
+    const f = s.dice.map(d => this.faceOf(d)), k = s.dice.map(d => d.kind);
+    return this.board.some(r => !this.rowBlocked(r.def) && !!bestMatch(r.def, f, k));
+  }
+  /** v4 刺客 刀鞘: strikes per turn = start + (刀鞘 level − 1), at most the cap; 觉醒「无尽连斩」+1 */
+  strikeCap(): number {
+    const sl = this.setup.loadout.tablets.flatMap(t => t.slots).find(x => x.rowId === 'r4_sheath');
+    const base = Math.min(V4_PARAMS.rogueStrikeCap, V4_PARAMS.rogueStartStrikes + (sl ? sl.level - 1 : 0));
+    return base + (this.setup.awaken?.includes('aw_endless') ? 1 : 0);
+  }
+  /** v4 刺客: 袖箭 once per turn */
+  private basicBlocked() { return this.v4 && this.cls.id === 'rogue' && this.s.sleeveUsed; }
   target(): Enemy | null {
     const t = this.s.targetUid != null ? this.enemy(this.s.targetUid) : null;
-    if (t && !t.dead) return t;
+    // v4.1 嘲讽: the target never rests on an enemy a living guardian protects
+    if (t && !t.dead && this.canTarget(t.uid)) return t;
     const a = this.alive(); const n = a.find(e => e.ct === 'guardian') || a[0] || null;
     this.s.targetUid = n ? n.uid : null; return n;
+  }
+  /** v4.1 盾卫嘲讽 (2D EnemyStageView): while a guardian lives, single-target skills may only pick a guardian */
+  isTaunting(uid: number): boolean { const e = this.enemy(uid); return !!e && !e.dead && e.ct === 'guardian' && ENEMY_TRAITS.taunt; }
+  /** v4.1: can the player pick this enemy as the target now? (false = dead, or protected by a living guardian) */
+  canTarget(uid: number): boolean {
+    const e = this.enemy(uid); if (!e || e.dead) return false;
+    if (!ENEMY_TRAITS.taunt || e.ct === 'guardian') return true;
+    return !this.alive().some(g => g.ct === 'guardian');
   }
 
   /** free = free rerolls left; bloodCost = HP for the next paid reroll (null = class cannot pay) */
@@ -213,8 +294,116 @@ export class Battle2 {
       return m ? { ...base, ok: true, tier: m.tier, count: m.count } : { ...base, ok: false, reason: 'cond' as const };
     });
     const ba = this.cls.basicAttack;
-    out.push({ ref: 'basic', rowId: 'basic', name: ba.name, ok: sel.length >= ba.minDice && sel.length <= ba.maxDice, bestTier: null });
+    const bOk = sel.length >= ba.minDice && sel.length <= ba.maxDice;
+    // v4.1: loose dice are their own pattern — a selection that forms 同点 / 连环 / 阵列 is not 散骰
+    const isPat = this.v4 && formsPattern(faces.map(f => f.value));
+    const loose = (name: string, side?: 'chop' | 'guard'): RowOption => {
+      const base = { ref: 'basic' as const, rowId: 'basic', name, bestTier: null, ...(side ? { loose: side } : {}) };
+      if (this.basicBlocked()) return { ...base, ok: false, reason: 'used' };
+      if (bOk && isPat) return { ...base, ok: false, reason: 'pattern' };
+      return { ...base, ok: bOk };
+    };
+    // v4.1 狂战: the same loose dice either guard (铁壁, armor) or attack (劈砍, damage)
+    if (this.v4 && this.cls.id === 'warrior') out.push(loose(this.basicName(), 'guard'), loose(rowDef('w4_chop').name, 'chop'));
+    else out.push(loose(this.basicName()));
+    // v4: per-option info (strike number, refill, 小咒 / 释放, armor, kills, guard)
+    if (this.v4 && this.s.phase === 'player' && this.strikesLeft() > 0 && this.alive().length) for (const o of out) if (o.ok) o.v4 = this.optionV4(o.ref, uids, o.loose);
     return out;
+  }
+  private basicName() { return this.v4 && this.basicRow ? this.basicRow.def.name : this.cls.basicAttack.name; }
+
+  /** v4 option info: tries the play on a clone (same precision as preview) */
+  private optionV4(ref: RowRef, uids: number[], loose?: 'chop' | 'guard'): OptionV4 {
+    const s = this.s, cid = this.cls.id;
+    const o: OptionV4 = { strike: s.strikesUsed + 1 };
+    const def = ref === 'basic' ? (loose === 'chop' ? rowDef('w4_chop') : this.basicRow?.def) : this.board[ref]?.def;
+    const m = this.check(ref, uids).match;
+    if (!def || !m) return o;
+    const fx = def.tiers[m.tier]?.effects || [];
+    if (cid === 'rogue') {
+      o.comboPct = Math.round(V4_PARAMS.comboPct * 100 * s.strikesUsed);
+      const room = 6 - (s.dice.length - uids.length);
+      const n = ref === 'basic' ? sleeveRefill(s.strikesUsed) : fx.some(e => e.t === 'hook' && e.id === 'refill') ? uids.length : 0;
+      o.refill = Math.min(n, room);
+      o.finisher = ref !== 'basic' && n === 0;
+      o.lastStrike = s.strikesUsed + 1 >= s.maxStrikes;
+    }
+    if (cid === 'mage') {
+      o.cast = uids.length >= 4 ? 'release' : 'minor';
+      if (o.cast === 'minor') o.holdBarrier = holdBarrier(s.dice.length - uids.length);
+    }
+    const c = this.clone();
+    const p0 = c.s.player.armor;
+    const ev = c.doPlay(ref, uids, undefined, true, loose ? { loose } : undefined);
+    const kills = ev.filter(e => e.t === 'hit' && e.killed).map(e => (e as Extract<Ev2, { t: 'hit' }>).uid);
+    if (cid === 'rogue') {
+      const kr = fx.find(e => e.t === 'hook' && e.id === 'killRefill') as Extract<Effect, { t: 'hook' }> | undefined;
+      o.refillOnKill = kr && kills.length && !s.killRefillUsed ? kr.p?.n ?? 2 : 0;
+    }
+    if (cid === 'warrior') {
+      o.armor = Math.max(0, c.s.player.armor - p0);
+      o.kills = kills;
+      o.killAct = ev.some(e => e.t === 'strikeGain' && e.reason === '斩杀再动');
+      o.guard = c.guardForecast();
+      o.bloodPending = this.refundOf(s.bloodPaid);
+    }
+    return o;
+  }
+  /** this turn's incoming attacks against current armor. v4.2: full = every blockable hit covered (a stunned / frozen attacker counts as covered);
+   *  v4 rule (ENEMY_TRAITS.guardAll off): one attack fully blocked is enough */
+  guardForecast(): { armor: number; incoming: number; full: boolean } {
+    const p = this.s.player;
+    if (ENEMY_TRAITS.guardAll) {
+      let incoming = 0, any = false;
+      const vul = this.hasStatus('player', 'vulnerable') ? 1.5 : 1;
+      for (const e of this.alive()) {
+        const it = this.intent(e);
+        if (it.kind === 'frz') { any = true; continue; }
+        if (it.kind !== 'atk' || !it.value) continue;
+        incoming += Math.ceil(it.value * vul - 1e-9); any = true;
+      }
+      return { armor: p.armor, incoming, full: any && p.armor + p.barrier >= incoming };
+    }
+    let rem = p.armor, incoming = 0, full = false;
+    const vul = this.hasStatus('player', 'vulnerable') ? 1.5 : 1;
+    for (const e of this.alive()) {
+      const it = this.intent(e);
+      if (it.kind === 'frz') { full = true; continue; }
+      if (it.kind !== 'atk' || !it.value) continue;
+      const v = Math.ceil(it.value * vul - 1e-9); incoming += v;
+      if (v <= rem && v > 0) full = true;
+      rem -= Math.min(rem, v);
+    }
+    return { armor: p.armor, incoming, full };
+  }
+  private refundOf(paid: number) { return paid > 0 ? Math.ceil(paid * V4_PARAMS.bloodRefund - 1e-9) : 0; }
+
+  /** v4.1 狂战 劈砍 (the attack side of loose dice) as a board row */
+  private chopRow(): BoardRow { const def = rowDef('w4_chop'); return { ref: -1, tablet: -1, slot: -1, rowId: def.id, name: def.name, level: 1, def }; }
+  /** v4: the loose-dice skill as a board row (def + level), for bots / previews */
+  basicRowDef(): BoardRow | null { return this.basicRow; }
+  /** v4: the class loose-dice skill slot (铁壁 / 奥术弹 / 袖箭) */
+  basicSkill(): { rowId: string; name: string; level: Level; maxLevel: Level; levelDesc?: [string, string] } | null {
+    const r = this.basicRow; if (!r) return null;
+    return { rowId: r.rowId, name: r.def.name, level: r.level, maxLevel: r.def.maxLevel ?? 3, levelDesc: r.def.levelDesc };
+  }
+  /** v4 刺客: next strike number, cap, its combo %, 袖箭 used, what 袖箭 would refill now */
+  comboInfo(): { strike: number; max: number; pct: number; sleeveUsed: boolean; sleeveRefill: number; capMax: number } | null {
+    if (!this.v4 || this.cls.id !== 'rogue') return null;
+    const s = this.s;
+    return { strike: s.strikesUsed + 1, max: s.maxStrikes, pct: Math.round(V4_PARAMS.comboPct * 100 * s.strikesUsed), sleeveUsed: s.sleeveUsed, sleeveRefill: sleeveRefill(s.strikesUsed), capMax: V4_PARAMS.rogueStrikeCap + (this.setup.awaken?.includes('aw_endless') ? 1 : 0) };
+  }
+  /** v4 魔导: dice in hand, barrier if the turn ends now without a release, overcharge, charge for next turn, cycle running */
+  castInfo(): { hand: number; holdBarrier: number; overcharge: number; charge: number; cycle: boolean } | null {
+    if (!this.v4 || this.cls.id !== 'mage') return null;
+    const s = this.s, hand = s.dice.filter(d => d.kind !== 'cracked' && d.kind !== 'cursed').length;
+    return { hand, holdBarrier: s.released ? 0 : holdBarrier(hand), overcharge: s.overcharge, charge: s.chargeNext, cycle: s.cycleActive };
+  }
+  /** v4 狂战 血偿: HP sold this turn, what comes back on success, the ratio, this round's behead / guard, 斩杀再动 left */
+  bloodInfo(): { paid: number; refund: number; ratio: number; behead: boolean; guard: boolean; killActsLeft: number } | null {
+    if (!this.v4 || this.cls.id !== 'warrior') return null;
+    const s = this.s;
+    return { paid: s.bloodPaid, refund: this.refundOf(s.bloodPaid), ratio: V4_PARAMS.bloodRefund, behead: s.beheadTurn, guard: s.guardTurn, killActsLeft: Math.max(0, 1 + s.killActBonus - s.killActs) };
   }
   private rowBlocked(def: RowDef): RowOption['reason'] | null {
     if (def.onlyAsStrike === 2 && this.s.strikesUsed < 1) return 'strike';
@@ -230,7 +419,9 @@ export class Battle2 {
     const sel = this.pick(uids); if (!sel.length || sel.length !== uids.length || new Set(uids).size !== uids.length) return { match: null, reason: '先选骰子' };
     if (ref === 'basic') {
       const ba = this.cls.basicAttack;
-      if (sel.length < ba.minDice || sel.length > ba.maxDice) return { match: null, reason: `${ba.name}要交 ${ba.minDice === ba.maxDice ? ba.minDice : ba.minDice + '～' + ba.maxDice} 颗` };
+      if (this.basicBlocked()) return { match: null, reason: '袖箭每回合只能用 1 次' };
+      if (sel.length < ba.minDice || sel.length > ba.maxDice) return { match: null, reason: `${this.basicName()}要交 ${ba.minDice === ba.maxDice ? ba.minDice : ba.minDice + '～' + ba.maxDice} 颗` };
+      if (this.v4 && formsPattern(sel.map(d => this.faceOf(d).value))) return { match: null, reason: '这几颗成牌型了，不是散骰' };
       return { match: { count: sel.length, companions: 0, tier: 'single', tierIdx: 0 } };
     }
     const r = this.board[ref]; if (!r) return { match: null, reason: '没有这一行' };
@@ -239,14 +430,16 @@ export class Battle2 {
     return m ? { match: m } : { match: null, reason: '骰子不满足这一行的条件' };
   }
 
-  preview(ref: RowRef, uids: number[], target?: number): Preview | null {
+  preview(ref: RowRef, uids: number[], target?: number, opts?: PlayOpts): Preview | null {
     if (!this.check(ref, uids).match) return null;
     const c = this.clone();
     const p0 = { armor: c.s.player.armor, barrier: c.s.player.barrier, hp: c.s.player.hp };
-    const ev = c.doPlay(ref, uids, target, true);
+    const ev = c.doPlay(ref, uids, target, true, opts);
     const hits = new Map<number, number>(); let ult = false, tier: TierName | null = null, gain = 0, self = 0, heal = 0;
-    const kills: number[] = []; let specialPct = 0;
+    const kills: number[] = []; let specialPct = 0, spawned = 0, extra = 0;
     for (const e of ev) {
+      if (e.t === 'special' && e.action === 'spawn') spawned++;
+      if (e.t === 'strikeGain') extra += e.n;
       if (e.t === 'hit') { hits.set(e.uid, (hits.get(e.uid) || 0) + e.dmg); if (e.killed) kills.push(e.uid); }
       if (e.t === 'rowPlay') { ult = e.ultimate; tier = e.tier; specialPct = (e.special || []).reduce((x, y) => x + y.pct, 0); }
       if (e.t === 'gainDice') gain += e.n;
@@ -255,7 +448,7 @@ export class Battle2 {
     return {
       total: [...hits.values()].reduce((a, b) => a + b, 0), hits: [...hits].map(([uid, dmg]) => ({ uid, dmg })),
       armor: Math.max(0, c.s.player.armor - p0.armor), barrier: Math.max(0, c.s.player.barrier - p0.barrier), heal, selfDmg: self,
-      tier, ultimate: ult, gainDice: gain, kills, specialPct,
+      tier, ultimate: ult, gainDice: gain, kills, specialPct, spawned, extraAction: extra,
     };
   }
 
@@ -267,6 +460,12 @@ export class Battle2 {
   private nextRaw(): number {
     const s = this.s;
     if (this.cls.id === 'warrior') return 3 + s.earned.behead + s.earned.guard + s.earned.tier + s.earned.extra + Math.min(this.talent('t_ember') >= 2 ? 2 : 1, s.carry.filter(d => d.kind === 'furyDie').length + (s.phase === 'player' ? s.dice.filter(d => d.kind === 'furyDie' && d.carried < (this.talent('t_ember') ? 2 : 1)).length : 0));
+    if (this.cls.id === 'mage' && this.v4) {
+      // v4 蓄星: dice stay; next turn = min(6, max(3, kept + 1) + 充能)
+      const kept = s.phase === 'player' ? s.dice.filter(d => d.kind !== 'cracked' && d.kind !== 'cursed').length : s.carry.length;
+      return Math.max(3, kept + 1) + s.chargeNext;
+    }
+    if (this.cls.id === 'rogue' && this.v4) return 3;
     if (this.cls.id === 'mage') {
       if (s.phase !== 'player') return 3 + s.chantRing;   // turn start: the ring was settled at the end of the last turn
       if (s.strikesUsed === 0) return 3 + Math.min(3, s.chantRing + (this.talent('t_deepchant') && s.chantsThisCycle < this.talent('t_deepchant') ? 2 : 1));
@@ -283,7 +482,7 @@ export class Battle2 {
     const s = this.s, p = s.player;
     if (this.cls.id !== 'mage' || s.result) return 0;
     const ring = s.chantRing;
-    let barrier = p.barrier + 4 + 2 * (ring + s.overcharge);
+    let barrier = p.barrier + (this.v4 ? (s.released ? 0 : holdBarrier(s.dice.length)) : 4 + 2 * (ring + s.overcharge));
     let barrier0 = barrier, armor = p.armor, armor0 = armor;
     let layers = p.backlash, n = s.chantHits, extra = 0;
     const mul = (this.hasStatus('player', 'vulnerable') ? 1.5 : 1);
@@ -296,21 +495,24 @@ export class Battle2 {
       const o = take(Math.ceil(raw - 1e-9), barrier0, armor0);
       extra += Math.max(0, w.hp - o.hp);
       barrier = w.b; armor = w.a; barrier0 = o.b; armor0 = o.a;
-      n++; layers = Math.min(BACKLASH_CAP, layers + 2 ** n);
+      n++; layers = Math.min(this.backlashCap(), layers + this.backlashAdd(n));
     }
     return extra;
   }
 
+  /** 反噬 layers added by the n-th hit of a cycle (v2.2: 2^n; v4 may use a flat step) and the cap */
+  private backlashAdd(n: number) { return this.v4 && V4_PARAMS.backlashStep > 0 ? V4_PARAMS.backlashStep : 2 ** n; }
+  private backlashCap() { return this.v4 ? V4_PARAMS.backlashCap : BACKLASH_CAP; }
   /** 刺客: shadow dice that would carry to next turn if the turn ended now (v2.2: only unused ones on the field) */
   private shadowCarryCount(): number {
     const s = this.s;
-    if (this.cls.id !== 'rogue' || (s.classSpawns <= 0 && !this.v3)) return 0;
+    if (this.cls.id !== 'rogue' || this.v4 || (s.classSpawns <= 0 && !this.v3)) return 0;
     return Math.min(1 + this.talent('t_shadowbox'), s.dice.filter(d => d.kind === 'shadowDie').length);
   }
   /** 魔导 after a play: how many leftovers may stay (3, 余韵 4), whether the player must choose, and the current pick. null = no choice now */
   keepInfo(): { cap: number; need: boolean; selected: number[] } | null {
     const s = this.s;
-    if (this.cls.id !== 'mage' || s.phase !== 'player' || s.strikesUsed === 0 || this.lastWasLightBasic) return null;
+    if (this.cls.id !== 'mage' || this.v4 || s.phase !== 'player' || s.strikesUsed === 0 || this.lastWasLightBasic) return null;
     const cap = 3 + s.resonanceNext;
     const left = s.dice.filter(d => d.kind !== 'cracked' && d.kind !== 'cursed');
     return { cap, need: left.length > cap, selected: this.keepSelection(left, cap) };
@@ -339,7 +541,7 @@ export class Battle2 {
     if (e.taunted && (a.type !== '攻击' || pc)) { const v = this.attackValue(e, e.attackDmg); return { kind: 'atk', text: String(v), value: v }; }
     if (a.type === '防御') return { kind: 'def', text: String(a.value), value: a.value };
     if (a.curse) return JUNK_ON ? { kind: 'curse', text: '诅咒骰', desc: a.desc } : { kind: 'skl', text: '剧毒 1', status: 'poison', value: 1, desc: a.desc };
-    if (a.type === '技能' || (pc && a.type === '攻击')) {
+    if (a.type === '技能' || (pc && a.type === '攻击' && !ENEMY_TRAITS.spellHits)) {
       const dot = a.desc ? DOT_DESC[a.desc] : undefined, ctl = a.desc ? CTL_DESC[a.desc] : undefined;
       if (!pc && (dot || ctl)) { const v = this.attackValue(e, e.attackDmg); return { kind: 'atk', text: v + '+' + (dot || ctl), value: v, status: dot || ctl }; }
       if (dot) return { kind: 'skl', text: dot + ' ' + a.value, status: dot, value: a.value, desc: a.desc };
@@ -370,13 +572,17 @@ export class Battle2 {
       cost = this.bloodCost()!;
       if (s.freeBloodLeft > 0) s.freeBloodLeft--;
       s.bloodRerolls++;
-      if (cost > 0) { p.hp -= cost; this.emit({ t: 'hp', who: 'player', delta: -cost, hp: p.hp, reason: 'reroll' }); }
+      if (cost > 0) { p.hp -= cost; this.emit({ t: 'hp', who: 'player', delta: -cost, hp: p.hp, reason: 'reroll' }); if (this.v4) { s.bloodPaid += cost; this.stats.bloodPaid += cost; } }
       this.stats.bloodRerolls++;
     }
     let capped = false;
     // 1.8: HP → rage +1 (or +5 armor when full) → fury-die check → reroll
     if (!free) {
-      if (p.rage >= 5) { capped = true; p.armor += 5; this.emit({ t: 'armor', who: 'player', delta: 5, total: p.armor, reason: '血怒已满' }); }
+      if (p.rage >= 5) {
+        capped = true;
+        const ra = this.v4 ? (this.board.some(r => r.def.flags?.bloodArmorII) ? V4_PARAMS.bloodArmorII : V4_PARAMS.bloodArmor) : 5;
+        p.armor += ra; this.emit({ t: 'armor', who: 'player', delta: ra, total: p.armor, reason: '血怒已满' });
+      }
       else { p.rage++; this.emit({ t: 'rage', stacks: p.rage }); }
     }
     s.rerollsThisTurn++;
@@ -434,20 +640,29 @@ export class Battle2 {
     const m = this.check(ref, uids).match!;
     const sel = this.pick(uids);
     this.rewards = []; this.othersPick = null;
-    if (targetUid != null) { const t = this.enemy(targetUid); if (t && !t.dead) s.targetUid = t.uid; }
+    if (targetUid != null) {
+      const t = this.enemy(targetUid);
+      // v4.1 嘲讽: a protected pick goes to the guardian (the selected one if it is a guardian, else the first)
+      if (t && !t.dead) s.targetUid = this.canTarget(t.uid) ? t.uid : (s.targetUid != null && this.isTaunting(s.targetUid) ? s.targetUid : this.alive().find(g => g.ct === 'guardian')!.uid);
+    }
     const target = this.target();
-    const row = ref === 'basic' ? null : this.board[ref];
+    // v4: the loose-dice skill is a real row (铁壁 / 奥术弹 / 袖箭) and resolves like one
+    const chop = ref === 'basic' && this.v4 && this.cls.id === 'warrior' && opts?.loose === 'chop';
+    const row = ref === 'basic' ? (this.v4 ? (chop ? this.chopRow() : this.basicRow) : null) : this.board[ref];
     const def = row?.def || null, level: Level = row?.level || 1;
     const strikeIdx = s.strikesUsed;
     const isRogue = this.cls.id === 'rogue';
+    const v4 = this.v4;
+    /** v4 魔导: 释放 = hand in ≥4 dice (else 小咒) */
+    const release = v4 && this.cls.id === 'mage' && sel.length >= 4;
     // v2.1 精准连击: same row as the previous strike (damage); 精准产残 also needs more dice than that strike
-    const combo = isRogue && !!def && !!s.lastStrike && s.lastStrike.ref === ref;
+    const combo = isRogue && !v4 && !!def && !!s.lastStrike && s.lastStrike.ref === ref;
     const preciseSpawn = combo && sel.length > s.lastStrike!.count;
     // v2.1 飞刀标记: this strike completes the mark set by the previous one
     const mk = isRogue ? s.knifeMark : null;
-    const markDone = !!mk && !!def && !!def.flags?.shape && def.cond.t === mk.shape && sel.some(d => d.uid === mk.dieUid) && sel.length >= 3 && sel.length === s.dice.length;
+    const markDone = !v4 && !!mk && !!def && !!def.flags?.shape && def.cond.t === mk.shape && sel.some(d => d.uid === mk.dieUid) && sel.length >= 3 && sel.length === s.dice.length;
     if (isRogue) s.knifeMark = null;
-    const tierName = def ? m.tier : null;
+    const tierName = def ? (ref === 'basic' ? 'single' : m.tier) : null;
     const tier = def && tierName ? def.tiers[tierName] || null : null;
     const ultimate = tierName === 'ultimate';
 
@@ -461,8 +676,12 @@ export class Battle2 {
       bonus += s.overflow * [0.1, 0.2, 0.3][this.talent('t_overdrive')];
       if (this.hasStatus('player', 'berserk')) bonus += 0.3;
     }
-    if (this.cls.id === 'mage') bonus += s.overcharge * 0.1;
-    if (isRogue) {
+    if (this.cls.id === 'mage') { if (!v4) bonus += s.overcharge * 0.1; else if (release) bonus += s.overcharge * (def?.flags?.overPct ?? 0.1); }
+    if (isRogue && v4) {
+      bonus += V4_PARAMS.comboPct * strikeIdx;   // v4 连击: strike N +20% × (N − 1)
+      if (strikeIdx >= 4 && this.setup.awaken?.includes('aw_endless')) bonus += 0.3;   // 觉醒「无尽连斩」: from the 5th strike +30%
+    }
+    else if (isRogue) {
       if (strikeIdx >= 1) bonus += [0.2, 0.35, 0.5][this.talent('t_dualmaster')];
       if (combo) bonus += [0.25, 0.4, 0.55][this.talent('t_precision')];
       if (markDone && this.talent('t_markmaster')) bonus += 0.3;
@@ -482,18 +701,23 @@ export class Battle2 {
     if (def?.flags?.chase && strikeIdx >= 2) bonus += def.flags.chase - 1;
     // v3 3: special dice add to this play when handed in (怒火 +50%, 星辰 +15%, 暗影残骰 +20%, each)
     const special: Array<{ uid: number; kind: DieKind; pct: number }> = [];
-    if (this.v3) for (const d of sel) { const pc = V3_SPECIAL_PCT[d.kind]; if (pc) { special.push({ uid: d.uid, kind: d.kind, pct: pc }); bonus += pc / 100; } }
+    let armorPct = 0;
+    if (this.v3) for (const d of sel) { const pc = (v4 ? V4_SPECIAL_PCT : V3_SPECIAL_PCT)[d.kind]; if (pc) { special.push({ uid: d.uid, kind: d.kind, pct: pc }); bonus += pc / 100; if (v4 && d.kind === 'furyDie') armorPct += pc / 100; } }
+    // v4 refill the play promises (for rowPlay / the UI): 袖箭 by strike, 影步 = dice handed in
+    const refill = !v4 || !isRogue ? 0 : ref === 'basic' ? sleeveRefill(strikeIdx) : tierName && def?.tiers[tierName]?.effects.some(e => e.t === 'hook' && e.id === 'refill') ? sel.length : 0;
 
     s.strikesUsed++; this.stats.strikes++;
     if (ref === 'basic') this.stats.basics++; else { this.stats.plays++; this.stats.rows[def!.id] = (this.stats.rows[def!.id] || 0) + 1; }
+    if (release) { this.stats.releases++; this.stats.releaseDice += sel.length; } else if (v4 && this.cls.id === 'mage') this.stats.minorCasts++;
     if (ultimate) this.stats.ultimates++;
-    if (def && m.count >= 4) { this.stats.big4++; this.stats.big4Rows[def.id] = (this.stats.big4Rows[def.id] || 0) + 1; }
+    if (def && ref !== 'basic' && m.count >= 4) { this.stats.big4++; this.stats.big4Rows[def.id] = (this.stats.big4Rows[def.id] || 0) + 1; }
     if (combo) { this.stats.combos++; s.comboThisTurn = true; }
     if (def && this.cls.id === 'mage') {
       if (def.cond.t === 'mixedRelease') this.stats.mixPlays++;
       if (s.chantRing >= 3) { this.stats.fullRingPlays++; this.stats.fullRingDice += sel.length; }
     }
-    this.emit({ t: 'rowPlay', ref, rowId: def ? def.id : 'basic', name: def ? def.name : this.cls.basicAttack.name, tier: tierName, count: m.count, uids: sel.map(d => d.uid), companions: m.companions, target: target ? target.uid : null, strike: strikeIdx + 1, ultimate, combo, X, bonusPct: Math.round(bonus * 100), ...(special.length ? { special } : {}) });
+    const v4ev = v4 ? { v4: { strike: strikeIdx + 1, ...(isRogue ? { comboPct: Math.round(V4_PARAMS.comboPct * 100 * strikeIdx), refill } : {}), ...(this.cls.id === 'mage' ? { cast: release ? 'release' as const : 'minor' as const } : {}), ...(ref === 'basic' && this.cls.id === 'warrior' ? { loose: chop ? 'chop' as const : 'guard' as const } : {}) } } : {};
+    this.emit({ t: 'rowPlay', ref, rowId: def && ref !== 'basic' ? def.id : 'basic', name: def ? def.name : this.cls.basicAttack.name, tier: tierName, count: m.count, uids: sel.map(d => d.uid), companions: m.companions, target: target ? target.uid : null, strike: strikeIdx + 1, ultimate, combo, X, bonusPct: Math.round(bonus * 100), ...(special.length ? { special } : {}), ...v4ev });
 
     // dice leave the field (飞刀 returns its die later)
     const knife = !!tier?.effects.some(e => e.t === 'hook' && e.id === 'knifeReturn');
@@ -508,9 +732,18 @@ export class Battle2 {
       row: def, level, ref, tierName, tier, dice: sel, X, count: m.count, coef: def ? this.coefOf(def, level, tier) : this.cls.basicAttack.coef,
       bonusPct: bonus, flat, ultimate, target, strikeIdx, combo, dealt: 0, kills: 0, firstDmg: true, halve: false,
       holdBurn: !!tier?.effects.some(e => e.t === 'hook' && e.id === 'burnHold'),
+      armorPct,
     };
-    // mage: playing breaks the chant
-    if (this.cls.id === 'mage') {
+    // v4 魔导: only a 释放 (≥4 dice) ends the cycle; a 小咒 keeps the chant going (barrier / backlash / overcharge)
+    if (this.cls.id === 'mage' && v4) {
+      this.lastWasLightBasic = false;
+      if (release) {
+        s.released = true;
+        if (s.turnDice >= 6) { const n = this.talent('t_supernova') ? 3 : 2; s.starTurnsLeft = n; if (this.talent('t_supernova') >= 2) s.bonusFreeNext = 1; this.emit({ t: 'overload', turns: n }); }
+        s.overcharge = 0; s.chantsThisCycle = 0; s.pierceHitsThisCycle = 0; s.cycleActive = false; s.chantHits = 0;
+        if (p.backlash) { p.backlash = 0; this.emit({ t: 'backlash', stacks: 0 }); }
+      }
+    } else if (this.cls.id === 'mage') {
       const light = ref === 'basic' && sel.length === 1 && this.talent('t_lightspell') > 0 && s.strikesUsed === 1;
       this.lastWasLightBasic = light;
       if (!light) {
@@ -522,11 +755,14 @@ export class Battle2 {
       }
     }
 
-    if (ref === 'basic') this.resolveBasic(ctx);
+    if (ref === 'basic' && !v4) this.resolveBasic(ctx);
     else this.resolveTier(ctx);
 
-    // rogue bookkeeping
-    if (isRogue) {
+    // v4 刺客: 袖箭 refills by strike number (once per turn); first strike gives the free reroll
+    if (isRogue && v4) {
+      if (ref === 'basic') { s.sleeveUsed = true; this.stats.sleeveSpawns++; if (strikeIdx === 0) this.stats.firstBasic++; this.spawnShadow(refill, 'shadowify'); }
+      if (strikeIdx === 0) { s.freeRerollsLeft++; this.emit({ t: 'freeReroll', n: 1, reason: 'firstStrike' }); }
+    } else if (isRogue) {
       s.lastStrike = ref === 'basic' ? null : { ref, count: sel.length };
       if (strikeIdx === 0) { s.freeRerollsLeft++; this.emit({ t: 'freeReroll', n: 1, reason: 'firstStrike' }); }
       if (preciseSpawn) this.classSpawn('precise');
@@ -551,7 +787,7 @@ export class Battle2 {
     if (this.hasRelic('lucky_coin')) this.relicGold(2);
     if (this.cls.id === 'mage' && this.talent('t_prism') && def) { const su = suitOfCond(def); if (su) s.prismSuit = su; }
     // v2.2 R3-3: once a mage play resolves, burns held from earlier 日行 plays go out; the ones this play laid stay
-    if (this.cls.id === 'mage' && !this.lastWasLightBasic) {
+    if (this.cls.id === 'mage' && !this.lastWasLightBasic && (!v4 || release)) {
       for (const e of this.alive()) {
         const b = e.statuses.find(x => x.type === 'burn'); if (!b || !b.held) continue;
         b.value = Math.max(0, b.value - b.held); b.held = 0;
@@ -595,7 +831,8 @@ export class Battle2 {
   }
 
   private coefOf(def: RowDef, level: Level, tier: Tier | null) {
-    return def.coef[level - 1] * (tier?.coefMul ?? 1) + (tier?.coefAdd ?? 0);
+    const sc = def.tags.includes('v4') && !def.tags.includes('basic') ? V4_PARAMS.dmgScale[this.cls.id] ?? 1 : 1;
+    return def.coef[level - 1] * sc * (tier?.coefMul ?? 1) + (tier?.coefAdd ?? 0);
   }
   private devourCount(ctx: PlayCtx) {
     return ctx.tier?.effects.some(e => e.t === 'hook' && e.id === 'devour') ? this.s.dice.filter(d => !ctx.dice.includes(d)).length : 0;
@@ -634,7 +871,7 @@ export class Battle2 {
     if (flags.assassin && ctx.count === 1) ctx.coef = flags.assassin;
     // void 4+ → ultimate hits all
     const voidAll = def.id.startsWith('m_void') && ctx.ultimate && ctx.count >= 4;
-    const late = (e: Effect) => (e.t === 'heal' && e.of === 'dmg') || (e.t === 'hook' && (e.id === 'furyUlt' || e.id === 'killShadow'));
+    const late = (e: Effect) => (e.t === 'heal' && e.of === 'dmg') || (e.t === 'hook' && (e.id === 'furyUlt' || e.id === 'killShadow' || e.id === 'killRefill' || e.id === 'refill'));
     const ordered = [...fx.filter(e => !late(e)), ...fx.filter(late)];
     for (const e of ordered) {
       if (!this.alive().length && (e.t === 'dmg' || e.t === 'hook' && ['bolts', 'dance', 'twinCut', 'elements', 'transfer'].includes(e.id))) continue;
@@ -647,7 +884,7 @@ export class Battle2 {
         }
         case 'armor': {
           let v = 0;
-          if (e.of === 'coef2') v = ctx.X * (def.coef2 ? def.coef2[ctx.level - 1] : 1) * (ctx.tier?.coefMul ?? 1) * e.mul;
+          if (e.of === 'coef2') v = ctx.X * (def.coef2 ? def.coef2[ctx.level - 1] : 1) * (ctx.tier?.coefMul ?? 1) * e.mul * (1 + ctx.armorPct) * (this.v4 && def.tags.includes('basic') ? V4_PARAMS.wallScale : 1);
           else if (e.of === 'suitPoints') v = ctx.dice.filter(d => this.faceOf(d).suit === e.suit).reduce((a, d) => a + this.points(d, def), 0) * e.mul;
           else v = e.mul;
           this.addArmor(Math.ceil(v), def.name);
@@ -740,6 +977,11 @@ export class Battle2 {
         break;
       }
       case 'burnHold': break;   // marker: burns this tier lays are held (see PlayCtx.holdBurn)
+      // ── v4
+      case 'refill': this.spawnShadow(ctx.dice.length, 'refill'); break;   // 影步: 交几补几
+      case 'killRefill': if (ctx.kills > 0 && !s.killRefillUsed) { s.killRefillUsed = true; this.spawnShadow(p.n ?? 2, 'kill'); } break;   // 背刺 II
+      case 'killActUp': s.killActBonus += p.n ?? 1; break;   // 顺劈斩 4+: one more 斩杀再动 this turn
+      case 'charge': { const n = p.n ?? 1; if (s.chargeNext < n) { this.gain(n - s.chargeNext, 'resonance'); s.chargeNext = n; } break; }   // 闪电链 3: 充能
       case 'devour': break;   // handled up front
       // 刃行: first strike turns blades into shadow dice (淬刃: poison instead); a later strike heals
       case 'bladeFirst': {
@@ -863,6 +1105,7 @@ export class Battle2 {
     let v = base * (1 + ctx.bonusPct);
     if (this.hasStatus('player', 'weak')) v *= 0.75;
     if (this.hasStatus(t, 'vulnerable')) v *= 1.5;
+    if (this.frozenTaken && this.hasStatus(t, 'freeze')) v *= 1 + this.frozenTaken;   // v4 冰锥 III
     return Math.max(0, Math.ceil(v - 1e-9));
   }
 
@@ -912,6 +1155,7 @@ export class Battle2 {
     // dice count
     const raw = this.nextRaw();
     const count = Math.min(cls.maxDice, raw);
+    s.chargeNext = 0;
     s.overflow = cls.overflow === 'damagePct' ? Math.max(0, raw - cls.maxDice) : 0;
     const reasons = s.nextReasons.slice();
     s.phase = 'player';
@@ -920,7 +1164,8 @@ export class Battle2 {
     if (relicFree) this.emit({ t: 'freeReroll', n: relicFree, reason: s.ironNext ? 'iron_charm' : 'steady_heart' });
     s.ironNext = false; s.steadyNext = false;
     s.freeRerollsLeft = cls.freeRerolls + s.bonusFreeNext + relicFree; s.bonusFreeNext = 0; s.resonanceNext = 0;
-    s.rerollsThisTurn = 0; s.bloodRerolls = 0; s.strikesUsed = 0; s.maxStrikes = cls.strikesPerTurn;
+    s.rerollsThisTurn = 0; s.bloodRerolls = 0; s.strikesUsed = 0; s.maxStrikes = this.v4 ? (cls.id === 'rogue' ? this.strikeCap() : 1) : cls.strikesPerTurn;
+    s.released = false; s.killRefillUsed = false; s.killActs = 0; s.killActBonus = 0; s.bloodPaid = 0; s.beheadTurn = false; s.guardTurn = false; s.roundClosed = false; s.attackedTurn = false; s.roundHits = 0; s.roundLeak = false; s.roundStun = false;
     s.lastStrike = null; s.comboThisTurn = false; s.sleeveUsed = false; s.earnUsed = false; s.danceUsed = false; s.tripleUsed = false; s.chainUsed = false; s.whetUsed = 0; s.stormPct = 0;
     s.knifeMark = null; s.classSpawns = 0;
     s.freeBloodLeft = s.freeBloodNext + [0, 1, 2][this.talent('t_instinct')]; s.freeBloodNext = 0;
@@ -963,6 +1208,7 @@ export class Battle2 {
     }
     s.dice = field.concat(fresh);
     s.turnDice = s.dice.length;
+    if (this.v4 && cls.id === 'mage') s.chantRing = Math.max(0, Math.min(3, s.turnDice - 3));   // v4: the ring = dice 4..6 in hand
     s.earned = { behead: 0, guard: 0, tier: 0, extra: 0 }; s.nextReasons = [];
     this.stats.turns++; this.stats.diceAtStart.push(s.turnDice);
     this.emit({ t: 'turnStart', turn: s.turn, diceCount: s.turnDice, overflow: s.overflow, strikes: s.maxStrikes, reasons });
@@ -974,6 +1220,38 @@ export class Battle2 {
     const s = this.s, p = s.player, cls = this.cls;
     const left = s.dice; s.dice = [];
     const vanish = (d: Die) => this.emit({ t: 'special', action: 'vanish', uid: d.uid, kind: d.kind, value: d.face.value, suit: d.face.suit });
+    if (this.v4) this.stats.strikeHist[Math.min(6, s.strikesUsed)]++;
+    if (this.v4 && cls.id === 'mage') {
+      // v4 蓄星: every leftover die stays; a turn without a release is a chant turn (小咒 included)
+      const hand = left.filter(d => d.kind !== 'cracked' && d.kind !== 'cursed');
+      for (const d of left) if (!hand.includes(d)) vanish(d);
+      if (!s.released) {
+        if (hand.length >= 6 && s.turnDice >= 6) s.overcharge++;   // 过充: full and still not released
+        const bar = holdBarrier(hand.length);
+        s.chantsThisCycle++; s.chantedThisTurn = true; s.cycleActive = true; this.stats.chantTurns++;
+        if (s.strikesUsed === 0) this.stats.holds++;
+        if (bar) { p.barrier += bar; this.emit({ t: 'barrier', delta: bar, total: p.barrier }); }
+        this.emit({ t: 'chant', ring: Math.max(0, Math.min(3, hand.length - 3)), barrier: p.barrier, overcharge: s.overcharge, minor: s.strikesUsed > 0, hand: hand.length });
+        if (this.hasRelic('charge_core')) { this.addArmor(4, '蓄力晶核'); this.changeHp(3, 'heal'); }
+      }
+      for (const d of hand.slice(0, 6)) { d.persist = 'retained'; s.carry.push(d); }
+      s.chantRing = Math.max(0, Math.min(3, hand.length - 3));
+      s.keepSel = null;
+      if (this.hasRelic('steady_heart') && s.strikesUsed > 0 && s.rerollsThisTurn === 0) s.steadyNext = true;
+      this.lastWasLightBasic = false;
+      return;
+    }
+    if (this.v4 && cls.id === 'rogue') {
+      // v4.1 刀鞘卡住: the cap ended the turn while a strike was still possible (dice left, 袖箭 unused or a pattern on the field)
+      if (s.strikesUsed >= s.maxStrikes && left.length && this.alive().length) {
+        const f = left.map(d => d.face), k = left.map(d => d.kind);
+        if (!s.sleeveUsed || this.board.some(r => !!bestMatch(r.def, f, k))) this.stats.capBlocked++;
+      }
+      // v4: refilled shadow dice and leftovers all vanish; nothing carries
+      for (const d of left) vanish(d);
+      if (this.hasRelic('steady_heart') && s.strikesUsed > 0 && s.rerollsThisTurn === 0) s.steadyNext = true;
+      return;
+    }
     if (cls.id === 'warrior') {
       const maxKeep = this.talent('t_ember') >= 2 ? 2 : 1, maxAge = this.talent('t_ember') >= 1 ? 2 : 1;
       let kept = s.carry.filter(d => d.kind === 'furyDie').length;
@@ -1024,6 +1302,12 @@ export class Battle2 {
   private lastWasLightBasic = false;
   /** rules v3: the board is pattern skills (同点 / 顺子 / 阵列); no rule reads normal die suits */
   readonly v3: boolean;
+  /** rules v4 (CLASS_DESIGN_V4): 刺客连击 / 魔导蓄星 / 狂战斩或挡 */
+  readonly v4: boolean;
+  /** v4: the loose-dice skill slot (not on the board) */
+  private basicRow: BoardRow | null;
+  /** v4 冰锥 III: frozen enemies take this much more damage */
+  private frozenTaken: number;
   /** kill rewards queued during a play (paid after it resolves); null outside a play */
   private rewards: Array<() => void> | null = null;
   /** v3 random extra targets of the play in progress */
@@ -1059,6 +1343,7 @@ export class Battle2 {
       e.age++;
       if (s.result) return;
     }
+    this.settleGuard();
     if (this.waveCleared()) { this.afterWaveClear(); return; }
     // junk traits (one junk die per turn at most), boss armor
     for (const e of this.alive()) if (JUNK_ON) this.junkTrait(e);
@@ -1073,6 +1358,7 @@ export class Battle2 {
     const before = p.statuses.map(x => x.type);
     p.statuses = p.statuses.filter(x => { if (x.duration == null) return true; x.duration--; return x.duration > 0; });
     for (const ty of before) if (!p.statuses.some(x => x.type === ty)) this.emit({ t: 'statusExpire', who: 'player', type: ty });
+    this.closeRound();
     s.turn++;
     this.turnStart();
   }
@@ -1095,7 +1381,9 @@ export class Battle2 {
     const s = this.s;
     if (this.hasStatus(e, 'stun') || this.hasStatus(e, 'freeze')) {
       this.emit({ t: 'enemyAct', uid: e.uid, kind: this.hasStatus(e, 'freeze') ? 'frozen' : 'stunned' });
-      if (this.cls.id === 'warrior' && s.earned.guard < s.caps.guard) { s.earned.guard++; this.gain(1, 'stun', e.uid); }
+      if (this.cls.id === 'warrior') { s.attackedTurn = true; s.roundStun = true; }
+      // v4.2 guardAll: judged once the enemies have acted (settleGuard); v4: a stunned attacker is a perfect guard right away
+      if (this.cls.id === 'warrior' && !ENEMY_TRAITS.guardAll) { s.guardTurn = true; if (s.earned.guard < s.caps.guard) { s.earned.guard++; this.gain(1, 'stun', e.uid); } }
       return;
     }
     if (this.isMelee(e) && e.distance > 0) { e.distance--; this.emit({ t: 'enemyMove', uid: e.uid, distance: e.distance }); return; }
@@ -1110,7 +1398,7 @@ export class Battle2 {
       if (JUNK_ON) this.addJunk('cursed', e); else this.addPlayerStatus('poison', 1);
       return;
     }
-    if (a.type === '技能' || (pc && a.type === '攻击')) {
+    if (a.type === '技能' || (pc && a.type === '攻击' && !ENEMY_TRAITS.spellHits)) {
       const dot = a.desc ? DOT_DESC[a.desc] : undefined, ctl = a.desc ? CTL_DESC[a.desc] : undefined;
       if (!pc && (dot || ctl)) {
         this.enemyAttack(e, Math.floor(this.attackValue(e, e.attackDmg) * half), a.desc, interrupted, false);
@@ -1209,7 +1497,11 @@ export class Battle2 {
     const perfectBlock = !isDot && v > 0 && rem === 0 && byArmor > 0;
     this.emit({ t: 'playerHit', from: e ? e.uid : null, dmg: v, byBarrier, byArmor, hpDmg, isDot, perfectBlock });
     // 完防
-    if (perfectBlock && this.cls.id === 'warrior' && s.earned.guard < s.caps.guard) { s.earned.guard++; this.gain(1, 'guard', e?.uid); }
+    // v4.2: a blockable hit this round, and whether any of it got through (armor / barrier); DoT is not blockable and never counts
+    if (!isDot && e && v > 0) { s.roundHits++; if (rem > 0) s.roundLeak = true; }
+    if (perfectBlock && this.cls.id === 'warrior' && !ENEMY_TRAITS.guardAll) s.guardTurn = true;
+    if (!isDot && e && v > 0) s.attackedTurn = true;
+    if (perfectBlock && this.cls.id === 'warrior' && !ENEMY_TRAITS.guardAll && s.earned.guard < s.caps.guard) { s.earned.guard++; this.gain(1, 'guard', e?.uid); }
     if (perfectBlock && e && this.board.some(r => r.def.flags?.thorns)) { const t = e; if (!t.dead) { t.hp = Math.max(0, t.hp - byArmor); this.emit({ t: 'hit', uid: t.uid, dmg: byArmor, absorbed: 0, hpDmg: byArmor, killed: t.hp <= 0, aoe: false, ultimate: false, source: 'thorns' }); if (t.hp <= 0) this.markDead(t, false, null); } }
     // 法术反噬: hits during a chant cycle (also those the barrier stopped); N counts from the cycle start, cap 30
     if (!isDot && e && this.cls.id === 'mage' && s.cycleActive && v > 0) {
@@ -1218,7 +1510,7 @@ export class Battle2 {
       let skip = blockedByBarrier && sv > 0;
       if (!skip && !blockedByBarrier && sv >= 2 && s.pierceHitsThisCycle === 0) { s.pierceHitsThisCycle++; skip = true; }
       if (!skip) {
-        s.chantHits++; p.backlash = Math.min(BACKLASH_CAP, p.backlash + 2 ** s.chantHits); this.emit({ t: 'backlash', stacks: p.backlash });
+        s.chantHits++; p.backlash = Math.min(this.backlashCap(), p.backlash + this.backlashAdd(s.chantHits)); this.emit({ t: 'backlash', stacks: p.backlash });
       }
     }
     if (!isDot && v > 0 && e) {
@@ -1228,6 +1520,7 @@ export class Battle2 {
     if (p.hp <= 0) {
       if (this.hasRelic('emergency_hourglass') && !s.hourglassUsed) { s.hourglassUsed = true; p.hp = 1; this.emit({ t: 'relic', id: 'emergency_hourglass', text: '免疫致命伤害' }); return; }
       s.result = 'lose'; s.phase = 'over';
+      this.closeRound();
       if (this.cls.id === 'mage' && p.backlash > 0) this.stats.backlashDeath = true;
       this.emit({ t: 'defeat' });
     }
@@ -1270,7 +1563,8 @@ export class Battle2 {
     }
     if (direct && ctx) {
       // 斩首
-      if (this.cls.id === 'warrior' && s.earned.behead < s.caps.behead) { s.earned.behead++; this.gain(1, 'behead', e.uid); }
+      if (this.cls.id === 'warrior' && this.v4) this.killAct(e, ctx);
+      else if (this.cls.id === 'warrior' && s.earned.behead < s.caps.behead) { s.earned.behead++; this.gain(1, 'behead', e.uid); }
       const fl = ctx.row?.flags;
       if (fl?.executeHeal && ctx.row?.flags?.execute) this.changeHp(fl.executeHeal, 'heal');
       if (fl?.chainKill && !s.chainUsed && ctx.count >= fl.chainKill) { s.chainUsed = true; this.addStrike(1, '连斩'); }
@@ -1278,6 +1572,52 @@ export class Battle2 {
       if (this.hasRelic('loot_die')) { s.freeRerollsLeft++; this.emit({ t: 'freeReroll', n: 1, reason: 'loot_die' }); }
     }
     if (ENEMY_TRAITS.vengeance && direct) for (const o of this.alive()) if (o.arch === 'berserker') o.vengeance++;
+  }
+
+  /** v4 狂战 斩杀再动: a skill's direct kill → a fury die on the field now + one more action (1 per turn; 顺劈斩 4+ / II raise it) */
+  private killAct(e: Enemy, ctx: PlayCtx) {
+    const s = this.s;
+    s.beheadTurn = true;
+    const cap = 1 + s.killActBonus + (ctx.row?.flags?.killActPlus || 0);
+    if (s.killActs >= cap || s.result) return;
+    s.killActs++; this.stats.killActs++;
+    if (s.dice.length < 6) {
+      const d = this.newDie('furyDie', 'mechanic'); s.dice.push(d);
+      this.emit({ t: 'special', action: 'spawn', uid: d.uid, kind: d.kind, value: d.face.value, suit: d.face.suit });
+      this.emit({ t: 'roll', dice: [this.snap(d)], reason: 'spawn', kept: [] });
+    }
+    s.maxStrikes++;
+    this.emit({ t: 'strikeGain', n: 1, reason: '斩杀再动' });
+    void e;
+  }
+  /** v4.2 完防 (guardAll): the enemies hit at least once (or were stunned out of it) and no blockable damage got through */
+  private settleGuard() {
+    const s = this.s;
+    if (!ENEMY_TRAITS.guardAll || this.cls.id !== 'warrior') return;
+    if ((s.roundHits > 0 || s.roundStun) && !s.roundLeak) {
+      s.guardTurn = true;
+      if (s.earned.guard < s.caps.guard) { s.earned.guard++; this.gain(1, s.roundHits ? 'guard' : 'stun'); }
+    }
+  }
+  /** v4 end of a round (player turn + enemy turn): metrics, then 血偿 refunds blood sold this turn after a behead / perfect guard */
+  private closeRound() {
+    const s = this.s;
+    if (!this.v4 || this.cls.id !== 'warrior' || s.roundClosed) return;
+    s.roundClosed = true;
+    const st = this.stats; st.rounds++;
+    if (s.beheadTurn) st.beheadRounds++;
+    if (s.guardTurn) st.guardRounds++;
+    if (s.beheadTurn || s.guardTurn) st.eitherRounds++;
+    if (s.beheadTurn && s.guardTurn) st.bothRounds++;
+    if (s.attackedTurn) { st.attackRounds++; if (s.beheadTurn || s.guardTurn) st.eitherAttackRounds++; }
+    if ((s.beheadTurn || s.guardTurn) && s.bloodPaid > 0 && s.player.hp > 0 && s.result !== 'lose') {
+      const amount = this.refundOf(s.bloodPaid), p = s.player, before = p.hp;
+      p.hp = Math.min(p.maxHp, p.hp + amount);
+      const got = p.hp - before; st.bloodRefunded += got;
+      this.emit({ t: 'bloodRefund', paid: s.bloodPaid, amount: got, why: s.beheadTurn ? 'behead' : 'guard' });
+      if (got) this.emit({ t: 'hp', who: 'player', delta: got, hp: p.hp, reason: 'refund' });
+    }
+    s.bloodPaid = 0;
   }
 
   private waveCleared() { return !this.alive().length; }
@@ -1291,6 +1631,7 @@ export class Battle2 {
   }
   private afterWaveClear() {
     const s = this.s;
+    this.closeRound();
     if (s.waveIdx + 1 < s.waves.length) {
       s.phase = 'enemy';
       // 1.9: dice earned this turn carry into the next wave's first turn; tell the UI before the next wave enters
@@ -1414,6 +1755,7 @@ export class Battle2 {
     for (let i = 0; i < n; i++) {
       if (s.dice.length >= 6) break;
       const d = this.newDie('shadowDie', 'mechanic'); s.dice.push(d);
+      if (this.v4) this.stats.refills++;
       this.emit({ t: 'special', action: 'spawn', uid: d.uid, kind: d.kind, value: d.face.value, suit: d.face.suit });
       this.emit({ t: 'roll', dice: [this.snap(d)], reason: 'spawn', kept: [] });
     }
@@ -1433,7 +1775,8 @@ export class Battle2 {
     if (n > 0) this.emit({ t: 'gainDice', n, reason, from });
   }
   private targets(t: Target, main: Enemy | null): Enemy[] {
-    const a = this.alive(); const m = main && !main.dead ? main : a[0]; if (!m) return [];
+    // v4.1 嘲讽: if the main target died mid-play, the next single-target effect still goes to a guardian first
+    const a = this.alive(); const m = main && !main.dead ? main : (ENEMY_TRAITS.taunt && a.find(e => e.ct === 'guardian')) || a[0]; if (!m) return [];
     switch (t) {
       case 'one': return [m];
       case 'all': return a;
@@ -1444,6 +1787,7 @@ export class Battle2 {
       case 'other': return this.randomOthers(m, 1);
       case 'two': return [m, ...this.randomOthers(m, 1)];
       case 'three': return [m, ...this.randomOthers(m, 2)];
+      case 'four': return [m, ...this.randomOthers(m, 3)];
     }
   }
   private randomOthers(m: Enemy, n: number): Enemy[] {
@@ -1489,6 +1833,14 @@ function suitOfCond(def: RowDef): Suit | null { return def.cond.t === 'suit' ? d
 
 export function buildBoard(l: Loadout): BoardRow[] {
   const out: BoardRow[] = [];
-  l.tablets.forEach((t, ti) => t.slots.forEach((sl, si) => { const def = slotRow(sl); out.push({ ref: out.length, tablet: ti, slot: si, rowId: sl.rowId, name: def.name, level: sl.level, def }); }));
+  l.tablets.forEach((t, ti) => t.slots.forEach((sl, si) => { const def = slotRow(sl); if (def.tags.includes('basic') || def.tags.includes('meta')) return; out.push({ ref: out.length, tablet: ti, slot: si, rowId: sl.rowId, name: def.name, level: sl.level, def }); }));
   return out;
+}
+/** v4: the loose-dice skill slot of a loadout (tag 'basic'), or null */
+export function buildBasic(l: Loadout): BoardRow | null {
+  for (const [ti, t] of l.tablets.entries()) for (const [si, sl] of t.slots.entries()) {
+    const def = slotRow(sl);
+    if (def.tags.includes('basic')) return { ref: -1, tablet: ti, slot: si, rowId: sl.rowId, name: def.name, level: sl.level, def };
+  }
+  return null;
 }

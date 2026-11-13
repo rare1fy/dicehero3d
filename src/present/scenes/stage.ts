@@ -11,6 +11,7 @@ import { buildSky, noiseTex, runeTex } from '../look/env';
 import { AREA } from './props';
 import { GRADE } from '../look/post';
 import { Cards, ambientTick, shaft, type Ambient } from './cards';
+import { quietBattleGlow } from './battleGlow';
 
 export interface Mood {
   sky: boolean; bg: number; fog: number; fogD: number; hemiSky: number; hemiGround: number; hemiI: number; moon: number; moonI: number; key: number; keyI: number;
@@ -76,7 +77,7 @@ export interface Stage { def: SceneDef; root: THREE.Group; phase2(k: number): vo
 export const CUT = { mode: 'auto' as 'auto' | 'show' | 'hide', far: 30, focus: V3(0, 0, -3) };
 
 let current: Stage | null = null;
-export function showStage(def: SceneDef): Stage {
+export function showStage(def: SceneDef, options: { combat?: boolean } = {}): Stage {
   current?.dispose();
   const g = globals(), root = new THREE.Group(); scene.add(root);
   // the night is dark in colour, not in exposure: lift the whole frame and ease the vignette so characters and props read
@@ -98,7 +99,11 @@ export function showStage(def: SceneDef): Stage {
     ambient(a) { amb.push(a); },
     shaft(x, z, o) { shaft(root, x, z, { color: md.moon, ...o }); },
     w,
-    light(p, color, intensity = 5, dist = 7) { const l = new THREE.PointLight(color, intensity, dist, 1.8); l.position.set(...p); scene.add(l); lights.push(l); },
+    light(p, color, intensity = 5, dist = 7) {
+      const cyan = ((color>>>8)&255) > ((color>>>16)&255)*1.2 && (color&255) > ((color>>>16)&255)*1.2;
+      if(options.combat && cyan) { if(p[2]>-0.5 || (p[0]>4 && p[2]>-5)) return; intensity=Math.min(1.35,intensity); color=0x66a68d; }
+      const l = new THREE.PointLight(color, intensity, dist, 1.8); l.position.set(...p); scene.add(l); lights.push(l);
+    },
     flame(p, color, size = 0.12) { const m = new THREE.Mesh(new THREE.BoxGeometry(size, size * 1.4, size), glow(color, 3)); m.position.set(...p); root.add(m); flames.push({ m, base: size, s: Math.random() * 10 }); },
     water(x0, z0, x1, z1, color) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), new THREE.MeshStandardMaterial({ color, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.82, emissive: new THREE.Color(color).multiplyScalar(0.25) }));
@@ -114,7 +119,8 @@ export function showStage(def: SceneDef): Stage {
     add(o) { root.add(o); },
   };
   def.build(ctx);
-  for (const m of w.build({ glow: 2.6 })) root.add(m);
+  if (options.combat) quietBattleGlow(w);
+  for (const m of w.build({ glow: options.combat ? 1.35 : 2.6 })) root.add(m);
   cards.build(root);
   if (cut.cells.size) for (const m of cut.build({ glow: 2.6 })) cutRoot.add(m);
   const off = { on: true };

@@ -9,16 +9,58 @@ export const FACE_N = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0), 
 export const FACE_U = [new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0)];
 export const FACE_V = [new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0)];
 
-/** A sharp cube (no rounded corners — history item) with each face UV-mapped to tile i of a 6×1 atlas. */
-export function dieGeometry(size: number): THREE.BufferGeometry {
-  const h = size / 2, pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [];
+/**
+ * A cube with each face UV-mapped to tile i of a 6×1 atlas. bevel > 0 (R5, TARGET_MOCKUP "边缘有倒角") cuts a flat 45° chamfer of that
+ * width on every edge (no rounding — history item "不能有圆角"): the painted tile fills the flat face inside the chamfers, each edge strip
+ * and corner triangle samples the border texels of one neighbouring tile (so a glowing tile frame lights the chamfers too), and the
+ * chamfers keep their own flat normal, so the bevel catches the light and the die reads as a thick block, not a paper box.
+ */
+export function dieGeometry(size: number, bevel = 0): THREE.BufferGeometry {
+  const h = size / 2, b = Math.max(0, Math.min(bevel, h * 0.6)), hi = h - b, pos: number[] = [], nor: number[] = [], uv: number[] = [], idx: number[] = [];
+  /** atlas uv of a point on face f's plane (inset keeps chamfer samples off the tile seam) */
+  const uvOn = (f: number, p: THREE.Vector3, inset = 0) => {
+    const a = THREE.MathUtils.clamp(p.dot(FACE_U[f]) / (hi || h), -1 + inset, 1 - inset), c = THREE.MathUtils.clamp(p.dot(FACE_V[f]) / (hi || h), -1 + inset, 1 - inset);
+    return [(f + (a + 1) / 2) / 6, (c + 1) / 2];
+  };
+  const _n = new THREE.Vector3(), _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3();
+  /** a flat polygon (3 or 4 points), wound to face `n` */
+  const poly = (pts: THREE.Vector3[], n: THREE.Vector3, uvs: number[][]) => {
+    const base = pos.length / 3;
+    pts.forEach((p, i) => { pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); uv.push(uvs[i][0], uvs[i][1]); });
+    _n.crossVectors(_e1.subVectors(pts[1], pts[0]), _e2.subVectors(pts[2], pts[0]));
+    const flip = _n.dot(n) < 0, tri = (i: number, j: number, k: number) => (flip ? idx.push(base + i, base + k, base + j) : idx.push(base + i, base + j, base + k));
+    tri(0, 1, 2); if (pts.length === 4) tri(0, 2, 3);
+  };
   for (let f = 0; f < 6; f++) {
-    const N = FACE_N[f], U = FACE_U[f], V = FACE_V[f], base = pos.length / 3;
-    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      const p = N.clone().multiplyScalar(h).addScaledVector(U, a * h).addScaledVector(V, b * h);
-      pos.push(p.x, p.y, p.z); nor.push(N.x, N.y, N.z); uv.push((f + (a + 1) / 2) / 6, (b + 1) / 2);
+    const N = FACE_N[f], U = FACE_U[f], V = FACE_V[f], pts: THREE.Vector3[] = [], uvs: number[][] = [];
+    for (const [a, c] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pts.push(N.clone().multiplyScalar(h).addScaledVector(U, a * hi).addScaledVector(V, c * hi));
+      uvs.push([(f + (a + 1) / 2) / 6, (c + 1) / 2]);
     }
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    poly(pts, N, uvs);
+  }
+  if (b > 0) {
+    const UI = 0.06;   // chamfers sample 6% inside the tile border (past a 1-texel painted bevel at 24 texels, inside the 6-texel glow frame at 80)
+    // 12 edge strips: faces f < g with perpendicular normals; uv from face f's border
+    for (let f = 0; f < 6; f++) for (let g = f + 1; g < 6; g++) {
+      const Nf = FACE_N[f], Ng = FACE_N[g]; if (Math.abs(Nf.dot(Ng)) > 0.5) continue;
+      const E = new THREE.Vector3().crossVectors(Nf, Ng), n = Nf.clone().add(Ng).normalize(), pts: THREE.Vector3[] = [], uvs: number[][] = [];
+      for (const s of [-1, 1]) {
+        const pf = Nf.clone().multiplyScalar(h).addScaledVector(Ng, hi).addScaledVector(E, s * hi);
+        pts.push(pf); uvs.push(uvOn(f, pf, UI));
+      }
+      for (const s of [1, -1]) {
+        const pg = Ng.clone().multiplyScalar(h).addScaledVector(Nf, hi).addScaledVector(E, s * hi);
+        pts.push(pg); uvs.push(uvOn(f, pg, UI));   // the same border texels as the matching point on face f
+      }
+      poly(pts, n, uvs);
+    }
+    // 8 corner triangles: uv from the corner of the x face
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+      const n = new THREE.Vector3(sx, sy, sz).normalize(), fx = sx > 0 ? 0 : 1;
+      const pts = [new THREE.Vector3(sx * h, sy * hi, sz * hi), new THREE.Vector3(sx * hi, sy * h, sz * hi), new THREE.Vector3(sx * hi, sy * hi, sz * h)];
+      const u0 = uvOn(fx, pts[0], UI); poly(pts, n, [u0, u0, u0]);
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));

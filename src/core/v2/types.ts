@@ -56,8 +56,8 @@ export interface TierRule {
 }
 
 // ── effects ──────────────────────────────────────────────
-/** v3: 'other' = one random other enemy (none if alone); 'two' / 'three' = the target plus 1 / 2 others */
-export type Target = 'one' | 'all' | 'adjacent' | 'others' | 'second' | 'other' | 'two' | 'three';
+/** v3: 'other' = one random other enemy (none if alone); 'two' / 'three' / 'four' = the target plus 1 / 2 / 3 others */
+export type Target = 'one' | 'all' | 'adjacent' | 'others' | 'second' | 'other' | 'two' | 'three' | 'four';
 export type StatusV2 = 'poison' | 'burn' | 'freeze' | 'stun' | 'vulnerable' | 'weak' | 'berserk';
 /** v2.2 灼烧: held = layers a 2+ 日行 laid in an earlier play (kept through turn ends until the mage's next play resolves); heldNew = laid by the play in progress */
 export interface Status { type: StatusV2; value: number; duration?: number; held?: number; heldNew?: number }
@@ -86,7 +86,8 @@ export type EffectBody =
 
 export interface Tier { effects: Effect[]; coefMul?: number; coefAdd?: number }
 
-export type Level = 1 | 2 | 3;
+/** row level I–III; v4.2: the 刀鞘 slot (meta row) can reach IV (start 2 → 5 strikes) */
+export type Level = 1 | 2 | 3 | 4;
 export interface EvoDef {
   id: string; name: string; desc: string;
   /** returns the evolved row (pure function over data) */
@@ -108,11 +109,16 @@ export interface RowDef {
   /** flags read by the engine (e.g. 'execute30', 'bolts') with numeric params */
   flags?: Record<string, number>;
   evolutions: [EvoDef, EvoDef];
-  tags: Array<'suit' | 'point' | 'tool' | 'pattern'>;
+  /** 'v4' = rules v4 row; 'basic' = the class loose-dice skill slot; 'meta' = a growth slot with no dice (刀鞘). Neither is on the board */
+  tags: Array<'suit' | 'point' | 'tool' | 'pattern' | 'v4' | 'basic' | 'meta'>;
   /** v3: extra effects added to every tier from this level on (III) */
   levelFx?: Partial<Record<Level, Effect[]>>;
   /** v3: what levels II and III add, for the upgrade card */
   levelDesc?: [string, string];
+  /** v4: highest level this row can reach (default 3); level-up cards and the shop never offer a row at its cap */
+  maxLevel?: Level;
+  /** v4: pure transforms applied by slotRow() for every level the slot has reached (II, then III) */
+  levelUp?: Partial<Record<2 | 3, (r: RowDef) => RowDef>>;
   /** short UI hint: condition icon kind */
   icon: { kind: 'suit' | 'same' | 'straight' | 'atLeast' | 'sum' | 'pairs' | 'mix' | 'twoPair' | 'fullHouse' | 'one' | 'array'; suit?: Suit; suits?: Suit[]; value?: number };
 }

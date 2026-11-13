@@ -31,15 +31,16 @@ const hd = (x: number, y: number) => Math.min(4, 1 + Math.floor(dist(x, y) * 0.7
 
 const LIQ_VS = `varying vec3 vW; varying vec3 vN; varying vec3 vC;
 void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vC = color; gl_Position = projectionMatrix * viewMatrix * w; }`;
-const LIQ_FS = `uniform float uLevel, uAmp, uTime, uK, uS; uniform vec3 uCol, uTop, uDeep; varying vec3 vW; varying vec3 vN; varying vec3 vC;
+const LIQ_FS = `uniform float uLevel, uGhost, uAmp, uTime, uK, uS, uCut; uniform vec3 uCol, uTop, uDeep; varying vec3 vW; varying vec3 vN; varying vec3 vC;
 void main(){
   float surf = uLevel + uAmp * sin(vW.x * uK + uTime * 7.0) + uAmp * 0.5 * sin(vW.x * uK * 2.3 - uTime * 5.0);
-  if (vW.y > surf) discard;
+  if (vW.y > surf) { if (vW.y <= uGhost) { gl_FragColor=vec4(1.0,0.57,0.46,0.65); return; } discard; }
   if (!gl_FrontFacing) { gl_FragColor = vec4(uTop, 1.0); return; }   // seen through the cut: the liquid's surface
   float tone = vN.y > 0.6 ? 1.1 : vN.y < -0.6 ? 0.6 : vN.x > 0.6 ? 0.82 : vN.x < -0.6 ? 0.95 : 1.0;
   float depthK = clamp((surf - vW.y) / (uS * 12.0), 0.0, 1.0);
   vec3 c = mix(uCol, uDeep, depthK * 0.6) * tone * vC;
   if (surf - vW.y < uS * 1.2) c = mix(c, uTop, 0.55);                     // a bright band just under the surface
+  if (vW.y > uCut) c = mix(c, vec3(0.2, 0.03, 0.06), 0.52 + 0.1 * sin(uTime * 4.0));   // R5: what the DoT will take at turn end (one darker band)
   gl_FragColor = vec4(c, 1.0);
 }`;
 
@@ -53,7 +54,12 @@ export class HeartFlask {
   /** layout: centre (CSS px) and height (px) */
   x = 110; y = 600; sizePx = 150;
   st: FlaskState = { hp: 1, maxHp: 1, armor: 0, barrier: 0 };
+  /** R5: HP the poison / burn will take at turn end (drawn as a darker cut at the top of the blood) */
+  dot = 0; private cutShown = 0;
+  /** R5: the armour shield and the digits moved to the status rows / HP pane (v2/hud/status.ts) */
+  showShield = false; showDome = false;
   private shown = 1; private ghost = 1; private wave = new Spring(90, 3.2); private rock = new Spring(140, 7); private pop = new Spring(260, 14);
+  private ghostFrom = 1; private ghostAge = 1;
   private shieldK = 0; private shieldPop = new Spring(300, 12); private domeK = 0; private time = 0; private crackK = [0, 0];
   constructor(private L: UiLayer) {
     this.sparks = new UiSparks(L.scene, 120);
@@ -78,8 +84,8 @@ export class HeartFlask {
     const liq = voxModel(CELL, set => {
       for (let y = 0; y < HH; y++) for (let x = -HW; x <= HW; x++) { if (!m(x, y) || dist(x, y) < 2) continue; const h = hd(x, y) - 1; for (let z = -h; z <= h; z++) set(x, y, z, 0xffffff); }
     }, { centre: [0, 9, 0] });
-    this.liqMat = new THREE.ShaderMaterial({ vertexShader: LIQ_VS, fragmentShader: LIQ_FS, side: THREE.DoubleSide, vertexColors: true,
-      uniforms: { uLevel: { value: 0 }, uAmp: { value: 0 }, uTime: { value: 0 }, uK: { value: 1 }, uS: { value: 1 }, uCol: { value: new THREE.Color(0xc0142a) }, uTop: { value: new THREE.Color(0xff6a5a) }, uDeep: { value: new THREE.Color(0x4a0410) } } });
+    this.liqMat = new THREE.ShaderMaterial({ vertexShader: LIQ_VS, fragmentShader: LIQ_FS, side: THREE.DoubleSide, vertexColors: true, transparent: true,
+      uniforms: { uLevel: { value: 0 }, uGhost: { value: 0 }, uAmp: { value: 0 }, uTime: { value: 0 }, uK: { value: 1 }, uS: { value: 1 }, uCut: { value: 1e9 }, uCol: { value: new THREE.Color(0xc0142a) }, uTop: { value: new THREE.Color(0xff6a5a) }, uDeep: { value: new THREE.Color(0x4a0410) } } });
     let lm: THREE.Mesh | null = null; liq.traverse(o => { const mm = o as THREE.Mesh; if (mm.isMesh) { mm.material = this.liqMat; lm = mm; } });
     this.liquid = lm!; this.body.add(liq);
     // ---- glass: a faint volume over the interior + a straight highlight streak
@@ -90,8 +96,8 @@ export class HeartFlask {
       // the glass tint shows only above the blood (over the blood it would wash the red out to pink)
       fragmentShader: `uniform float uLevel; varying vec3 vW; varying vec3 vN; varying vec3 vC; void main(){ if (vW.y < uLevel) discard; gl_FragColor = vec4(0.16, 0.24, 0.5, 0.14); }`,
       uniforms: { uLevel: this.liqMat.uniforms.uLevel } }); });
-    const hl = voxModel(CELL, set => { for (let y = 8; y <= 12; y++) set(-6, y, 4, 0xffffff, 1); for (let y = 7; y <= 8; y++) set(-5, y, 4, 0xffffff, 1); set(-4, 13, 4, 0xffffff, 1); }, { centre: [0, 9, 0] });
-    hl.traverse(o => { const mm = o as THREE.Mesh; if (mm.isMesh) mm.material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false, toneMapped: false }); });
+    const hl = voxModel(CELL, set => { for (let y = 8; y <= 12; y++) set(-6, y, 4, 0xffffff, 1); for (let y = 7; y <= 8; y++) set(-5, y, 4, 0xffffff, 1); set(-4, 13, 4, 0xffffff, 1); set(-5, 13, 4, 0xffffff, 1); set(5, 12, 4, 0xffffff, 1); set(6, 12, 4, 0xffffff, 1); set(6, 11, 4, 0xffffff, 1); }, { centre: [0, 9, 0] });
+    hl.traverse(o => { const mm = o as THREE.Mesh; if (mm.isMesh) mm.material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false }); });
     this.glass.add(hl); this.body.add(this.glass);
     // ---- cracks: orthogonal zig-zag lines (no diagonals) in two stages
     const crackPaths: Array<Array<[number, number]>> = [
@@ -137,6 +143,10 @@ export class HeartFlask {
   /** set the values (no animation of its own: use hit() / heal() for the beats) */
   set(s: Partial<FlaskState>) {
     const a0 = this.st.armor, b0 = this.st.barrier; Object.assign(this.st, s);
+    const f=Math.max(0,Math.min(1,this.st.hp/Math.max(1,this.st.maxHp)));
+    if(f<this.shown) { this.ghostFrom=Math.max(this.ghost,this.shown); this.ghostAge=0; }
+    else if(f>this.shown) { this.ghost=f; this.ghostAge=1; }
+    this.shown=f;
     if (this.st.armor > a0) { this.shieldPop.kick(14); cue('armor', 0.6); }
     if (this.st.barrier > 0 && b0 <= 0) cue('magic', 0.5);
   }
@@ -156,8 +166,8 @@ export class HeartFlask {
   update(dt: number) {
     this.time += dt;
     const L = this.L, f = Math.max(0, Math.min(1, this.st.hp / Math.max(1, this.st.maxHp)));
-    this.shown += (f - this.shown) * Math.min(1, dt * 6);
-    this.ghost = this.ghost < this.shown ? this.shown : this.ghost + (this.shown - this.ghost) * Math.min(1, dt * 1.5);
+    this.shown=f; this.ghostAge=Math.min(1,this.ghostAge+dt/0.4);
+    this.ghost=f+(this.ghostFrom-f)*(1-this.ghostAge)**2;
     const w = this.wave.step(0, dt), rk = this.rock.step(0, dt), pp = this.pop.step(0, dt);
     const sc = L.px(this.sizePx) / 20;   // model is ~20 cells tall (heart 16 + cork)
     L.at(this.x, this.y, 0, this.root.position); this.root.scale.setScalar(sc * (1 + pp * 0.01));
@@ -167,6 +177,7 @@ export class HeartFlask {
     const yBot = this.root.localToWorld(V3(0, -9 + 1.2, 0)).y, yTop = this.root.localToWorld(V3(0, -9 + 14.6, 0)).y;
     const u = this.liqMat.uniforms; u.uLevel.value = yBot + (yTop - yBot) * this.shown; u.uAmp.value = Math.min(sc * 1.6, Math.abs(w) * sc * 0.08 + sc * 0.12) * (this.shown > 0.01 ? 1 : 0);
     u.uTime.value = this.time; u.uK.value = 0.55 / sc; u.uS.value = sc;
+    u.uGhost.value=yBot+(yTop-yBot)*Math.max(this.shown,this.ghost);
     // cracks
     const low = f < 0.3 ? 1 : 0, vlow = f < 0.15 ? 1 : 0;
     for (const [i, on] of [low, vlow].entries()) { if (on && !this.crackK[i]) { cue('shatter', 0.4); this.sparks.burst(L.at(this.x, this.y - this.sizePx * 0.1, 8), 10, L.px(160), L.px(4), 0xe8f2ff, { life: 0.4 }); } this.crackK[i] = on; this.cracks[i].visible = !!on; }
@@ -177,16 +188,14 @@ export class HeartFlask {
     this.shield.rotation.z = 0.12 + Math.sin(this.time * 2.1) * 0.05;
     // barrier
     this.domeK += ((this.st.barrier > 0 ? 1 : 0) - this.domeK) * Math.min(1, dt * 6);
-    this.dome.visible = this.domeK > 0.01; this.dome.scale.setScalar(0.92 + 0.08 * ease.outBack(Math.min(1, this.domeK)));
+    this.dome.visible = this.showDome && this.domeK > 0.01; this.dome.scale.setScalar(0.92 + 0.08 * ease.outBack(Math.min(1, this.domeK)));
     for (const mt of this.domeMats) mt.opacity = this.domeK * (0.55 + 0.25 * Math.sin(this.time * 3.4));
     this.sparks.update(dt);
-    // digits (full resolution)
-    const T = L.text, hpTxt = `${Math.max(0, Math.round(this.st.hp))}`;
-    T.set('flask.hp', { text: hpTxt, x: this.x + 2, y: this.y + this.sizePx * 0.02, cell: Math.max(3, Math.round(this.sizePx / 34)), color: f < 0.3 ? '#ffd0c8' : '#fff6e2' });
-    T.set('flask.max', { text: `/${this.st.maxHp}`, x: this.x + 2, y: this.y + this.sizePx * 0.2, cell: 2, color: '#e8c8c8' });
-    const shp = L.toPx(this.shield.getWorldPosition(V3()));
-    T.set('flask.armor', { text: String(this.st.armor), x: shp.x, y: shp.y - 2, cell: 3, color: '#e8f0ff', alpha: this.shieldK, scale: 0.6 + 0.4 * this.shieldK });
-    T.set('flask.barrier', { text: this.st.barrier > 0 ? String(this.st.barrier) : '', x: this.x - this.sizePx * 0.5, y: this.y - this.sizePx * 0.52, cell: 3, color: '#bfe4ff', alpha: this.domeK });
+    // R5: the DoT cut (the digits are drawn by the HUD's status rows)
+    const cf = Math.max(0, Math.min(1, (this.st.hp - this.dot) / Math.max(1, this.st.maxHp)));
+    this.cutShown += ((this.dot > 0 ? cf : this.shown) - this.cutShown) * Math.min(1, dt * 6);
+    u.uCut.value = this.dot > 0 ? yBot + (yTop - yBot) * this.cutShown : 1e9;
+    if (!this.showShield) this.shield.visible = false;
   }
 }
 void animP; void R;

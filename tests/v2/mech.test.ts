@@ -35,7 +35,8 @@ describe('warrior', () => {
     const b = mk('warrior', 'w_suit');
     b.reroll([b.s.dice[0].uid]);   // free
     const costs = [0, 1, 2].map(() => (b.reroll([b.s.dice[0].uid]) as { events: Ev2[] }).events.find(e => e.t === 'reroll'));
-    expect(costs.map(e => e && e.t === 'reroll' ? e.hpCost : -1)).toEqual([3, 5, 10]);
+    const hp = b.s.player.maxHp;   // v4 tuning changed the warrior's HP; the formula is what matters
+    expect(costs.map(e => e && e.t === 'reroll' ? e.hpCost : -1)).toEqual([0.02, 0.04, 0.08].map(k => Math.ceil(hp * k - 1e-9)));
   });
   it('a direct kill (behead) gives +1 die next turn, capped at 1', () => {
     const b = mk('warrior', 'w_suit', [['forest_ghoul', 'forest_ghoul', 'forest_ghoul']]);
@@ -47,7 +48,7 @@ describe('warrior', () => {
   });
   it('a perfect guard gives +1 die next turn', () => {
     const b = mk('warrior', 'w_suit', [['forest_ghoul']]);
-    b.s.enemies[0].distance = 0; b.s.player.armor = 100;
+    b.s.enemies[0].distance = 0; b.s.enemies[0].age = 1; b.s.player.armor = 100;   // v4.1: age 1 = the ghoul's first attack
     const ev = b.endTurn().events;
     expect(of(ev, 'playerHit')[0].perfectBlock).toBe(true);
     expect(b.s.turnDice).toBe(4);
@@ -88,13 +89,14 @@ describe('mage', () => {
   });
   it('backlash v2.1: the hit uses the old layers, then +2^N; N runs over the cycle; cap 30; a play clears it', () => {
     const b = mk('mage', 'm_suit', [['forest_ghoul', 'forest_ghoul']]);
-    for (const e of b.s.enemies) e.distance = 0;
+    for (const e of b.s.enemies) { e.distance = 0; e.age = 1; }   // v4.1: the ghoul opens with a guard turn; age 1 = its first attack
     let ev = b.endTurn().events;
     expect(of(ev, 'backlash').map(e => e.stacks)).toEqual([2, 6]);
     const hits = of(ev, 'playerHit');
     expect(hits[1].dmg).toBe(Math.ceil(hits[0].dmg * 1.2 - 1e-9));   // 2nd hit: ×1.2 (2 layers), not ×1.6
     ev = b.endTurn().events;   // second chant turn of the same cycle: N = 3, 4
     expect(of(ev, 'backlash').map(e => e.stacks)).toEqual([14, 30]);
+    for (const e of b.s.enemies) e.age = 1;   // keep them attacking (the ghoul loop has a guard turn)
     ev = b.endTurn().events;
     expect(of(ev, 'backlash').map(e => e.stacks)).toEqual([30, 30]);
     play(b, 'basic', [b.s.dice[0].uid]);
@@ -103,7 +105,7 @@ describe('mage', () => {
   });
   it('chantRisk(): extra damage from backlash if this turn is a chant; 0 for other classes', () => {
     const b = mk('mage', 'm_suit', [['forest_ghoul', 'forest_ghoul']]);
-    for (const e of b.s.enemies) e.distance = 0;
+    for (const e of b.s.enemies) { e.distance = 0; e.age = 1; }   // v4.1: the ghoul opens with a guard turn; age 1 = its first attack
     b.s.chantsThisCycle = 1; b.s.chantHits = 2; b.s.player.backlash = 6;
     expect(b.chantRisk()).toBeGreaterThan(0);
     b.s.player.backlash = 0; b.s.chantHits = 0;
@@ -301,7 +303,7 @@ describe('v2.2 settlement rules', () => {
     const e1 = b.reroll([b.s.dice[0].uid]).events.find(e => e.t === 'reroll');
     const e2 = b.reroll([b.s.dice[0].uid]).events.find(e => e.t === 'reroll');
     expect(e1 && e1.t === 'reroll' ? e1.hpCost : -1).toBe(0);
-    expect(e2 && e2.t === 'reroll' ? e2.hpCost : -1).toBe(Math.ceil(120 * 0.04));
+    expect(e2 && e2.t === 'reroll' ? e2.hpCost : -1).toBe(Math.ceil(b.s.player.maxHp * 0.04 - 1e-9));   // the warrior's HP is a tuning number
   });
   it('日行 2+ burn stays through chant turns and goes out after the next play resolves (a new one stays)', () => {
     const b = mk('mage', 'm_suit', [['forest_ghoul']]);
@@ -334,7 +336,7 @@ describe('v2.2 settlement rules', () => {
   });
   it('backlash gate: no layers outside a chant cycle, none from DoT', () => {
     const b = mk('mage', 'm_suit', [['forest_ghoul', 'forest_ghoul']]);
-    for (const e of b.s.enemies) e.distance = 0;
+    for (const e of b.s.enemies) { e.distance = 0; e.age = 1; }   // v4.1: the ghoul opens with a guard turn; age 1 = its first attack
     play(b, 'basic', [b.s.dice[0].uid]);
     const ev = b.endTurn().events;    // played this turn: no cycle
     expect(b.s.cycleActive).toBe(false);

@@ -34,6 +34,8 @@ export class Loot {
   gold = 0; shownGold = 0; xp = 0; xpMax = 30; shownXp = 0; level = 1;
   /** purse and emblem positions (CSS px), set by the layout */
   purse: Purse = { x: 70, y: 60 }; emblem = { x: 230, y: 640 };
+  /** R5: purse size (px); the class emblem + xp bar and the pixel digits are off (the HUD draws the gold number) */
+  bagPx = 54; showEmblem = false; visible = true;
   /** where experience goes in the world first (the hero's chest), updated by the caller */
   heroAt: () => THREE.Vector3 = () => V3(-2, 1.2, 3);
   onGold: (gold: number) => void = () => {}; onLevel: (lv: number) => void = () => {};
@@ -151,7 +153,7 @@ export class Loot {
     }
     // purse + emblem + bar
     const sq = this.bagSq.step(0, dt);
-    L.at(this.purse.x, this.purse.y, 0, this.bag.position); const bs = L.px(54) / 12; this.bag.scale.set(bs * (1 + sq * 0.015), bs * (1 - sq * 0.02), bs);
+    L.at(this.purse.x, this.purse.y, 0, this.bag.position); const bs = L.px(this.bagPx) / 12; this.bag.scale.set(bs * (1 + sq * 0.015), bs * (1 - sq * 0.02), bs);
     this.bag.rotation.set(-0.15, 0.5 + Math.sin(time * 0.8) * 0.15, Math.sin(time * 1.3) * 0.04);
     const es = this.embSq.step(0, dt); L.at(this.emblem.x, this.emblem.y, 0, this.emb.position); this.emb.scale.setScalar(L.px(48) / 14 * (1 + es * 0.012)); this.emb.rotation.set(-0.1, 0.35, 0);
     this.shownGold += (this.gold - this.shownGold) * Math.min(1, dt * 10); if (Math.abs(this.gold - this.shownGold) < 0.5) this.shownGold = this.gold;
@@ -159,8 +161,9 @@ export class Loot {
     const f = this.shownXp / this.xpMax;
     this.bar.forEach((b, i) => { L.at(this.emblem.x - 36 + i * 8, this.emblem.y + 36, 0, b.position); b.scale.set(L.px(6), L.px(6), L.px(4)); (b.material as THREE.MeshBasicMaterial).color.setHex(i < Math.floor(f * 10 + 0.001) ? 0x5affff : 0x1a2a30).multiplyScalar(i < Math.floor(f * 10 + 0.001) ? 1.5 : 1); });
     this.sparks.update(dt);
-    L.text.set('loot.gold', { text: String(Math.round(this.shownGold)), x: this.purse.x + 34, y: this.purse.y + 4, cell: 4, color: '#ffe08a', align: 'left' });
-    L.text.set('loot.lv', { text: String(this.level), x: this.emblem.x + 30, y: this.emblem.y - 26, cell: 3, color: '#bfffff', align: 'left' });
+    this.bag.visible = this.visible; this.emb.visible = this.showEmblem && this.visible; for (const b of this.bar) b.visible = this.showEmblem && this.visible;
+    if (this.showEmblem) { L.text.set('loot.gold', { text: String(Math.round(this.shownGold)), x: this.purse.x + 34, y: this.purse.y + 4, cell: 4, color: '#ffe08a', align: 'left' }); L.text.set('loot.lv', { text: String(this.level), x: this.emblem.x + 30, y: this.emblem.y - 26, cell: 3, color: '#bfffff', align: 'left' }); }
+    else { L.text.hide('loot.gold'); L.text.hide('loot.lv'); }
   }
 }
 

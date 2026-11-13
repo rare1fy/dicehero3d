@@ -2,7 +2,7 @@
 // HP, gold, xp / level, loadout (tablet rows and their levels), talents, relics, potions. Rules only; deterministic per seed.
 import { createRng, type Rng } from '../rng';
 import { Battle2, type FightKind } from './battle2';
-import { CLASSES, ECON, PROTO_RELICS, TABLETS, TALENTS, TALENT_FILLERS, addableRows, loadoutA, loadoutB, relicV2, rowDef, slotRow, xpToNext } from './data';
+import { CLASSES, ECON, PROTO_RELICS, TABLETS, TALENTS, TALENT_FILLERS, addableRows, loadoutA, loadoutB, maxLevelOf, relicV2, rowDef, slotRow, xpToNext } from './data';
 import type { ClassId, Level, Loadout, RowSlot } from './types';
 
 export type NodeKind = 'normal' | 'elite' | 'shop' | 'camp' | 'midBoss';
@@ -114,7 +114,7 @@ export class Run2 {
       const card = c.cards[index]; if (!card) return { ok: false, reason: '没有这张卡' };
       const t = s.loadout.tablets[card.tablet];
       if (card.kind === 'addRow') t.slots.push({ rowId: card.rowId, level: 1, borrowed: card.borrowed || undefined });
-      else if (card.kind === 'upgrade') t.slots[card.slot].level = Math.min(3, t.slots[card.slot].level + 1) as Level;
+      else if (card.kind === 'upgrade') t.slots[card.slot].level = Math.min(maxLevelOf(t.slots[card.slot].rowId), t.slots[card.slot].level + 1) as Level;
       else t.slots[card.slot].evolvedTo = card.options[sub === 1 ? 1 : 0];
     } else if (c.kind === 'talent') {
       const o = c.options[index]; if (!o) return { ok: false, reason: '没有这个天赋' };
@@ -135,7 +135,7 @@ export class Run2 {
     // version B edits tablet 0; version A: the "add row" card swaps the other row in (SPEC 2.4), kept simple: upgrades / evolves only
     const slots: Array<{ tablet: number; slot: number; sl: RowSlot }> = [];
     s.loadout.tablets.forEach((t, ti) => t.slots.forEach((sl, si) => slots.push({ tablet: ti, slot: si, sl })));
-    const upg = () => { const c = slots.filter(x => x.sl.level < 3 && !cards.some(k => k.kind === 'upgrade' && k.tablet === x.tablet && k.slot === x.slot)); return c.length ? this.rng.pick(c) : null; };
+    const upg = () => { const c = slots.filter(x => x.sl.level < maxLevelOf(x.sl.rowId) && !cards.some(k => k.kind === 'upgrade' && k.tablet === x.tablet && k.slot === x.slot)); return c.length ? this.rng.pick(c) : null; };
     const t0 = s.loadout.tablets[0], tdef = TABLETS[t0.tabletId];
     // left: add a row
     const add = s.loadout.version === 'B' && t0.slots.length < tdef.maxRows ? addableRows(t0.tabletId, t0.slots) : [];
@@ -175,7 +175,7 @@ export class Run2 {
     if (pool[0]) items.push({ kind: 'relic', id: pool[0].id, price: ECON.salePrice, sold: false, sale: true });
     if (pool[1]) items.push({ kind: 'relic', id: pool[1].id, price: ECON.relicPrice[pool[1].rarity], sold: false });
     items.push({ kind: 'potion', price: ECON.potionPrice, sold: false });
-    const up = s.loadout.tablets.flatMap((t, ti) => t.slots.map((sl, si) => ({ ti, si, sl }))).filter(x => x.sl.level < 3);
+    const up = s.loadout.tablets.flatMap((t, ti) => t.slots.map((sl, si) => ({ ti, si, sl }))).filter(x => x.sl.level < maxLevelOf(x.sl.rowId));
     if (up.length) { const x = this.rng.pick(up); items.push({ kind: 'engrave', tablet: x.ti, slot: x.si, price: ECON.engravePrice[x.sl.level - 1], sold: false }); }
     return items;
   }
@@ -187,7 +187,7 @@ export class Run2 {
     s.gold -= it.price;
     if (it.kind === 'relic') { s.relics.push(it.id); it.sold = true; }
     else if (it.kind === 'potion') { s.potions++; s.shopBought.potions++; it.price += ECON.potionStep; }
-    else { const sl = s.loadout.tablets[it.tablet].slots[it.slot]; sl.level = Math.min(3, sl.level + 1) as Level; s.shopBought.engrave++; it.sold = true; }
+    else { const sl = s.loadout.tablets[it.tablet].slots[it.slot]; sl.level = Math.min(maxLevelOf(sl.rowId), sl.level + 1) as Level; s.shopBought.engrave++; it.sold = true; }
     return { ok: true };
   }
   refreshShop(): { ok: boolean; reason?: string } {

@@ -36,7 +36,7 @@ export const ECON = {
   salePrice: 42,           // 特价 = common × 0.6
   potionPrice: 35, potionStep: 20, potionHealPct: 0.25,
   refreshPrice: 20, refreshStep: 20,
-  engravePrice: [50, 100] as [number, number],   // → II / → III
+  engravePrice: [50, 100, 150] as [number, number, number],   // → II / → III / → IV (v4.2: only the 刀鞘 slot has IV)
   engraveMax: 2,
   campRestPct: 0.35, campTrainXp: 60,
   bossHealPct: 0.6,

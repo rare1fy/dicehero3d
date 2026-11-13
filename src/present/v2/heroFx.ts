@@ -1,17 +1,21 @@
-// fx4: the class state shown on the hero model instead of HUD text (SHOW3 #16). Read from the live Battle2 state every frame.
-// Over the head (camera-facing voxel icons): mage = 3-cell chant ring, warrior = 5 blood drops (血怒), rogue = 2 daggers (strikes left)
+// 职业状态读演出快照，不能在敌方动作尚未播放时提前补满下一回合的刀鞘。
+// Over the head (camera-facing voxel icons): mage = 3-cell chant ring, warrior = 5 blood drops (血怒), rogue = the scabbard (UX_V3 §8:
+// one dagger per strike left this turn, drawn out right to left leaving dashed empty slots; the last one orange and blinking; none =
+// all grey + 「刀尽」; never a 'full combo' glow)
 // plus a shadow icon that flashes when the first strike grants the free reroll. On the body (pixel particles, rising straight up):
-// mage star energy by chant turns, barrier = a pale box shell, backlash = purple-black crack sparks; warrior fury flames by rage, a
+// mage star energy by chant turns, barrier = a voxel hemisphere, backlash = purple-black crack sparks; warrior fury flames by rage, a
 // burning hand while a fury die is on the field. Tap the hero → a tips pane with the exact numbers.
 import * as THREE from 'three';
 import { scene, camera, V3, R } from '../engine/world';
 import { PADD, PALPHA, TILE } from '../engine/particles';
 import { voxModel } from '../ui3d/vox';
+import { arcSlab } from './hud/models';
 import { worldToUi } from '../ui3d/layer';
 import type { BattleActor } from '../bestiary/battle';
 import type { Battle2 } from '../../core/v2/battle2';
 import type { ClassId } from '../../core/v2/types';
 import { Overlay, Pane, panel, text, textW, PIX_H } from './overlay';
+import { BarrierDome } from './barrierDome';
 
 const CELL = 0.055;
 const DROP = ['..#..', '.###.', '#####', '#####', '.###.'];
@@ -24,14 +28,27 @@ function iconModel(rows: string[], main: number, acc: number, glow: boolean) {
   const H = rows.length;
   return voxModel(CELL, set => rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch === '.') return; for (let z = 0; z < 2; z++) set(i, H - 1 - j, z, ch === 'o' ? acc : main, glow ? 1 : 0); })), { glow: 1.25 });
 }
-interface Slot { on: THREE.Group; off: THREE.Group; g: THREE.Group; pop: number; was: boolean }
+interface Slot { on: THREE.Group; off: THREE.Group; g: THREE.Group; pop: number; was: boolean; last?: THREE.Group }
+/** the dashed outline of a pixel icon (every other edge cell): an empty scabbard slot */
+function dashModel(rows: string[], col: number) {
+  const H = rows.length, on = (i: number, j: number) => rows[j]?.[i] === '#';
+  return voxModel(CELL, set => rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch !== '#') return; const edge = !on(i - 1, j) || !on(i + 1, j) || !on(i, j - 1) || !on(i, j + 1); if (edge && (i + j) % 2 === 0) set(i, H - 1 - j, 0, col); })), { glow: 0 });
+}
+function wordSprite(t: string) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 48; const g = c.getContext('2d')!;
+  g.font = '900 30px "Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  g.lineWidth = 6; g.strokeStyle = 'rgba(8,6,14,0.9)'; g.strokeText(t, 64, 26); g.fillStyle = '#9a94a8'; g.fillText(t, 64, 26);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false })); sp.scale.set(1.0, 0.375, 1); sp.renderOrder = 21; return sp;
+}
 
 export class HeroFx {
-  private head = new THREE.Group(); private shell: THREE.Mesh; private shellMat: THREE.MeshBasicMaterial; private edge: THREE.LineSegments; private edgeMat: THREE.LineBasicMaterial;
+  private head = new THREE.Group(); private dome = new BarrierDome(); private shownState: Battle2['s'] | null = null;
   private sets: Record<ClassId, Slot[]> = { warrior: [], mage: [], rogue: [] };
-  private shadow: THREE.Group; private shadowT = 0; private lastStrikes = 0; private barrierK = 0; private t = 0;
+  private shadow: THREE.Group; private shadowT = 0; private lastStrikes = 0; private t = 0;
   private acc = { star: 0, crack: 0, rage: 0, hand: 0 };
   private tip: Pane; tipOn = false; private cls: ClassId = 'warrior';
+  private orbit = new THREE.Group(); private orbitMat!: THREE.MeshBasicMaterial; private spent: THREE.Sprite;
   constructor(private ov: Overlay) {
     scene.add(this.head);
     const mk = (rows: string[], on: [number, number], off: [number, number], x: number, y = 0): Slot => {
@@ -39,37 +56,61 @@ export class HeroFx {
       g.add(a, b); g.position.set(x, y, 0); this.head.add(g); return { on: a, off: b, g, pop: 0, was: false };
     };
     for (let i = 0; i < 5; i++) this.sets.warrior.push(mk(DROP, [0xff2a20, 0xff9a80], [0x2a1416, 0x3a1a1c], (i - 2) * 6.5 * CELL));
-    for (let i = 0; i < 3; i++) this.sets.mage.push(mk(RUNE, [0x6aa8ff, 0xe0f4ff], [0x1a2238, 0x262e48], (i - 1) * 6.5 * CELL, i === 1 ? 1.5 * CELL : 0));
-    for (let i = 0; i < 2; i++) this.sets.rogue.push(mk(DAGGER, [0xb8a0e8, 0x8a50d8], [0x242030, 0x1a1622], (i - 0.5) * 7 * CELL));
+    // R5: the mage's chant ring = an arch of three thick arcs over the head (mockup), lit cyan per filled cell
+    const arcOn = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x40e0ff).multiplyScalar(1.6), toneMapped: false }), arcOff = new THREE.MeshBasicMaterial({ color: 0x3a4658, transparent: true, opacity: 0.85, toneMapped: false });
+    for (let i = 0; i < 3; i++) {
+      const a1 = (160 - i * 50) * Math.PI / 180, a0 = a1 - 40 * Math.PI / 180, g = new THREE.Group();
+      const on = new THREE.Group(), off = new THREE.Group(); on.add(arcSlab(0.5, 0.62, a0, a1, 0.08, arcOn)); off.add(arcSlab(0.5, 0.62, a0, a1, 0.08, arcOff));
+      g.add(on, off); g.position.set(0, -0.35, 0); this.head.add(g); this.sets.mage.push({ on, off, g, pop: 0, was: false });
+    }
+    // R5: a dotted cyan orbit round the mage's body (mockup)
+    const om = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x40e0ff).multiplyScalar(1.5), transparent: true, toneMapped: false });
+    for (let i = 0; i < 18; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.07), om); this.orbit.add(m); }
+    this.orbitMat = om; this.orbit.visible = false; scene.add(this.orbit);
+    // the rogue's scabbard: up to 6 slots (5 strikes + the 无尽连斩 awakening slot)
+    for (let i = 0; i < 6; i++) {
+      const g = new THREE.Group(), on = iconModel(DAGGER, 0xd8c8ff, 0x8a50d8, true), off = dashModel(DAGGER, 0x5a5468), last = iconModel(DAGGER, 0xff9a30, 0xffe0a0, true);
+      g.add(on, off, last); this.head.add(g); this.sets.rogue.push({ on, off, g, pop: 0, was: false, last });
+    }
+    this.spent = wordSprite('刀尽'); this.spent.position.set(0, -0.42, 0); this.spent.visible = false; this.head.add(this.spent);
     this.shadow = iconModel(SHADOW, 0x5a30a0, 0xffd0ff, true); this.shadow.position.set(0, 9 * CELL, 0); this.shadow.visible = false; this.head.add(this.shadow);
-    // the barrier: a pale box shell with crisp edges (axis-aligned, no curves)
-    this.shellMat = new THREE.MeshBasicMaterial({ color: 0x6ab8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
-    this.shell = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.shellMat); this.shell.renderOrder = 5;
-    this.edgeMat = new THREE.LineBasicMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-    this.edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), this.edgeMat); this.shell.add(this.edge);
-    scene.add(this.shell);
+    scene.add(this.dome.root);
     this.tip = ov.pane(12); this.tip.visible = false;
   }
 
   /** call every frame; hero / b null (or not in battle) hides everything */
-  update(dt: number, hero: BattleActor | null, b: Battle2 | null, cls: ClassId, on: boolean) {
+  update(dt: number, hero: BattleActor | null, b: Battle2 | null, cls: ClassId, on: boolean, shown: Battle2['s'] | null = null) {
     this.t += dt; this.cls = cls;
     const live = on && !!hero && !!b && hero.root.visible && !hero.dead;
-    this.head.visible = live; this.shell.visible = live;
+    this.head.visible = live; this.dome.root.visible = live; if (!live) this.orbit.visible = false;
     if (!live) { this.tip.visible = false; this.tipOn = false; return; }
-    const s = b!.s, p = s.player, h = hero!;
+    const s = shown ?? b!.s, p = s.player, h = hero!; this.shownState = s;
     // ---- over the head
     const top = h.root.position.clone().add(V3(0, h.top + 0.85, 0));
     this.head.position.copy(top); this.head.quaternion.copy(camera.quaternion);
+    // R5: the mage's orbit (brighter with the chant ring)
+    this.orbit.visible = cls === 'mage';
+    if (cls === 'mage') {
+      const k = 0.35 + 0.22 * s.chantRing, base = h.root.position, rw = Math.max(0.8, h.width * 0.85);
+      this.orbit.children.forEach((m, i) => { const a = this.t * 0.9 + (i / 18) * Math.PI * 2; m.position.set(base.x + Math.cos(a) * rw, base.y + 0.75 + Math.sin(a * 2 + this.t) * 0.06, base.z + Math.sin(a) * rw * 0.8); m.scale.setScalar(0.7 + 0.5 * Math.sin(a * 3 + this.t * 4) ** 2); });
+      this.orbitMat.opacity = Math.min(1, k);
+    }
     for (const c of Object.keys(this.sets) as ClassId[]) for (const sl of this.sets[c]) sl.g.visible = c === cls;
     const lit: boolean[] = cls === 'warrior' ? this.sets.warrior.map((_, i) => i < p.rage) : cls === 'mage' ? this.sets.mage.map((_, i) => i < s.chantRing) : [];
-    // rogue: daggers = strikes left this turn (max 2 shown); the used one goes dark
-    if (cls === 'rogue') { const left = s.phase === 'player' ? Math.max(0, s.maxStrikes - s.strikesUsed) : s.maxStrikes; this.sets.rogue.forEach((_, i) => { lit[i] = i < Math.min(2, left); }); }
+    // rogue: the scabbard = strikes left this turn (drawn out right to left, never refilled mid-turn)
+    let rogueLeft = 0, rogueN = 0;
+    if (cls === 'rogue') { rogueN = Math.max(1, Math.min(6, s.maxStrikes)); rogueLeft = Math.max(0, s.maxStrikes - s.strikesUsed); this.sets.rogue.forEach((_, i) => { lit[i] = i < rogueLeft; }); }
+    this.spent.visible = cls === 'rogue' && rogueLeft === 0;
     this.sets[cls].forEach((sl, i) => {
       const o = !!lit[i]; if (o && !sl.was) sl.pop = 1; sl.was = o;
       sl.on.visible = o; sl.off.visible = !o; sl.pop = Math.max(0, sl.pop - dt * 3);
+      if (cls === 'rogue') {   // the last dagger: orange, blinking; slots past the strike cap hidden
+        const lastOne = o && rogueLeft === 1 && i === 0; sl.on.visible = o && !lastOne; if (sl.last) sl.last.visible = lastOne && Math.sin(this.t * 9) > -0.4;
+        sl.g.visible = i < rogueN; sl.g.position.x = (i - (rogueN - 1) / 2) * 6.5 * CELL; sl.g.scale.setScalar(1); sl.g.position.y = 0; return;
+      }
       const bob = cls === 'mage' && o ? Math.sin(this.t * 2 + i) * 0.4 * CELL : 0;
-      sl.g.scale.setScalar(1 + sl.pop * 0.6); sl.g.position.y = (cls === 'mage' && i === 1 ? 1.5 * CELL : 0) + bob + sl.pop * 2 * CELL;
+      if (cls === 'mage') { sl.g.scale.setScalar(1 + sl.pop * 0.25); sl.g.position.y = -0.35 + sl.pop * 0.08; void bob; }
+      else { sl.g.scale.setScalar(1 + sl.pop * 0.6); sl.g.position.y = bob + sl.pop * 2 * CELL; }
     });
     // rogue: the first strike's free reroll → the shadow icon flashes (blinks for 1.2 s)
     if (cls === 'rogue') { if (s.strikesUsed === 1 && this.lastStrikes === 0) this.shadowT = 1.4; this.lastStrikes = s.strikesUsed; }
@@ -79,12 +120,7 @@ export class HeroFx {
     // ---- the body
     const base = h.root.position, w = Math.max(0.6, Math.min(1.6, h.width)), ht = Math.max(1, h.height);
     const around = (k = 1) => base.clone().add(V3(R(-0.5, 0.5) * w * k, R(0.1, 0.9) * ht, R(-0.5, 0.5) * w * k));
-    // barrier shell
-    this.barrierK += ((p.barrier > 0 ? 1 : 0) - this.barrierK) * Math.min(1, dt * 6);
-    this.shell.position.copy(base).add(V3(0, ht * 0.55, 0)); this.shell.scale.set(w + 0.5, ht + 0.5, w + 0.5);
-    this.shell.quaternion.setFromAxisAngle(V3(0, 1, 0), h.root.rotation.y);
-    const pulse = 0.85 + 0.15 * Math.sin(this.t * 3);
-    this.shellMat.opacity = 0.06 * this.barrierK * pulse; this.edgeMat.opacity = 0.28 * this.barrierK * pulse; this.shell.visible = this.barrierK > 0.02;
+    this.dome.update(dt, h, p.barrier, s.dice.length+s.carry.length);
     const emit = (key: keyof HeroFx['acc'], rate: number, fn: () => void) => { this.acc[key] += rate * dt; let n = 0; while (this.acc[key] >= 1 && n++ < 12) { this.acc[key] -= 1; fn(); } if (rate <= 0) this.acc[key] = 0; };
     if (cls === 'mage') {
       const k = s.chantRing + (s.overcharge || 0) * 0.7;
@@ -117,7 +153,7 @@ export class HeroFx {
   }
 
   private lines(b: Battle2): Array<[string, string]> {
-    const s = b.s, p = s.player, out: Array<[string, string]> = [[`生命 ${p.hp}/${p.maxHp}${p.armor ? `  护甲 ${p.armor}` : ''}`, '#ffb0a0']];
+    const s = this.shownState ?? b.s, p = s.player, out: Array<[string, string]> = [[`生命 ${p.hp}/${p.maxHp}${p.armor ? `  护甲 ${p.armor}` : ''}`, '#ffb0a0']];
     if (this.cls === 'warrior') {
       out.push([`血怒 ${p.rage}/5（头顶血滴）`, '#ff8a7a'], ['卖血重投攒血怒，身上怒焰随层数变大', '#d8c0b8']);
       if (s.overflow > 0) out.push([`溢出 ${s.overflow} 颗 · 本回合加伤`, '#ffb070']);
@@ -130,7 +166,7 @@ export class HeroFx {
       if (p.backlash) out.push([`反噬 ${p.backlash} 层（紫黑裂纹）`, '#d090ff']);
       const risk = s.phase === 'player' ? b.chantRisk() : 0; if (risk) out.push([`再吟唱一回合 多受 ${risk}`, '#d090ff']);
     } else {
-      const left = s.phase === 'player' ? b.strikesLeft() : s.maxStrikes;
+      const left = Math.max(0,s.maxStrikes-s.strikesUsed);
       out.push([`本回合剩 ${left}/${s.maxStrikes} 刀（头顶匕首）`, '#e0a8ff'], ['第一刀后白送一次重投（影子闪一下）', '#c8b8e0']);
       if (s.freeRerollsLeft) out.push([`免费重投 ×${s.freeRerollsLeft}`, '#8ad8ff']);
       const sh = s.dice.filter(x => x.kind === 'shadowDie').length; if (sh) out.push([`暗影残骰 ${sh}`, '#c890ff']);

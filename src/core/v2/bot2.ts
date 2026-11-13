@@ -6,6 +6,7 @@ import type { Battle2, KnifeShape, RowRef } from './battle2';
 import { kindSuit, kindValues } from './battle2';
 import { matchRow, subsets } from './cond';
 import type { Die, Enemy, Face, RowDef } from './types';
+import { botTurnV4 } from './bot4';
 import { TIER_ORDER } from './types';
 
 export interface Cand { ref: RowRef; uids: number[]; target: number; mark?: KnifeShape }
@@ -86,7 +87,7 @@ export function chooseReroll(b: Battle2, rnd: () => number, samples = 10): numbe
 
 /** every legal (row, dice) pair right now, one target per pair (all enemies tried for single-target rows) */
 export function candidates(b: Battle2): Cand[] {
-  const dice = b.dice(); const out: Cand[] = []; const foes = b.alive(); if (!foes.length) return out;
+  const dice = b.dice(); const out: Cand[] = []; const foes = b.alive().filter(e => b.canTarget(e.uid)); if (!foes.length) return out;
   const subs = subsets(dice.length);
   const rows = b.rows();
   const shapes = b.markShapes();
@@ -159,6 +160,7 @@ export function bestPlay(b: Battle2, depth = b.cls.id === 'rogue' ? 2 : 1): { c:
 
 /** Plays the current player turn to its end (including endTurn). */
 export function botTurn(b: Battle2, rnd: () => number): void {
+  if (b.v4) { botTurnV4(b, rnd); return; }
   if (b.cls.id === 'rogue') chaseThousand(b);
   let guard = 0;
   while (b.s.phase === 'player' && !b.s.result && guard++ < 40) {
