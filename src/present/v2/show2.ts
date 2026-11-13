@@ -2,7 +2,7 @@
 // boss (枯骨巫妖) → result. Rules come only from Run2 / Battle2 (core/v2): every action returns events, and every event becomes a
 // staged beat (actors, dice, the UI-layer kit from ui3d, the 2D overlay, sound). Live state is read back only at the end of a batch.
 import * as THREE from 'three';
-import { V3, R, onUpdate, camera as CAMERA } from '../engine/world';
+import { V3, R, onUpdate, camera as CAMERA, scene as SCENE } from '../engine/world';
 import { wait, anim, animP, ease, lerp, shake, hitstop, slowmo, after, clock, FX } from '../engine/clock';
 import { CAM } from '../engine/gfx';
 import { shot, staticShot } from '../director';
@@ -34,6 +34,7 @@ import { PREFS, SPEEDS, loadPrefs, tickPrefs } from './meta/prefs';
 import { saveRun, clearRun, loadRun } from './meta/save';
 import { PauseButton } from './meta/pauseBtn';
 import { DieTip } from './meta/dieTip';
+import { ClassPick } from './meta/classPick';
 import { safeInsets } from './hud/hud';
 import type { Ev2, GainReason } from '../../core/v2/events2';
 import type { ClassId, DieKind, StatusV2 } from '../../core/v2/types';
@@ -65,11 +66,6 @@ const GAIN_CN: Record<GainReason, string> = { behead: '斩首', guard: '格挡',
 const NODE_SCENE: Record<string, string> = { normal: 'n_trail', elite: 'n_lumber', shop: 'c_merchant', midBoss: 'b_lich' };
 const NODE_CN: Record<string, [string, string]> = { normal: ['雾林小径', '普通战 · 两波'], elite: ['废弃伐木场', '精英 · 狼人首领'], midBoss: ['墓园祭坛', '首领 · 枯骨巫妖'], shop: ['林边货车', '商人'] };
 const CLASS_IDS: ClassId[] = ['warrior', 'mage', 'rogue'];
-const CLASS_LINES: Record<ClassId, string[]> = {
-  warrior: ['散骰几颗都行：劈砍或铁壁二选一', '斩杀再动；完防下回合 +1 骰', '卖血重投，斩首或完防还你一半'],
-  mage: ['骰子留场，每回合补 1 颗（最多 6）', '交 3 颗以内是小咒，照样吟唱', '交 4 颗以上释放大招；吟唱有屏障'],
-  rogue: ['有骰子就能接着出手，刀鞘是上限（会成长）', '每多一刀 +20%', '袖箭、影步补骰续刀；背刺、影舞收尾'],
-};
 const ROMAN = ['', 'I', 'II', 'III'];
 const gainSpecial = (r: GainReason): SpecialId | undefined => (r === 'fury' || r === 'furyUlt' ? 'fury' : r === 'shadow' || r === 'precise' || r === 'mark' ? 'shadowres' : r === 'titan' ? 'titan' : undefined);
 const hex = (s: string) => parseInt(s.slice(1), 16);
@@ -111,6 +107,7 @@ export class V2Show {
     this.loot = new Loot(L, 'warrior'); this.mech = new ClassMech(L, skin);
     this.banner = new Banner(this.ov); this.toast = new Toast(this.ov); this.screen = new Screen(this.ov);
     this.menu = new Menu(this.ov); this.pauseBtn = new PauseButton(this.ov); this.dieTip = new DieTip(this.ov); loadPrefs();
+    this.classPick = new ClassPick({ L: this.L, ov: this.ov, menu: this.menu, scene: SCENE, actors: () => this.picks, pick: c => this.pick(c), back: () => this.toTitle() });
     this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10);
     this.giveUp = this.ov.pane(11, true); this.endPane = this.ov.pane(11);
     this.loot.heroAt = () => (this.hero ? this.hero.chest() : V3(-2, 1.2, 3));
@@ -129,14 +126,14 @@ export class V2Show {
   }
 
   // ------------------------------------------------------------ meta screens (console shell: title / pause / settings / save)
-  menu: Menu; pauseBtn: PauseButton; paused = false;
+  menu: Menu; pauseBtn: PauseButton; paused = false; classPick: ClassPick;
   private host(): MetaHost {
     return { menu: this.menu, newRun: () => { this.menu.close(); this.classSelect(); }, continueRun: () => this.continueRun(), toTitle: () => this.toTitle(),
       abandonRun: () => { clearRun(); this.toTitle(); }, resume: () => this.resume() };
   }
   /** title screen over the forest path, the camera drifting slowly */
   title() {
-    this.mode = 'title'; this.paused = false; this.result = null; this.botBusy = false; this.screen.close(); this.reopen = null; this.cleanupWorld(); GRADE.desat = 0;
+    this.mode = 'title'; this.paused = false; this.result = null; this.botBusy = false; this.screen.close(); this.reopen = null; if (this.classPick.on) this.classPick.close(); this.cleanupWorld(); GRADE.desat = 0;
     this.hudRun(false); this.hudBattle(false); this.pauseBtn.show(false); FX.speed = SPEEDS[PREFS.speed];
     this.stage = showStage(SCENES.find(s => s.id === 'n_trail')!);
     this.picks = CLASS_IDS.map((c, i) => { const a = new BattleActor(c); a.place(V3(-2.6 + i * 2.6, 0, -1.2 - (i === 1 ? 0.6 : 0))); a.faceToward(V3(-2.6 + i * 2.6, 0, 12)); return a; });
@@ -175,6 +172,7 @@ export class V2Show {
     CAM.shift = W > H ? Math.round(H * 0.06) : 0;
     if (this.mode === 'battle' && this.hero && this.b) { this.reframePending = true; void this.reframe(true, 0); }
     if (this.screen.on) this.reopen?.();
+    if (this.classPick.on) this.classPick.relayout();
   }
   private reopen: (() => void) | null = null;
   private get k() { return Math.min(1, this.ov.h / 720); }
@@ -193,28 +191,9 @@ export class V2Show {
     this.hudRun(false); this.hudBattle(false);
     this.stage = showStage(SCENES.find(s => s.id === 'n_trail')!);
     this.picks = CLASS_IDS.map((c, i) => { const a = new BattleActor(c); a.place(V3(-3.4 + i * 3.4, 0, 0.6)); a.faceToward(V3(-3.4 + i * 3.4, 0, 12)); return a; });
-    shot('select', staticShot(V3(0, 3.6, 10.5), V3(0, 1.6, 0), 40), { cut: true });
-    const open = () => {
-      const ov = this.ov, k = this.k, W = ov.w, H = ov.h, cw = Math.min(360, W * 0.3), ch = 210 * k + 40;
-      this.screen.open(0);
-      this.screen.add('title' + W, { x: W / 2 - 300, y: 18 * k, w: 600, h: 70 * k + 20 }, (g, d, w) => { text(g, '选择职业', w / 2, 10 * d, Math.round(ov.fp * 2 * d), '#ffe6a0', 'center'); });
-      CLASS_IDS.forEach((c, i) => {
-        const x = W / 2 + (i - 1) * (cw + 24 * k) - cw / 2, y = H - ch - 24 * k;
-        this.screen.button('cls' + i, { x, y, w: cw, h: ch }, (g, d, w, h) => {
-          const u = ov.fp / 2; panel(g, 0, 0, w, h, 3 * d, { body: '#1a1422', rim: CLASS_COL[c], line: '#07050a', hi: '#2a2234' });
-          const s2 = Math.max(1, Math.round(2 * u * d)), s1 = Math.max(1, Math.round(1.5 * u * d)) ;
-          text(g, CLASSES[c].name, w / 2, 14 * d, s2, '#fff2d8', 'center');
-          text(g, `生命 ${CLASSES[c].hp}`, w / 2, 14 * d + PIX_H * s2 + 6 * d, s1, '#ff9a8a', 'center');
-          let yy = 14 * d + PIX_H * (s2 + s1) + 18 * d;
-          for (const ln of CLASS_LINES[c]) {
-            icon(g, ICON.star, 16 * d, yy + 2 * d, s1 * 1.0, { main: CLASS_COL[c] });
-            for (const part of pixWrap(ln, (w - 16 * d - 14 * s1 - 12 * d) / s1)) { text(g, part, 16 * d + 14 * s1, yy, s1, '#e8dcc8'); yy += PIX_H * s1 + 4 * d; }
-            yy += 2 * d;
-          }
-        }, () => this.pick(c));
-      });
-    };
-    this.reopen = open; open();
+    // user: 「不要常显介绍面板，点一个职业再拉近，然后出介绍的UI面板」 → meta/classPick.ts (name plates, zoom, tilted info card)
+    this.screen.close(); this.reopen = null; this.L.on = true; this.flask.root.visible = false;   // the info card lives in the UI 3D layer (nothing else of it shows here)
+    this.classPick.focus = Math.max(0, CLASS_IDS.indexOf(this.cls)); this.classPick.open();
   }
 
   pick(c: ClassId, seed = (Date.now() % 100000) | 0) {
@@ -222,6 +201,8 @@ export class V2Show {
   }
   private startRun(run: Run2, logLine: string) {
     const c = run.s.classId;
+    if (this.classPick.on) this.classPick.close();
+    this.flask.root.visible = true;
     this.menu.close(); this.screen.close(); this.reopen = null; cue('select', 0.8); void audio.unlock().then(() => audio.playMusic('bgm_battle', 0.6));
     this.cls = c; this.run = run; this.result = null; this.tauntSeen = false; this.paused = false; FX.speed = SPEEDS[PREFS.speed];
     const skin: SuitSkin = { cls: c, scheme: 'A', plain: true };
@@ -895,6 +876,7 @@ export class V2Show {
   }
   /** one bot step (called every 0.3 s while the bot is on): tap a screen button, or play the next action of botTurn */
   private botTick() {
+    if (this.mode === 'select' && this.classPick.on) { this.pick(this.cls); return; }
     if (this.screen.on) {
       if (this.screen.t < 0.5) return;
       if (this.mode === 'select') { this.screen.tap('cls' + CLASS_IDS.indexOf(this.cls)); return; }
@@ -995,6 +977,7 @@ export class V2Show {
   private frame(dt: number) {
     const t = clock.time;
     this.menu.update(clock.rdt); tickPrefs(); this.pollStart(); this.dieHold();
+    if (this.classPick.on) this.classPick.tick();
     if (this.paused) FX.speed = 0;
     this.pauseBtn.show(!this.menu.on && (this.mode === 'battle' || this.mode === 'shop' || this.mode === 'choice'));
     // R7B #6 (user: 「放大的技能按钮长按不动的时候要出 tips 才行吧」): holding the play button still for 0.4 s opens its tip
@@ -1071,6 +1054,7 @@ export class V2Show {
   private swipe: { on: boolean; seen: Set<number>; t: number; x: number; y: number; die: Die3D; tip: boolean } | null = null;
   private pointer(type: string, x: number, y: number): boolean {
     if (type === 'down') void audio.unlock();
+    if (this.mode === 'select' && this.classPick.on) return this.classPick.pointer(type, x, y);
     if (this.menu.on) return this.menu.pointer(type, x, y);
     if (this.pauseBtn.on && this.pauseBtn.hit(x, y)) { if (type === 'down') this.pauseBtn.press(true); else if (type === 'up') { this.pauseBtn.press(false); this.pause(); } else if (type === 'cancel') this.pauseBtn.press(false); return true; }
     if (type === 'down') this.flow.hurry();
@@ -1141,6 +1125,10 @@ export class V2Show {
   private bindKeys() {
     if (typeof window === 'undefined' || !window.addEventListener) return;
     window.addEventListener('keydown', e => {
+      if (this.mode === 'select' && this.classPick.on && !this.menu.on) {
+        const ck = ({ arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', enter: 'ok', ' ': 'ok', escape: 'back', backspace: 'back' } as const)[e.key.toLowerCase() as 'a'];
+        if (ck) { e.preventDefault(); this.classPick.key(ck); } return;
+      }
       if (this.menu.on) { this.menuKey(e); return; }
       if (e.key === 'Escape' && (this.mode === 'shop' || this.mode === 'choice' || (this.mode === 'battle' && !this.sel.length))) { e.preventDefault(); this.pause(); return; }
       if (this.mode !== 'battle' || !this.b) return;

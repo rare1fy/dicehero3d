@@ -20,10 +20,13 @@ export interface MenuOpts {
   dim?: number;
   /** extra lines under the list (credits, key help, confirm text) */
   notes?: string[];
+  /** bare list at a given place (no title pane): class select's buttons under the tilted info panel */
+  anchor?: { x: number; y: number; w: number };
 }
 export type MenuKey = 'up' | 'down' | 'left' | 'right' | 'ok' | 'back';
 
-const GOLD = '#ffd890', BODY = 'rgba(18,12,24,0.92)', RIM = '#6a5a7a', RIM_F = '#e8b060';
+// 《我的世界：地下城》-like restraint: dark slate translucent stone, a light slate rim, gold only on what is focused
+const GOLD = '#f6d36b', BODY = 'rgba(20,22,30,0.86)', RIM = '#5d6475', RIM_F = '#f6d36b';
 interface Row { p: Pane; i: number; x: number; y: number; w: number; h: number }
 
 export class Menu {
@@ -65,8 +68,9 @@ export class Menu {
     const dimA = o.dim ?? 0.62; this.dim.visible = dimA > 0; (this.dim.material as THREE.MeshBasicMaterial).opacity = dimA;
     this.dim.scale.set(W, H, 1); this.dim.position.set(W / 2, -H / 2, 0);
     const { s1, sLogo } = this.sizes(), lay = o.layout ?? 'center', gap = 8;
-    const w = lay === 'side' ? Math.min(820, W - 120) : lay === 'title' ? Math.min(520, Math.max(360, W * 0.34)) : Math.min(520, Math.max(380, W * 0.4));
-    const x = lay === 'title' ? Math.max(40, Math.round(W * 0.07)) : Math.round((W - w) / 2);
+    const A = o.anchor;
+    const w = A ? A.w : lay === 'side' ? Math.min(820, W - 120) : lay === 'title' ? Math.min(520, Math.max(360, W * 0.34)) : Math.min(520, Math.max(380, W * 0.4));
+    const x = A ? A.x : lay === 'title' ? Math.max(40, Math.round(W * 0.07)) : Math.round((W - w) / 2);
     // title block
     const logoH = PIX_H * sLogo, subGap = Math.round(sLogo * 3 + 10), titleH = logoH + (o.subtitle ? subGap + PIX_H * s1 : 0) + 12;
     const tw = Math.max(textW(o.title, sLogo), o.subtitle ? textW(o.subtitle, s1) : 0) + 40;
@@ -80,9 +84,9 @@ export class Menu {
     let ty: number;
     if (lay === 'title') ty = Math.round(H * 0.08);
     else { const total = titleH + 18 + listH + notesH; ty = Math.max(14, Math.round((H - footH - 24 - total) / 2)); }
-    tp.at(lay === 'title' ? x : W / 2 - tw / 2, ty); this.panes.push(tp);
+    tp.at(lay === 'title' ? x : W / 2 - tw / 2, ty); this.panes.push(tp); if (A) tp.visible = false;
     // list viewport: scroll when it does not fit (settings)
-    const top = lay === 'title' ? listTop0 : ty + titleH + 18, bot = H - footH - 28 - notesH;
+    const top = A ? A.y : lay === 'title' ? listTop0 : ty + titleH + 18, bot = H - footH - 28 - notesH;
     this.view = { top, bot, off: this.view.off };
     let y = top;
     o.items.forEach((it, i) => {
@@ -119,8 +123,9 @@ export class Menu {
       const val = it.kind === 'opt' ? it.values[it.get()] ?? '' : '', sub = it.kind === 'btn' ? it.sub ?? '' : '';
       r.p.paint(['mr', it.id, it.label, val, sub, foc, en, r.w, r.h].join('|'), r.w, r.h, g => {
         const W = r.w * k, H = r.h * k, c = 3 * k;
-        panel(g, 0, 0, W, H, c, { body: foc ? 'rgba(48,34,22,0.96)' : BODY, rim: foc ? RIM_F : RIM, line: '#07050a', hi: foc ? 'rgba(255,220,150,0.14)' : 'rgba(255,255,255,0.04)' });
-        const col = !en ? '#6a6070' : it.kind === 'btn' && it.danger ? '#ff9a8a' : foc ? '#fff0c8' : '#e0d4ec';
+        panel(g, 0, 0, W, H, c, { body: foc ? 'rgba(46,40,26,0.95)' : BODY, rim: foc ? RIM_F : RIM, line: '#07050a', hi: foc ? 'rgba(255,230,160,0.16)' : 'rgba(255,255,255,0.06)' });
+        if (foc) { g.fillStyle = 'rgba(246,211,107,0.18)'; g.fillRect(c * 2, H - c * 3, W - c * 4, c); }   // a lit 1-cell sill = the stone is raised
+        const col = !en ? '#6a6878' : it.kind === 'btn' && it.danger ? '#ff9a8a' : foc ? '#fffaf0' : '#e8e6ef';
         const ty = sub ? 9 * k : (H - PIX_H * s2 * k) / 2, lx = left ? 26 * k : W / 2;
         if (foc) { g.fillStyle = GOLD; const b = Math.max(2, Math.round(2 * k)), cx = 10 * k, cy = ty + (PIX_H * s2 * k) / 2; for (let j = -2; j <= 2; j++) g.fillRect(cx + (2 - Math.abs(j)) * b, cy + j * b - b / 2, b, b); }
         if (it.kind === 'opt') {
