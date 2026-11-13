@@ -67,6 +67,8 @@ export function fxStatus(p: THREE.Vector3, type: string) {
   else if (type === 'vulnerable') { fxSparks(p, 0xff9a48, 16, 3, { life: 0.5, grav: 2 }); fxRing(p, 0xff9a48, 1.1, { billboard: true, life: 0.4, width: 0.12 }); }
   else if (type === 'freeze') { for (let i = 0; i < 16; i++) PADD.emit({ p: p.clone().add(V3(R(-0.6, 0.6), R(-0.5, 0.6), R(-0.2, 0.4))), v: V3(R(-0.6, 0.6), R(-0.2, 0.6), 0), s0: R(0.1, 0.18), s1: 0.02, life: R(0.6, 1), c0: WHITE, c1: COL.ice, bright: 2.4, tile: TILE.flare, spin: R(-2, 2) }); fxRing(p, COL.ice, 1.4, { billboard: true, life: 0.5 }); }
   else if (type === 'strength') { fxEmbers(p, 0xff7040, 14, { r: 0.4 }); fxGlow(p, 0xff6030, 1.4, 0.4, 2); }
+  // fx5: 眩晕 had no burst at all (only the 「晕」 word): gold stars knocked out of the head + a flat ring
+  else if (type === 'stun') { const h = p.clone().add(V3(0, 0.7, 0)); for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; PADD.emit({ p: h.clone(), v: V3(Math.cos(a) * R(1.4, 2.4), R(0.6, 1.6), Math.sin(a) * R(1.4, 2.4)), s0: 0.16, s1: 0.05, life: R(0.45, 0.7), c0: WHITE, c1: C(0xffe07a), bright: 2.6, tile: TILE.flare, spin: R(-4, 4), drag: 2, grav: 2, fadeIn: 0 }); } fxRing(h, 0xffe07a, 1.0, { billboard: true, life: 0.35, width: 0.12 }); cue('block', 0.5); }
 }
 export function fxHeal(p: THREE.Vector3) { for (let i = 0; i < 14; i++) PADD.emit({ p: p.clone().add(V3(R(-0.5, 0.5), R(-0.4, 0.3), R(-0.3, 0.3))), v: V3(0, R(0.8, 1.8), 0), s0: R(0.08, 0.14), s1: 0.03, life: R(0.7, 1.1), c0: WHITE, c1: COL.green, bright: 2.4, tile: TILE.flare, fadeIn: 0.15 }); fxGlow(p, COL.green, 1.6, 0.5, 1.6); }
 export function fxShield(p: THREE.Vector3, r = 0.9) {

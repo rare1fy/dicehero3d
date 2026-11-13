@@ -56,6 +56,9 @@ import { displayTarget, canAim, displayPreview, modelHit } from './targeting';
 import { statusFlight } from './statusFlight';
 import { HERO_POS, foePosition, entranceFrom, actorSubject, fitBattle, type FramingSubject, type CameraFit } from './battleCamera';
 import { DiceField } from './diceField';
+import { stageSkill, stageHit, stageChantIdle, stageBarrier, stageGuardFlash, stageRage } from './skillStage';   // fx5: the skill-staging table
+import { tickStatusAuras } from './statusAura';   // lasting status looks on the bodies (poison bubbles, flames, grey, cracks, rage, armour)
+import { foeSpell, backlashBurst } from '../fx/foeSpells';
 
 const EYE = V3(0.3, 13.4, 14.9), LOOK = V3(0, -0.6, -3.6);   // mutable in place by cam() (tuning)
 /** R5 (UX_V3 §1b): tighter than the old 42° so the dice on the near arc are ≥ 72 px on screen */
@@ -398,7 +401,7 @@ export class V2Show {
       }
       case 'barrier': {
         this.pd.barrier = e.total; this.flask.set({ barrier: e.total });
-        if (e.delta > 0) { popPix(`屏障 +${e.delta}`, this.hero!.head().add(V3(-0.4, 0.6, 0)), { color: '#8ad8ff', h: 0.4 }); fxRing(this.hero!.home.clone().add(V3(0, 0.1, 0)), 0x6ab8ff, 1.6, { life: 0.6, width: 0.12 }); await wait(0.25); }
+        if (e.delta > 0) { stageBarrier(this.hero!); popPix(`屏障 +${e.delta}`, this.hero!.head().add(V3(-0.4, 0.6, 0)), { color: '#8ad8ff', h: 0.4 }); fxRing(this.hero!.home.clone().add(V3(0, 0.1, 0)), 0x6ab8ff, 1.6, { life: 0.6, width: 0.12 }); await wait(0.25); }
         return;
       }
       case 'hp': {
@@ -422,10 +425,10 @@ export class V2Show {
         return;
       }
       case 'rage': this.mech.setRage(e.stacks); if (e.stacks > 0) popPix(`血怒 ${e.stacks}`, this.hero!.head().add(V3(-0.5, 0.9, 0)), { color: '#ff7a6a', h: 0.36 }); return;
-      case 'chant': this.mech.setChant(e.ring); popPix(e.overcharge ? `过充 ${e.overcharge}` : `吟唱 ${e.ring}/3`, this.hero!.head().add(V3(0, 1.0, 0)), { color: '#8ac8ff', h: 0.4 }); fxGlow(this.hero!.chest(), COL.blue, 2, 0.6, 2); await wait(0.3); return;
-      case 'backlash': if (e.stacks > 0) popPix(`反噬 ${e.stacks}`, this.hero!.head().add(V3(0.6, 0.4, 0)), { color: '#d080ff', h: 0.36 }); return;
+      case 'chant': this.mech.setChant(e.ring); popPix(e.overcharge ? `过充 ${e.overcharge}` : `吟唱 ${e.ring}/3`, this.hero!.head().add(V3(0, 1.0, 0)), { color: '#8ac8ff', h: 0.4 }); stageChantIdle(this.hero!); await wait(0.3); return;
+      case 'backlash': if (e.stacks > 0) { backlashBurst(this.hero!.chest(), this.hero!.home, e.stacks); } if (e.stacks > 0) popPix(`反噬 ${e.stacks}`, this.hero!.head().add(V3(0.6, 0.4, 0)), { color: '#d080ff', h: 0.36 }); return;
       case 'overload': this.banner.show('过载', `${e.turns} 回合星辰骰`, 1.0, '#a8d8ff'); await wait(0.6); return;
-      case 'strikeGain': popPix(`+${e.n} 刀`, this.hero!.head().add(V3(0, 1.0, 0)), { color: '#e0a8ff', h: 0.4 }); return;
+      case 'strikeGain': if (this.cls === 'warrior') stageRage(this.hero!); popPix(`+${e.n} 刀`, this.hero!.head().add(V3(0, 1.0, 0)), { color: '#e0a8ff', h: 0.4 }); return;
       case 'freeReroll': popPix(`免费重投 +${e.n}`, this.hero!.head().add(V3(0.6, 1.2, 0)), { color: '#8ad8ff', h: 0.36 }); cue('magic', 0.3); return;
       case 'enemyTurn': return this.enemyTurnBeat();
       case 'enemyMove': return;
@@ -610,13 +613,9 @@ export class V2Show {
       if (e.ultimate) { shake(0.4); slowmo(0.5, 0.35); GRADE.flashCol.set(1, 0.9, 0.8); this.flash(0.35); }
       await this.flow.beat(0.3);
     });
-    // ③ the attack: the hits / effects that follow are their own engine events
-    const tA = e.target != null ? this.foes.get(e.target) : [...this.foes.values()].find(a => a.root.visible);
-    const aim = tA ? tA.home.clone() : V3(0, 0, -3); hero.faceToward(aim);
-    const melee = this.cls !== 'mage', dist = melee ? Math.max(0, hero.home.distanceTo(aim) - (tA && this.disp.get(e.target!)?.boss ? 2.6 : 1.6)) : 0;
-    const act = hero.attack(dist); cue('whoosh', 0.9);
-    await act.impact;
-    if (!melee && tA) await this.orb(hero.weapon(), tA.chest(), col);
+    // ③ the attack (fx5): skillStage.ts looks the skill + tier up in its table (move, wind-up, path, camera) and resolves when the
+    //    first blow lands; the hits / effects that follow are their own engine events (impact() asks the same table for the hit look)
+    await stageSkill({ hero, foes: this.foes, disp: this.disp, cls: this.cls, e, col, next: this.batch.slice(this.bi + 1), battle: this.b });
   }
   private async impact(e: Extract<Ev2, { t: 'hit' }>) {
     const a = this.foes.get(e.uid), d = this.disp.get(e.uid); if (!a) return;
@@ -624,7 +623,7 @@ export class V2Show {
     if (d) { d.armor = Math.max(0, d.armor - e.absorbed); d.hp = Math.max(0, d.hp - e.hpDmg); }
     if(d?.hp===0)this.targetUid=displayTarget(this.disp,this.targetUid);
     const heavy = e.hpDmg >= 30 || e.ultimate, mid = !heavy && e.hpDmg >= 14, p = a.chest();
-    fxImpact(p.clone().add(V3(0, 0, 0.4)), e.aoe ? 0xffc040 : 0xffe2a8, Math.min(3, 0.6 + e.dmg / 22), { dir: V3(0, 0.1, -1) });
+    stageHit(e, a, p, d);   // fx5: element / slash mark / armour shards / control state of this skill's hit (was one fxImpact)
     a.hurt(Math.min(1.6, 0.6 + e.hpDmg / 30));
     if (e.absorbed) popPix(`-${e.absorbed}`, p.clone().add(V3(0.7, 0.5, 0)), { color: '#8ac8ff', h: 0.4 });
     popPix(String(e.hpDmg), a.head().add(V3(R(-0.2, 0.2), 0.4, 0)), { color: heavy ? '#ff7a3a' : mid ? '#ffd060' : '#fff6e0', h: 0.62, big: heavy, life: 1.2, rise: 1.0 });
@@ -676,7 +675,7 @@ export class V2Show {
     if (e.kind === 'defend') { a.roar(); fxShield(a.home, 1.8); cue('armor'); await wait(0.4); return; }
     if (d.boss || e.kind === 'skill' || e.kind === 'curse') {
       const act = a.cast(); cue('magic'); fxGlow(a.weapon(), COL.green, 2.2, 0.6, 2.6);
-      await act.impact; await this.orb(a.weapon(), hero.chest(), e.kind === 'attack' ? 0x6aff9a : 0xc070ff); return;
+      await act.impact; await foeSpell(e.desc, e.kind, a.weapon(), hero.chest(), hero.home); return;
     }
     a.faceToward(hero.home);
     const act = a.attack(Math.max(0, a.home.distanceTo(hero.home) - 1.4)); cue('whoosh', 0.7);
@@ -698,7 +697,7 @@ export class V2Show {
       hero.hurt(Math.min(1.6, 0.6 + e.hpDmg / 15)); popPix(`-${e.hpDmg}`, hero.head(), { color: '#ff5a4a', h: 0.6, big: e.hpDmg >= 12 });
       if (!e.isDot) { shake(0.2 + Math.min(0.4, e.hpDmg / 25)); hitstop(0.06); GRADE.flashCol.set(0.6, 0.05, 0.02); this.flash(Math.min(0.3, 0.1 + e.hpDmg / 60)); this.platform.vibrate(e.hpDmg >= 12 ? 'heavy' : 'medium'); }
       cue('hurt', Math.min(1.4, 0.6 + e.hpDmg / 20));
-    } else if (e.perfectBlock) popPix('完美格挡', p.clone().add(V3(0, 1.0, 0)), { color: '#bfe8ff', h: 0.45 });
+    } else if (e.perfectBlock) { stageGuardFlash(hero, e.from != null ? this.foes.get(e.from)?.home : undefined); popPix('完美格挡', p.clone().add(V3(0, 1.0, 0)), { color: '#bfe8ff', h: 0.45 }); }
     await wait(0.3);
   }
   private async death(uid: number) {
@@ -986,6 +985,7 @@ export class V2Show {
   private frame(dt: number) {
     const t = clock.time;
     this.menu.update(clock.rdt); tickPrefs(); this.pollStart(); this.dieHold();
+    tickStatusAuras(dt, this.foes, this.disp, this.hero, this.display.state?.player ?? null, this.mode === 'battle' && !!this.b);
     if (this.classPick.on) this.classPick.tick();
     this.titleScene.tick();
     if (this.paused) FX.speed = 0;
