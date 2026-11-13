@@ -114,6 +114,8 @@ export class FoePlates {
     });
   }
   freeze(uid: number) { const p = this.plates.get(uid); if (p) p.frozen = true; }
+  /** the display values of a foe's plate (for its long-press tip) and the plate's px box */
+  view(uid: number) { const p = this.plates.get(uid); return p ? { foe: p.foe, x: p.x, y: p.y - p.p.h } : null; }
   deny(uid: number) { const p = this.plates.get(uid); if (p) p.shake = 0.4; this.tauntFlash = 0.55; }
   /** tap / hover hit test: the plate's visible content, padded to ≥ 88 reference px (UX_V3 §1b) */
   hit(x: number, y: number): number | null {

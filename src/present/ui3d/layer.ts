@@ -28,7 +28,7 @@ export class UiLayer implements Ui3DLayer {
     this.hemi = new THREE.HemisphereLight(0xd8d0ff, 0x30202a, 1.5); this.scene.add(this.hemi);
     this.key = new THREE.DirectionalLight(0xffe2b8, 2.6); this.key.position.set(-6, 10, 14); this.scene.add(this.key);
     this.fill = new THREE.DirectionalLight(0x7aa0ff, 0.9); this.fill.position.set(8, -4, 6); this.scene.add(this.fill);
-    setUi3DLayer(this); this.setLens(24);
+    setUi3DLayer(this); this.setLens(27);
     // fx4: every widget turns a little toward the screen centre for the frame it is drawn (restored after), so the sides show
     this.scene.onBeforeRender = () => this.tiltOn();
     this.scene.onAfterRender = () => this.tiltOff();
@@ -36,7 +36,7 @@ export class UiLayer implements Ui3DLayer {
   /** max turn toward the screen centre (rad) and the idle sway; tilt = 0 turns it off */
   // user 11-13: 「两边的UI没有稍微往里面斜一点」; 11-14: 「透视感还是不够」 — a turn equal to the view ray just faces the lens (flat): turn
   // well past it (HUD groups at |nx| ≈ 0.6–0.85 → 38–54°, ≈ 20° past the ray at camZ 24) so the sides and the converging edges show
-  tilt = 1.1; sway = 0.035;
+  tilt = 1.0; sway = 0.07;   // user 11-14 (调参): 转角 1.00, 摆动 0.070, 镜距 27
   private tilted: THREE.Object3D[] = []; private tq = new THREE.Quaternion(); private te = new THREE.Euler();
   /** the extra screen-space turn for a widget at CSS px (x, y) (also used by the UI → world hand-over) */
   tiltAt(x: number, y: number, ph = 0, out = new THREE.Quaternion()) {

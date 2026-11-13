@@ -18,6 +18,7 @@ import { FieldMarks } from './fieldMarks';
 import type { Glyph } from './draw';
 import { setGrid, GRID } from '../../ui3d/pixelGrid';
 import { turnInsets } from '../../../platform/rotate';
+import { HoldTips } from './holdTips';
 
 /** the ≤4-char tag under each skill (UX_V3 §2) and the tier-3 upgraded icon */
 const TAGS: Record<string, string> = { 奥术弹: '单体', 冰锥: '控制', 闪电链: '弹射', 陨石: '爆发', 劈砍: '单体', 顺劈斩: '横扫', 盾墙: '防御', 狂血: '吸血', 袖箭: '补骰', 背刺: '处决', 影步: '补骰', 毒雾: '群毒',
@@ -53,11 +54,11 @@ export function safeInsets() {
 }
 
 export class BattleHud {
-  bar: SkillBar; reroll: RerollButton; chant: ChantButton; plates: FoePlates; top: TopLeft; status: StatusRows; marks: FieldMarks;
+  bar: SkillBar; reroll: RerollButton; chant: ChantButton; plates: FoePlates; top: TopLeft; status: StatusRows; marks: FieldMarks; tips: HoldTips;
   W = 1280; H = 720; k = 1;
   constructor(private L: UiLayer, ov: Overlay) {
     this.bar = new SkillBar(L, ov); this.reroll = new RerollButton(L, ov); this.chant = new ChantButton(L, ov);
-    this.plates = new FoePlates(ov); this.top = new TopLeft(L, ov); this.status = new StatusRows(ov, L); this.marks = new FieldMarks();
+    this.plates = new FoePlates(ov); this.top = new TopLeft(L, ov); this.status = new StatusRows(ov, L); this.marks = new FieldMarks(); this.tips = new HoldTips(ov, this);
   }
   /** the HUD frame: the whole safe area — the left group anchors to its left edge, the right group to its right edge (user: 「两边UI的位置
    *  要根据屏幕的宽度适配」), k = px per reference px (from the height, capped by the width) */
@@ -69,6 +70,7 @@ export class BattleHud {
     this.W = W; this.H = H; this.k = k; this.frame = { L0, R0, k, B: sa.t + sh, top: sa.t };
     const X = (x: number) => L0 + x * k, R = (x: number) => R0 - x * k, Y = (y: number) => sa.t + y * k;   // R(x) = x ref px in from the right
     // UX_V3 §1b: thumbs — reroll ≈ (left + 200, 560), play button ≈ (right − 200, 548), chant ≥ 64 from the right at y ≈ 400
+    this.tips.flask = flask; this.tips.tray = tray; this.tips.loot = loot;
     this.top.place(X(116), Y(42), k); loot.purse = this.top.purse(); loot.emblem = this.top.purse(); loot.bagPx = 40 * k;
     this.reroll.place(X(200), Y(560), 124 * k, k);
     // left player zone (user: 「血瓶在中间感觉好孤独」): reroll + flask + status rows stacked to the flask's right, all on the left
@@ -82,8 +84,8 @@ export class BattleHud {
   /** battle widgets on / off (top-left stays with the run) */
   battle(on: boolean, mage: boolean) {
     this.bar.show(on); this.reroll.root.visible = on; this.chant.root.visible = on; this.chant.v.mage = mage; this.status.on = on;
-    if (!on) { this.plates.clear(); this.marks.hide(); this.bar.endAim(); }
+    if (!on) { this.plates.clear(); this.marks.hide(); this.bar.endAim(); this.tips.hide(); }
   }
   runOn(on: boolean) { this.top.on = on; }
-  update(dt: number) { this.bar.update(dt); this.reroll.update(dt); this.chant.update(dt); this.top.update(dt); }
+  update(dt: number) { this.bar.update(dt); this.reroll.update(dt); this.chant.update(dt); this.top.update(dt); this.tips.update(dt); }
 }

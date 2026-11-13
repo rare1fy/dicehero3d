@@ -23,7 +23,7 @@ export class HeartFlask {
   /** the armour shield and the barrier rings (v2 shows armour / barrier in the status rows instead) */
   showShield = false; showDome = false;
   /** thickness multiplier (the extruded heart reads as a solid bottle under the UI perspective) */
-  depthK = 1.6;
+  depthK = 1.75;   // user 11-14 (调参): 血瓶厚 1.75
   private shown = 1; private ghost = 1; private wave = new Spring(90, 3.2); private rock = new Spring(140, 7); private pop = new Spring(260, 14);
   private ghostFrom = 1; private ghostAge = 1;
   private shieldK = 0; private shieldPop = new Spring(300, 12); private domeK = 0; private time = 0; private crackK = [0, 0];

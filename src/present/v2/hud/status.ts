@@ -12,7 +12,8 @@ import { GRID } from '../../ui3d/pixelGrid';
 import { pixGlyph, INK } from './pixIcons';
 
 export interface PlayerView { hp: number; maxHp: number; armor: number; barrier: number; rage: number; backlash: number; statuses: Array<{ type: StatusV2; value: number; duration?: number }> }
-interface Ico { g: Glyph; col: string; n: number | string }
+/** k = what it is (armor / barrier / backlash / a status type) and d = turns left, for the long-press tip (hud/holdTips.ts) */
+export interface Ico { g: Glyph; col: string; n: number | string; k: string; d?: number }
 
 /** 一枚牌的边长、步距（格） */
 const CH = 15, STEP = 17, ROW_W = 3 * STEP + 1, ROW_H = CH + 4;
@@ -37,6 +38,17 @@ export class StatusRows {
   stack = false;
   constructor(ov: Overlay, public L?: UiLayer) { this.left = ov.pane(7); this.right = ov.pane(7); this.hp = ov.pane(8); }
   place(x: number, y: number, size: number, k: number) { this.x = x; this.y = y; this.size = size; this.k = k; }
+  private rows: Array<{ pn: Pane; list: Ico[]; rtl: boolean }> = [];
+  /** the chip under (x, y) (CSS px): one status, or the 「+N」 chip with the folded ones (hit area padded to ≥ 88 ref px wide rows) */
+  chipAt(x: number, y: number): { ico: Ico } | { more: Ico[] } | null {
+    const uc = GRID.uc;
+    for (const r of this.rows) {
+      const pn = r.pn; if (!pn.visible || !r.list.length || y < pn.y - 4 || y > pn.y + pn.h + 4 || x < pn.x - 4 || x > pn.x + pn.w + 4) continue;
+      const show = r.list.slice(0, r.list.length > 3 ? 2 : 3), n = show.length + (r.list.length > show.length ? 1 : 0), cx = (x - pn.x) / uc;
+      for (let i = 0; i < n; i++) { const x0 = r.rtl ? ROW_W - (i + 1) * STEP : 1 + i * STEP; if (cx >= x0 - 1 && cx < x0 + STEP) return i < show.length ? { ico: show[i] } : { more: r.list.slice(show.length) }; }
+    }
+    return null;
+  }
   /** where a status icon flying to the player lands (the chip centre) */
   landing(type: StatusV2, p: PlayerView) {
     const good = type === 'berserk', list = p.statuses.filter(s => good ? s.type === 'berserk' : s.type !== 'berserk');
@@ -49,13 +61,14 @@ export class StatusRows {
   update(p: PlayerView | null, shownHp: number) {
     const vis = this.on && !!p; this.left.visible = this.right.visible = this.hp.visible = vis; if (!vis || !p) return 0;
     const buffs: Ico[] = [], bad: Ico[] = [];
-    if (p.armor > 0) buffs.push({ g: 'shield', col: '#4a9aff', n: p.armor });
-    if (p.barrier > 0) buffs.push({ g: 'ring', col: '#5ae0ff', n: p.barrier });
+    if (p.armor > 0) buffs.push({ g: 'shield', col: '#4a9aff', n: p.armor, k: 'armor' });
+    if (p.barrier > 0) buffs.push({ g: 'ring', col: '#5ae0ff', n: p.barrier, k: 'barrier' });
     for (const s of p.statuses) {
-      if (s.type === 'berserk') buffs.push({ g: 'tri', col: '#ff4a3a', n: s.duration ?? s.value });
-      else if (ST_GLYPH[s.type]) { const S = ST_GLYPH[s.type], dot = s.type === 'poison' || s.type === 'burn'; bad.push({ g: S.g, col: S.col, n: dot ? s.value : s.duration ?? s.value }); }
+      if (s.type === 'berserk') buffs.push({ g: 'tri', col: '#ff4a3a', n: s.duration ?? s.value, k: 'berserk', d: s.duration });
+      else if (ST_GLYPH[s.type]) { const S = ST_GLYPH[s.type], dot = s.type === 'poison' || s.type === 'burn'; bad.push({ g: S.g, col: S.col, n: dot ? s.value : s.duration ?? s.value, k: s.type, d: s.duration }); }
     }
-    if (p.backlash > 0) bad.push({ g: 'crack', col: '#d080ff', n: p.backlash });
+    if (p.backlash > 0) bad.push({ g: 'crack', col: '#d080ff', n: p.backlash, k: 'backlash' });
+    this.rows = [{ pn: this.left, list: buffs, rtl: !this.stack }, { pn: this.right, list: bad, rtl: false }];
     const dot = p.statuses.filter(s => s.type === 'poison' || s.type === 'burn').reduce((a, s) => a + s.value, 0);
     const uc = GRID.uc;
     const row = (pn: Pane, list: Ico[], badRow: boolean, rtl: boolean) => {

@@ -1072,6 +1072,7 @@ export class V2Show {
     if (this.screen.pointer(type, x, y)) return true;
     if (this.mode !== 'battle' || !this.b) return false;
     if (this.drag) return this.dragPointer(type, x, y);
+    if (this.hud.tips.pointer(type, x, y, this.b)) return true;   // user 11-14: 「看看还有哪些是没做长按tips的」 (hud/holdTips.ts)
     if (type === 'down' && this.hfx.pointer(x, y, this.hero)) { cue('click', 0.4); return true; }   // fx4: tap the hero → class-state tips
     if (this.hud.chant.pointer(type, x, y) || this.hud.reroll.pointer(type, x, y)) return true;
     // swipe-select (CLAUDE.md 定稿: 按住滑过多选; user: 「按住滑动选择多个骰子的功能也没实现」): press on a die, slide over others —

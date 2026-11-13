@@ -3,6 +3,7 @@
 import type { Menu, MenuItem } from './menu';
 import { PREFS, savePrefs, applyPrefs, resetPrefs } from './prefs';
 import { peekRun, saveSummary } from './save';
+import { openTunePanel } from '../tunePanel';
 
 export interface MetaHost {
   menu: Menu;
@@ -44,7 +45,7 @@ export function pauseMenu(h: MetaHost, focus?: string) {
   if (h.openBuild) items.push({ kind: 'btn', id: 'build', label: '查看构筑', sub: '技能 · 遗物 · 天赋', on: () => h.openBuild!(() => pauseMenu(h, 'build')) });
   if (h.openCodex) items.push({ kind: 'btn', id: 'codex', label: '图鉴', on: () => h.openCodex!(() => pauseMenu(h, 'codex')) });
   items.push(
-    { kind: 'btn', id: 'set', label: '设置', on: () => settingsMenu(h, () => pauseMenu(h, 'set')) },
+    { kind: 'btn', id: 'set', label: '设置', on: () => settingsMenu(h, () => pauseMenu(h, 'set'), undefined, true) },
     { kind: 'btn', id: 'keys', label: '操作说明', on: () => controlsMenu(h, () => pauseMenu(h, 'keys')) },
     { kind: 'btn', id: 'title', label: '回到标题', sub: '下次从这一关开始', on: () => confirm(h, '回到标题？', '这一场战斗的进度不保存，下次从这一关开始。', '回到标题', () => h.toTitle(), () => pauseMenu(h, 'title')) },
     { kind: 'btn', id: 'quit', label: '放弃本局', danger: true, on: () => confirm(h, '放弃本局？', '存档会被删除，无法恢复。', '放弃', () => h.abandonRun(), () => pauseMenu(h, 'quit')) },
@@ -52,12 +53,14 @@ export function pauseMenu(h: MetaHost, focus?: string) {
   h.menu.open({ title: '暂停', items, onBack: () => h.resume(), dim: 0.62 }, focus);
 }
 
-export function settingsMenu(h: MetaHost, back: () => void, focus?: string) {
+export function settingsMenu(h: MetaHost, back: () => void, focus?: string, inBattle = false) {
   const set = <K extends keyof typeof PREFS>(k: K, v: (typeof PREFS)[K]) => { PREFS[k] = v; applyPrefs(); savePrefs(); };
   const items: MenuItem[] = [
     { kind: 'head', label: '画面' },
     { kind: 'opt', id: 'pixel', label: '场景像素', values: ['高清 1×', '像素 2×', '像素 3×'], get: () => PREFS.pixel - 1, set: i => set('pixel', (i + 1) as 1 | 2 | 3) },
     { kind: 'opt', id: 'shake', label: '屏幕震动', values: ['关', '弱', '标准'], get: () => PREFS.shake, set: i => set('shake', i as 0 | 1 | 2) },
+    // user 11-14: 「调参按钮放进设置吧」 — in a battle only (the camera and the HUD are what it tunes): back to the fight with the sliders open
+    ...(inBattle ? [{ kind: 'btn' as const, id: 'tune', label: '调参（镜头 / 界面透视）', sub: '回到战斗，拖滑块实时调，数值显示在屏幕上', on: () => { h.resume(); openTunePanel(); } }] : []),
     { kind: 'head', label: '声音' },
     { kind: 'opt', id: 'master', label: '总音量', values: vol, get: () => PREFS.master, set: i => set('master', i) },
     { kind: 'opt', id: 'music', label: '音乐', values: vol, get: () => PREFS.music, set: i => set('music', i) },
@@ -69,8 +72,8 @@ export function settingsMenu(h: MetaHost, back: () => void, focus?: string) {
     { kind: 'opt', id: 'tips', label: '教学提示', values: onOff, get: () => +PREFS.tips, set: i => set('tips', !!i) },
     { kind: 'opt', id: 'vibrate', label: '震动反馈（手机）', values: onOff, get: () => +PREFS.vibrate, set: i => set('vibrate', !!i) },
     { kind: 'head', label: '' },
-    { kind: 'btn', id: 'keys', label: '操作说明', on: () => controlsMenu(h, () => settingsMenu(h, back, 'keys')) },
-    { kind: 'btn', id: 'reset', label: '恢复默认', on: () => confirm(h, '恢复默认设置？', '画面、声音和游戏选项都回到默认值。', '恢复', () => { resetPrefs(); settingsMenu(h, back, 'reset'); }, () => settingsMenu(h, back, 'reset')) },
+    { kind: 'btn', id: 'keys', label: '操作说明', on: () => controlsMenu(h, () => settingsMenu(h, back, 'keys', inBattle)) },
+    { kind: 'btn', id: 'reset', label: '恢复默认', on: () => confirm(h, '恢复默认设置？', '画面、声音和游戏选项都回到默认值。', '恢复', () => { resetPrefs(); settingsMenu(h, back, 'reset', inBattle); }, () => settingsMenu(h, back, 'reset', inBattle)) },
     { kind: 'btn', id: 'back', label: '返回', on: back },
   ];
   h.menu.open({ title: '设置', items, layout: 'side', onBack: back }, focus);

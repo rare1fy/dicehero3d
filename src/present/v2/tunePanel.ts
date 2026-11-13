@@ -1,6 +1,7 @@
 // In-game tuning panel (user 11-14: 「你把这个参数放到游戏里我自己来调试，调试结果显示在界面上一串文字，我觉得OK了会截图给你」).
-// A small 「调参」 button at the top centre opens sliders for the battle camera and the UI perspective; every change applies at once,
-// and one line of text shows all current values (the user screenshots it). Values persist per device (localStorage).
+// Opened from 暂停 → 设置 → 调参 (user: 「调参按钮放进设置吧」): sliders for the battle camera and the UI perspective; every change applies at
+// once, and one line of text shows all current values (the user screenshots it; tap the line to fold / unfold the sliders).
+// Values persist per device (localStorage).
 // Browser only (a DOM debug overlay); on portrait phones it turns with the canvas (platform/rotate.ts).
 import type { UiLayer } from '../ui3d/layer';
 import { CAMERA_TUNE } from './battleCamera';
@@ -11,6 +12,10 @@ interface Param { key: string; cn: string; min: number; max: number; step: numbe
 
 const STORE = 'dh_tune_v1';
 const BACK_LEN = Math.hypot(12.8, 18.0);   // the camera back vector's length (dist scales it)
+
+let opener: (() => void) | null = null;
+/** open the sliders (from the settings menu) */
+export function openTunePanel() { opener?.(); }
 
 export function installTunePanel(host0: unknown) {
   if (typeof document === 'undefined' || !document.body) return;
@@ -52,6 +57,8 @@ export function installTunePanel(host0: unknown) {
   const short = Math.min(innerWidth, innerHeight) < 500;
   css(panel, { pointerEvents: 'auto', display: 'none', background: 'rgba(16,14,22,0.88)', border: '1px solid #8a6a3a', padding: short ? '3px 8px' : '6px 10px', color: '#ece6f2', fontSize: short ? '11px' : '12px', maxHeight: '70vh', overflowY: 'auto', width: short ? '440px' : '300px', boxSizing: 'border-box' });
   const grid = document.createElement('div'); css(grid, { display: 'grid', gridTemplateColumns: short ? '1fr 1fr' : '1fr', columnGap: '12px' }); panel.append(grid);
+  btn.style.display = 'none';   // opened from the settings menu now
+  line.style.cursor = 'pointer'; line.title = '点一下收起 / 展开滑块';
   bar.append(btn, line, panel); root.append(bar); document.body.append(root);
 
   const fmt = (p: Param) => p.get().toFixed(p.digits);
@@ -76,6 +83,8 @@ export function installTunePanel(host0: unknown) {
   );
   panel.append(btns);
   btn.addEventListener('click', () => { const open = panel.style.display === 'none'; panel.style.display = open ? 'block' : 'none'; line.style.display = 'block'; refresh(); });
+  line.addEventListener('click', () => { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; });
+  opener = () => { panel.style.display = 'block'; line.style.display = 'block'; refresh(); };
   refresh();
 
   // portrait phones: the canvas is turned 90° (platform/rotate.ts); turn the overlay the same way so it reads in landscape

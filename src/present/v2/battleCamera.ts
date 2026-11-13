@@ -37,8 +37,9 @@ export const BANDS = { diceY: 0.655, diceX: 0.6, top: 0.09 };
 export const DIE_PX = 64;
 /** the classic battle camera (R5): eye / look / fov as the director takes them. Tunable live: __dh.show2() → CAMERA_TUNE + layout()
  *  user 11-14: 「镜头我觉得默认要再上拉仰起来一点，看到更多战场和场景信息」 — the eye higher and farther, the look further up the path */
-// was lookZ −2.4, back (0.3, 14, 17.3) × 0.62 (pitch ≈ 39°); now ≈ 35°, 20 % farther and higher: the gate behind the enemies shows
-export const CAMERA_TUNE = { lookY: -0.6, lookZ: -2.8, back: [0.3, 12.8, 18.0] as [number, number, number], dist: 0.74, fov: 42 };
+// user 11-14, tuned in game (调参): 俯角 30.4° 距离 0.81 看点 Z −4.1 Y −0.6 视野 41 (was 39° / 0.62 / −2.4 / 42; then 35.4° / 0.74 / −2.8)
+const BACK_LEN = Math.hypot(12.8, 18.0), backAt = (deg: number): [number, number, number] => [0.3, BACK_LEN * Math.sin(deg * Math.PI / 180), BACK_LEN * Math.cos(deg * Math.PI / 180)];
+export const CAMERA_TUNE = { lookY: -0.6, lookZ: -4.1, back: backAt(30.4), dist: 0.81, fov: 41 };
 const LOOK0 = new THREE.Vector3(), EYE0 = new THREE.Vector3();
 let FOV0 = 42;
 function readTune() {
