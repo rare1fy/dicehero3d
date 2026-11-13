@@ -32,6 +32,8 @@ export class Slot3D {
   /** current / target px pose and morph */
   cx = 0; cy = 0; size = 80; tx = 0; ty = 0; ts = 80; big = 0; tBig = 0; dim = 0; tDim = 0; vis = 0; tVis = 1;
   st: SlotState = { lit: false, tier: 0, dead: false, ready: false }; press = 0; aimK = 0; k = 1;
+  /** where the aim arrow ends (CSS px), set by the skill bar while this slot is aimed */
+  aim: { x: number; y: number } | null = null;
   private lift = 4; private shownTier = 0; bump = new Spring(500, 18); private popT = 1; private flashT = 0; t = Math.random() * 6; private wave = 1;
   constructor(private L: UiLayer, private ov: Overlay, public def: SlotDef, private sparks: UiSparks) {
     // R6: the pixel plate (28 cells idle, 20 shrunk, 66×56 the play button, 48×40 two buttons side by side); root unit = 1 CSS px
@@ -110,8 +112,11 @@ export class Slot3D {
     const liftT = s.dead || this.dim > 0.5 ? 4 : s.lit ? [12, 12, 16, 22][Math.min(3, tier)] : s.ready ? 7 : 5;
     this.lift = lerp(this.lift, liftT, k);
     const pop = this.popT < 1 ? Math.sin(this.popT * Math.PI) * 16 : 0, bob = Math.sin(this.t * Math.PI) * 2;
-    const isz = Math.min(B > 0.5 ? 74*this.k : Infinity, this.size * lerp(0.56, 0.62, B) * (s.lit ? [1, 1.06, 1.12, 1.2][Math.min(3, tier)] : 1) * Math.max(0.01, this.vis) * (s.dead ? 0.8 : 1 - this.dim * 0.12));
-    const ix = this.cx, iy = this.cy - lerp(this.lift * 0.4, this.size * 0.27, B) - (this.lift * 0.6 + pop + bob)*this.k;
+    // R7B 追加 8（用户：「技能激活待释放的时候按钮上的技能图标模型要再放大一些」「甚至立起来一些」）：长成出牌按钮时图标放大到约 1.4 倍、
+    // 往上抬，并朝镜头立起约 30°；瞄准时朝目标方向倾。上限从 74 提到 112（参考 px），顶部仍按包围盒压在按钮上沿以下。
+    const grow = 1 + 0.4 * B;
+    const isz = Math.min(B > 0.5 ? 112 * this.k : Infinity, this.size * lerp(0.56, 0.62, B) * grow * (s.lit ? [1, 1.06, 1.12, 1.2][Math.min(3, tier)] : 1) * Math.max(0.01, this.vis) * (s.dead ? 0.8 : 1 - this.dim * 0.12));
+    const ix = this.cx, iy = this.cy - lerp(this.lift * 0.4, this.size * 0.34, B) - (this.lift * 0.6 + pop + bob)*this.k;
     // in front of the plate face (front ≈ 0.17 × size) by the lift: the perspective shows the gap
     L.at(ix, iy, 0, this.iconG.position); this.iconG.position.z = L.px(isz * 0.16 + this.lift * 0.8 * this.k);
     const want = tier >= 3 && B > 0.5 && this.def.up ? 1 : 0;
@@ -121,10 +126,12 @@ export class Slot3D {
     modelLook(this.icon, gl, dm); if (this.iconUp) modelLook(this.iconUp, gl, dm); modelLook(this.badge, 1, s.dead ? 0.6 : this.dim * 0.4);
     this.iconG.scale.setScalar(L.px(isz));
     const spin = this.popT < 1 ? ease.inOut(this.popT) * Math.PI * 2 : 0;
-    this.iconG.rotation.set(-0.15 + this.aimK * -0.25, Math.sin(this.t * 0.6) * 0.25 + spin, tier >= 3 && B > 0.5 ? 0.12 : 0);
+    // stand up toward the camera when big (+0.52 rad ≈ 30°); while aiming lean toward the arrow's end
+    const lean = this.aim ? Math.max(-0.5, Math.min(0.5, (this.aim.x - this.cx) / Math.max(1, this.size * 3))) * this.aimK : 0;
+    this.iconG.rotation.set(-0.15 + 0.52 * B + this.aimK * -0.25, Math.sin(this.t * 0.6) * 0.25 * (1 - this.aimK) + spin - lean * 0.6, (tier >= 3 && B > 0.5 ? 0.12 : 0) - lean);
     if(B>0.5) { // 根据实际模型包围盒限制最高点，三档冰晶也不会侵入结束按钮。
       this.iconG.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(this.iconG), top = L.toPx(new THREE.Vector3(this.iconG.position.x,box.max.y,box.max.z));
-      const floor = this.cy-78*this.k; if(top.y<floor) this.iconG.position.y-=L.px(floor-top.y);
+      const floor = this.cy-118*this.k; if(top.y<floor) this.iconG.position.y-=L.px(floor-top.y);
     }
     (this.shadow.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - B) * Math.max(0.15, 1 - this.lift / 30); this.shadow.scale.setScalar(Math.max(0.3, 1 - this.lift / 40));
     // the front layer (crisp panes)

@@ -69,9 +69,9 @@ export class SkillBar {
   /** aiming: the pressed button stays, the arrow follows (x, y); hot = over a target */
   aim(i: number, x: number, y: number, hot: boolean, blocked = false) {
     const s = this.slots[i]; if (!s) return; if (this.aiming !== i) { this.aiming = i; cue('tick', 0.4); }
-    const p = s.top(); this.arrow.a = { x0: p.x, y0: p.y, x1: x, y1: y, hot, blocked };
+    const p = s.top(); this.arrow.a = { x0: p.x, y0: p.y, x1: x, y1: y, hot, blocked }; s.aim = { x, y };
   }
-  endAim() { this.aiming = -1; this.arrow.a = null; }
+  endAim() { if (this.aiming >= 0 && this.slots[this.aiming]) this.slots[this.aiming].aim = null; this.aiming = -1; this.arrow.a = null; }
   /** the play left the button: a burst of light from the icon toward (x, y) */
   release(i: number, x: number, y: number) {
     const s = this.slots[i]; if (!s) return; const p = s.iconPx();

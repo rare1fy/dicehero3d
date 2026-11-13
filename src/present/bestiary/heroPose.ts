@@ -15,10 +15,63 @@ function wrist(b: Record<string, Bone>, side: 'R' | 'L', elevation: number, yaw 
   hand.quaternion.copy(parentQ.invert().multiply(targetQ));
 }
 
+/** 一次性小动作的进度：每 period 秒在 phase 处发生一次、持续 dur 秒；不在发生时返回 −1 */
+function beat(t: number, period: number, dur: number, phase = 0) { const u = ((t - phase) % period + period) % period; return u < dur ? u / dur : -1; }
+/** 0→1→0 的平滑鼓包 */
+const bump = (k: number) => (k < 0 ? 0 : Math.sin(k * Math.PI) ** 2);
+/** 屈膝不滑脚：大腿前摆 a、小腿回折 2a、脚掌回 a，髋部按腿长下沉（两段腿各约 0.28 m） */
+function crouch(b: Record<string, Bone>, side: 'L' | 'R', a: number, splay: number) {
+  rot(b[`leg${side}`], -a, 0, splay); rot(b[`shin${side}`], 2 * a, 0, 0); rot(b[`foot${side}`], -a, 0, -splay);
+  return 0.28 * 2 * (1 - Math.cos(a)) + 0.56 * (1 - Math.cos(splay));
+}
+
+/**
+ * 备战待机：架势 + 呼吸 + 换重心 + 偶发的握紧武器。返回给手腕的附加角度（武器方向最显眼，主要靠它让动作被看见）。
+ * 有动作在播（a 非空）时由调用方传 calm = 0：只保留架势，偶发动作停掉，免得和攻击、受击叠在一起。
+ */
+function readyIdle(id: GripHero, b: Record<string, Bone>, t: number, calm = 1) {
+  const out = { right: 0, rightYaw: 0, left: 0 };
+  if (id === 'warrior') {
+    // 矮人狂战：两脚分开压低重心，左肩冲前；粗重的呼吸（2.6 秒一口）带着胸背和斧头一起起伏；重心左右慢慢换；
+    // 每 5 秒掂一下斧头（往上一提再落回，髋部跟着一沉）。
+    const br = Math.sin(t * Math.PI * 2 / 2.6), sway = Math.sin(t * Math.PI * 2 / 3.6), heft = bump(beat(t, 5.0, 0.7, 1.2)) * calm;
+    const a = 0.26 + 0.05 * br + 0.06 * heft;
+    const drop = Math.max(crouch(b, 'L', a + 0.06, 0.14), crouch(b, 'R', a - 0.04, -0.14));
+    mov(b.hips, sway * 0.06, -drop, 0); rot(b.hips, 0, 0.16, -sway * 0.05);
+    rot(b.spine, 0.10 + 0.06 * br, -0.12, sway * 0.04); rot(b.chest, 0.05 * br, -0.04, 0);
+    rot(b.neck, -0.10 - 0.04 * br + 0.10 * heft, 0, -sway * 0.03);
+    rot(b.armR, -0.06 * br - 0.25 * heft, 0, 0); rot(b.armL, 0.05 * br, 0, 0.06 * br); rot(b.handL, 0.35, 0, 0);
+    out.right = 0.08 * br + 0.35 * heft; out.rightYaw = -0.05 * sway;
+  } else if (id === 'rogue') {
+    // 暗夜精灵刺客：脚掌着地轻轻弹（0.8 秒一下），重心左右换得快，双匕首交替微动；每 3.4 秒右手翻一下匕首（转一圈）。
+    const bob = Math.sin(t * Math.PI * 2 / 0.8), sway = Math.sin(t * Math.PI * 2 / 1.7), twirl = beat(t, 3.4, 0.5, 0.8);
+    const tw = twirl < 0 || !calm ? 0 : twirl;
+    mov(b.hips, sway * 0.07, -0.03 * (0.5 + 0.5 * bob), 0); rot(b.hips, 0, -0.1, -sway * 0.06);
+    rot(b.spine, 0.04 * bob, 0.06 * sway, sway * 0.05); rot(b.neck, -0.03 * bob, -0.06 * sway, 0);
+    rot(b.legL, -0.05 * bob, 0, 0); rot(b.shinL, 0.1 * bob, 0, 0); rot(b.legR, -0.05 * bob, 0, 0); rot(b.shinR, 0.1 * bob, 0, 0);
+    rot(b.armR, -0.06 * bob, 0, 0); rot(b.armL, 0.06 * bob, 0, 0);
+    out.right = 0.1 * sway; out.left = -0.1 * sway; out.rightYaw = tw * Math.PI * 2;
+  } else {
+    // 星界魔导：两脚前后错开站定，法杖斜指前方，左手在胸前慢慢画圈聚气；呼吸平稳（3.2 秒）；每 4.4 秒法杖往前一点。
+    const br = Math.sin(t * Math.PI * 2 / 3.2), c = t * Math.PI * 2 / 2.4, point = bump(beat(t, 4.4, 0.8, 2.0)) * calm;
+    const drop = Math.max(crouch(b, 'L', 0.2, 0.08), crouch(b, 'R', 0.06, -0.08));
+    mov(b.hips, Math.sin(c * 0.5) * 0.03, -drop - 0.012 * br, 0); rot(b.hips, 0, 0.1, 0);
+    rot(b.spine, 0.05 + 0.04 * br + 0.06 * point, -0.08, 0); rot(b.neck, -0.04 - 0.03 * br, 0, 0);
+    rot(b.armL, -0.12 + Math.sin(c) * 0.12, Math.cos(c) * 0.1, 0.06 + Math.cos(c) * 0.08);
+    rot(b.armR, -0.25 * point, 0, 0);
+    out.right = -0.12 * point + 0.04 * br;
+  }
+  return out;
+}
+
 export function poseHero(id: GripHero, b: Record<string, Bone>, t: number, a: Action | null, off: THREE.Vector3) {
   const br = Math.sin(t * 2.2), rogue = id === 'rogue', mage = id === 'mage';
   let right = mage ? 1.62 : Math.PI / 4, rightYaw = mage ? -0.04 : -0.12;
   let left = Math.PI / 4, leftYaw = 0.16;
+  // 备战待机（用户 11-13：「现在就呆站着」）：压低重心的弓步、身体侧对来敌，呼吸带动肩背起伏，重心在两脚间慢慢换，
+  // 偶尔一次握紧 / 掂一下武器。动作要在 3× 像素下一眼看得出：胸背起伏约 4°、重心起伏约 3 cm、换重心左右 ±4 cm。
+  const ready = readyIdle(id, b, t, a ? 0 : 1);
+  right += ready.right; rightYaw += ready.rightYaw; left += ready.left;
   mov(b.hips, 0, (rogue ? -0.045 : 0) + br * 0.008, 0);
   rot(b.spine, rogue ? 0.18 + br * 0.012 : 0.025 + br * 0.012, 0, 0);
   rot(b.neck, rogue ? -0.16 : -0.025, Math.sin(t * 0.5) * 0.025, 0);
