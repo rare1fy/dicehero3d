@@ -33,6 +33,7 @@ import { titleMenu, pauseMenu, type MetaHost } from './meta/screens';
 import { PREFS, SPEEDS, loadPrefs, tickPrefs } from './meta/prefs';
 import { saveRun, clearRun, loadRun } from './meta/save';
 import { PauseButton } from './meta/pauseBtn';
+import { DieTip } from './meta/dieTip';
 import { safeInsets } from './hud/hud';
 import type { Ev2, GainReason } from '../../core/v2/events2';
 import type { ClassId, DieKind, StatusV2 } from '../../core/v2/types';
@@ -109,7 +110,7 @@ export class V2Show {
     this.hud = new BattleHud(L, this.ov);
     this.loot = new Loot(L, 'warrior'); this.mech = new ClassMech(L, skin);
     this.banner = new Banner(this.ov); this.toast = new Toast(this.ov); this.screen = new Screen(this.ov);
-    this.menu = new Menu(this.ov); this.pauseBtn = new PauseButton(this.ov); loadPrefs();
+    this.menu = new Menu(this.ov); this.pauseBtn = new PauseButton(this.ov); this.dieTip = new DieTip(this.ov); loadPrefs();
     this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10);
     this.giveUp = this.ov.pane(11, true); this.endPane = this.ov.pane(11);
     this.loot.heroAt = () => (this.hero ? this.hero.chest() : V3(-2, 1.2, 3));
@@ -993,7 +994,7 @@ export class V2Show {
   // ------------------------------------------------------------ per frame
   private frame(dt: number) {
     const t = clock.time;
-    this.menu.update(clock.rdt); tickPrefs(); this.pollStart();
+    this.menu.update(clock.rdt); tickPrefs(); this.pollStart(); this.dieHold();
     if (this.paused) FX.speed = 0;
     this.pauseBtn.show(!this.menu.on && (this.mode === 'battle' || this.mode === 'shop' || this.mode === 'choice'));
     // R7B #6 (user: 「放大的技能按钮长按不动的时候要出 tips 才行吧」): holding the play button still for 0.4 s opens its tip
@@ -1058,7 +1059,16 @@ export class V2Show {
     for (const [uid, a] of this.foes) { if (!a.root.visible || a.dead || !this.disp.get(uid)?.hp) continue; const dd = modelHit(a.root, x, y, this.hud.k, worldToUi); if (dd < bd) { bd = dd; best = uid; } }
     return best;
   }
-  private swipe: { on: boolean; seen: Set<number> } | null = null;
+  dieTip: DieTip;
+  /** swipe-select state; t / x / y / die = the press, for the long-press die tip */
+  /** long-press a die (0.45 s, still, no other die swept) → its tip; the tap's select toggle is undone */
+  private dieHold() {
+    const S = this.swipe; if (!S || S.tip || S.seen.size > 1 || performance.now() - S.t < 450 || !this.b) return;
+    S.tip = true; this.setSel(S.die, !S.on);
+    const cd = this.b.s.dice.find(x => x.uid === S.die.uid), v = worldToUi(S.die.root.position);
+    this.dieTip.show(cd?.face?.value ?? S.die.value, cd?.kind ?? 'normal', v.x, v.y, this.cls === 'mage' && !!cd && (cd as { persist?: string }).persist === 'retained');
+  }
+  private swipe: { on: boolean; seen: Set<number>; t: number; x: number; y: number; die: Die3D; tip: boolean } | null = null;
   private pointer(type: string, x: number, y: number): boolean {
     if (type === 'down') void audio.unlock();
     if (this.menu.on) return this.menu.pointer(type, x, y);
@@ -1072,8 +1082,9 @@ export class V2Show {
     // swipe-select (CLAUDE.md 定稿: 按住滑过多选; user: 「按住滑动选择多个骰子的功能也没实现」): press on a die, slide over others —
     // they all take the state the first die got (select or deselect)
     if (this.swipe) {
+      if (type === 'move' && this.swipe.tip) return true;
       if (type === 'move') { const h = this.pickDie(x, y); if (h && !this.swipe.seen.has(h.uid!)) { this.swipe.seen.add(h.uid!); if (this.sel.includes(h.uid!) !== this.swipe.on) this.setSel(h, this.swipe.on); } return true; }
-      if (type === 'up' || type === 'cancel') { this.swipe = null; return true; }
+      if (type === 'up' || type === 'cancel') { this.swipe = null; this.dieTip.hide(); return true; }
     }
     if (type === 'move' && !this.busy && this.b.s.phase === 'player') {   // hover: a resting die rises a little
       const h = this.pickDie(x, y), u = h?.uid ?? null;
@@ -1088,7 +1099,7 @@ export class V2Show {
     const ri = this.hud.top.hitRelic(x, y); if (ri >= 0) { this.hud.top.toggleTip(ri); cue('click', 0.4); return true; } this.hud.top.closeTip();
     if (this.busy || this.b.s.phase !== 'player') return false;
     const d = this.pickDie(x, y);
-    if (d) { const ki = this.b.keepInfo(); if (ki?.need && this.b.strikesLeft() === 0) this.toggleKeep(d); else { this.setSel(d, !this.sel.includes(d.uid!)); this.swipe = { on: this.sel.includes(d.uid!), seen: new Set([d.uid!]) }; } return true; }
+    if (d) { const ki = this.b.keepInfo(); if (ki?.need && this.b.strikesLeft() === 0) this.toggleKeep(d); else { this.setSel(d, !this.sel.includes(d.uid!)); this.swipe = { on: this.sel.includes(d.uid!), seen: new Set([d.uid!]), t: performance.now(), x, y, die: d, tip: false }; } return true; }
     const f = this.pickFoe(x, y); if (f != null) { if (this.chooseTarget(f)) { cue('click', 0.5); this.foeTip(f); } return true; }
     if (this.sel.length) { this.clearSel(); cue('deselect', 0.4); this.refresh(); return true; }
     return false;
