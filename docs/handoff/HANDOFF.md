@@ -56,6 +56,12 @@
 - 后台子代理（简报在本目录）：音频 `AUDIO_BRIEF.md`（挑选页端口 8820，选择写 `sfx/out_dicehero_v2/choices.json`）、地图选路 `MAP_BRIEF.md`（改 core 的 run2 / bot2 / sim、`meta/mapScreen.ts`、show2 的 nextNode / 营火）、战斗演出 `FX_BRIEF.md`（`skillStage.ts`、`fx/**`、`battle.ts`）。验收后主会话提交。
 - 下一批 meta：图鉴、构筑查看、结算统计、新手提示、手柄战斗操作。
 
+## 4d. 共用面板与 HUD 收尾（2026-11-14 0:50，会话 liufengyun-da）
+- 用户转来的 HUD 反馈第 1～8 条都做完：`d8b6566`（目标圈贴地被模型挡、环绕骰沿光环、结束回合上移并能翻回正面、去掉钱袋胶囊、两侧 UI 朝中间斜、标签字放大不重叠、可用技能呼吸闪、去掉骰子头上的重投标记）；`4151878`（《我的世界：地下城》式共用面板）。
+- **共用面板**（菜单 meta/** 也该改用它，保持一致）：`import { PANEL, panelWith, panelInset, type PanelStyle } from '../../ui3d/pixDraw'`，在 `paintCells` 里 `pen.panel(x, y, w, h, style, cut = 2)`。w、h 不含落影，画布宽高各多留 1 格。画法：1u 黑外线 → 1u 斜面（左上 edge 亮、右下 shade 暗）→ 可选 1u 语义内沿 accent → 板面 fill，右下 1u 落影 drop。内容区偏移 `panelInset(style)`（有 accent 3 格，没有 2 格）。状态：`PANEL.normal` / `focus`（金沿，可操作 / 聚焦）/ `good`（正面状态）/ `danger`（负面 / 危险）/ `disabled` / `tip`（提示框，比普通深一档，标题下一条 1u 分隔线用 `tip.edge`）。换类别色：`panelWith(PANEL.normal, '#色')`。每种还带 `title / text / sub` 三个字色。
+- 8812 的 csp_serve 在 11-14 凌晨已经不在了（不是本会话停的）。测试时自己另起一个端口：`cd dist && python ../tools/csp_serve.py <端口>`，用完关掉。
+- 还差（HUD）：吐骰子太慢、骰子和队列的往返交互（A 第 11 条）；血瓶瓶身、遗物外框换像素外壳；斩杀线 / 完防线；技能图标体素对齐 u。
+
 ## 5. 剩下的活（按优先级）
 ### A. 战斗修补（任务单 `R6S.md` 的第 2、3 条；站位 / 骰场 / 镜头那第 1 条已经由主会话做完）
 Codex 做过一半（`hpDisplay.ts`、`targeting.ts`、`barrierDome.ts`、`statusFlight.ts`、`scenes/battleGlow.ts`，进度见 `fix6_report.md` 和 `FIX6.md`），**先构建截图核实每条现在的实际效果，没做到的补上**：
