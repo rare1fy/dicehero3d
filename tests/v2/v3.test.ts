@@ -43,7 +43,7 @@ describe('v3 patterns', () => {
       expect(b.rows().map(r => r.def.cond.t)).toEqual(['sameValue', 'straight', 'array']);
     }
     expect(CLASSES.mage.basicAttack.maxDice).toBe(1);
-    expect(CLASSES.warrior.basicAttack.maxDice).toBe(3);
+    expect(CLASSES.warrior.basicAttack.maxDice).toBe(6);   // v4.4: any count of loose dice
     const b = mk('mage'); const u = setDice(b, [1, 2]);
     expect(b.check('basic', u).match).toBeNull();
   });

@@ -59,7 +59,7 @@ const WIDER: Record<string, 'three' | 'four'> = { two: 'three', three: 'four' };
 export const V4_ROWS: RowDef[] = [
   // ── 嗜血狂战：斩或挡
   row({
-    id: 'w4_loose', name: '铁壁', classId: 'warrior', basic: true, cond: { t: 'any', min: 1, max: 3 }, tierRule: { steps: S_ONE, maxDice: 3 }, icon: { kind: 'one' },
+    id: 'w4_loose', name: '铁壁', classId: 'warrior', basic: true, cond: { t: 'any', min: 1, max: 6 }, tierRule: { steps: S_ONE, maxDice: 6 }, icon: { kind: 'one' },
     tiers: ladder({ single: { fx: [armorX(0.9)] } }),   // v4.3: design ×1.5 / II ×2.0 → ×0.9 / ×1.2 (user pick: ×0.6 with HP 90; v4.2 had ×1.05 / ×1.4 with HP 80)
     maxLevel: 2,
     levelUp: { 2: r => mapTiers(r, list => list.map(e => (e.t === 'armor' ? { ...e, mul: 1.2 } : e))) },
@@ -199,7 +199,7 @@ export const V4_ROWS: RowDef[] = [
 
 /** v4.1 狂战 劈砍: the attack side of the warrior's loose dice (铁壁 is the guard side, and the upgradeable slot). Not on the tablet */
 V4_ROWS.push(row({
-  id: 'w4_chop', name: '劈砍', classId: 'warrior', basic: true, cond: { t: 'any', min: 1, max: 3 }, tierRule: { steps: S_ONE, maxDice: 3 }, icon: { kind: 'one' },
+  id: 'w4_chop', name: '劈砍', classId: 'warrior', basic: true, cond: { t: 'any', min: 1, max: 6 }, tierRule: { steps: S_ONE, maxDice: 6 }, icon: { kind: 'one' },
   tiers: ladder({ single: { fx: [dmg('one', 1.0)] } }), maxLevel: 1,
 }));
 /** v4.1: do these values form a pattern (同点 ≥2 / 连环 ≥3 / 阵列 ≥4)? Loose dice must not (散骰 is an exclusive pattern) */

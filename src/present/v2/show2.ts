@@ -66,7 +66,7 @@ const NODE_SCENE: Record<string, string> = { normal: 'n_trail', elite: 'n_lumber
 const NODE_CN: Record<string, [string, string]> = { normal: ['雾林小径', '普通战 · 两波'], elite: ['废弃伐木场', '精英 · 狼人首领'], midBoss: ['墓园祭坛', '首领 · 枯骨巫妖'], shop: ['林边货车', '商人'] };
 const CLASS_IDS: ClassId[] = ['warrior', 'mage', 'rogue'];
 const CLASS_LINES: Record<ClassId, string[]> = {
-  warrior: ['散骰 1～3 颗：劈砍或铁壁二选一', '斩杀再动；完防下回合 +1 骰', '卖血重投，斩首或完防还你一半'],
+  warrior: ['散骰几颗都行：劈砍或铁壁二选一', '斩杀再动；完防下回合 +1 骰', '卖血重投，斩首或完防还你一半'],
   mage: ['骰子留场，每回合补 1 颗（最多 6）', '交 3 颗以内是小咒，照样吟唱', '交 4 颗以上释放大招；吟唱有屏障'],
   rogue: ['有骰子就能接着出手，刀鞘是上限（会成长）', '每多一刀 +20%', '袖箭、影步补骰续刀；背刺、影舞收尾'],
 };

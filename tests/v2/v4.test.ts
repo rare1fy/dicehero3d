@@ -367,6 +367,10 @@ describe('v4.1 散骰是排他的牌型', () => {
     const o2 = b.options(pair);
     expect(o2.find(o => o.ref === 0)?.ok).toBe(true);
     expect(o2.filter(o => o.ref === 'basic').some(o => o.ok)).toBe(false);
+    // v4.4: the warrior hands in any number of loose dice (user: 「战士大于3颗骰子的散骰触发不了」)
+    expect(basic([1, 1, 3, 6]).every(o => o.ok)).toBe(true);
+    expect(basic([2, 2, 5, 5, 6, 1]).every(o => o.ok)).toBe(true);
+    expect(basic([2, 2, 5, 5]).every(o => !o.ok && o.reason === 'pattern')).toBe(true);   // 阵列, not loose
     // mage / rogue: 1 die is always loose
     for (const cid of ['mage', 'rogue'] as const) { const m = mk(cid); const u = setDice(m, [5]); expect(m.options(u).find(o => o.ref === 'basic')?.ok).toBe(true); }
   });

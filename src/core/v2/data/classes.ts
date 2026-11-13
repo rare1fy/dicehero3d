@@ -28,7 +28,7 @@ export const CLASSES: Record<ClassId, ClassDefV2> = {
   warrior: mk('warrior', {
     name: '嗜血狂战', hp: 90,   // v4 tuning: 120 → 105; v4.2: → 80; v4.3 (user pick): → 90 with 铁壁 ×0.9 (core2_report v4.3)
     strikesPerTurn: 1, maxStrikes: 1, leftover: 'dissipate', overflow: 'damagePct',
-    basicAttack: { minDice: 1, maxDice: 3, coef: 1, name: '铁壁' },   // v4: loose dice = 铁壁 (armor); v3 tablets still hit (劈砍)
+    basicAttack: { minDice: 1, maxDice: 6, coef: 1, name: '铁壁' },   // v4: loose dice = 铁壁 (armor); v3 tablets still hit (劈砍). v4.4: any count (user: 「战士大于3颗骰子的散骰触发不了」)
     specialDice: ['furyDie', 'titanDie'],
     mechanics: ['bloodReroll', 'behead', 'perfectGuard', 'stunGuard', 'overflow'],
     earnDieMode: 'nextTurnPlusOne',
