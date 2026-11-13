@@ -33,6 +33,21 @@
 - 画面：场景默认像素 3×（`look/pixel.ts`），UI 单独原生分辨率渲染（`look/uiPass.ts`、`uiLook.ts`：UI 周围暗晕 + 加粗描边 + 底带压暗）。曝光和英雄自发光已调低（白色不再糊）。
 - 用户要的 UI 美术方向：**高清像素规范**（`UX_V3.md` §6b：美术像素单位 u，横平竖直 / 正 45°，平涂 2～4 档，1u 描边）、按钮有厚度（§5b，挤出 ≥ 宽度 35%）、字用方正的像素字（Fusion Pixel 12px，OFL，`_ref/px3d/pit_fonts/`）、骰子六面都写数字、瞄准箭头照炉石（等距 V 形节、流动）。
 
+## 4b. 第七轮进度（2026-11-13 19:30，新会话接手后）
+- 提交：`d98ecec`（手机竖屏浏览器自动横过来：`src/platform/rotate.ts`，`?rot=0` 关，`?rot=1` 在桌面上强制；奖励和弦音删掉）、`1b6e9f9`（r7a 战斗修补 + r7b 像素 UI，代理报告在 `reports/r7a_report.md`、`r7b_report.md`）、`043d5a7`（重投点了整块转一圈，结束回合 / 吟唱翻面再翻回，像素板加了背面；出牌按钮按住不动 0.4 秒出 tips，看完松手不出牌）。
+- 用户要求：**不再发 Artifact，只更新桌面本地版** `C:\Users\liufengyun\Desktop\六面史诗_v2_试玩.html`（从 `dist/r8/index.html` 复制，并把 title 改成「六面史诗 v2 试玩」）。
+- opencode 代理挂在后台服务（`opencode serve --service`）上，客户端关了也会继续跑。派活前先查 `~/.local/share/opencode/opencode.db` 里 `session_v2.time_updated`。
+- A 组第 1～10 条已核实做完（见 r7a 报告）。B 组做完的：像素按钮外壳、按下、翻转、状态行、技能槽前景、tips 像素字、长按 tips。
+- 还差：
+  - A 组第 11 条：回合开始吐骰子太慢，骰子和骰子队列之间没有往返交互。
+  - B 组追加第 8 条：出牌按钮长出来时，技能图标放大 1.3～1.5 倍并立起 25～35°，瞄准时朝目标倾斜。
+  - 血瓶瓶身、遗物胶囊、金币胶囊还没换成像素外壳。
+  - 技能图标的体素没对齐 u。
+  - 罗马数字补 `IV`（`show2.ts:66`、`skills.ts:18`）。
+  - show2 给 `plates.sync` 填 `trail`。
+  - 斩杀线 / 完防线：SlotState 加 `line?: { kind: 'kill' | 'guard'; on: boolean }`。
+  - `hud/pixCoin.ts` 没人用，可以删。
+
 ## 5. 剩下的活（按优先级）
 ### A. 战斗修补（任务单 `R6S.md` 的第 2、3 条；站位 / 骰场 / 镜头那第 1 条已经由主会话做完）
 Codex 做过一半（`hpDisplay.ts`、`targeting.ts`、`barrierDome.ts`、`statusFlight.ts`、`scenes/battleGlow.ts`，进度见 `fix6_report.md` 和 `FIX6.md`），**先构建截图核实每条现在的实际效果，没做到的补上**：
