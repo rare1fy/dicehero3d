@@ -8,10 +8,11 @@
 import * as THREE from 'three';
 import type { BattleActor } from '../bestiary/battle';
 
-export const HERO_POS = new THREE.Vector3(-2.9, 0, 2.6);
+// user: 「站位还是太斜了」 — the hero stands on the path's centre line facing straight up it, the first enemy straight across from him
+export const HERO_POS = new THREE.Vector3(0, 0, 3.4);
 /** the classic lanes up the path (no distance rule any more: enemies stand at their lane from the start) */
-const LANES: Array<[number, number]> = [[0.9, -2.4], [-1.5, -3.0], [2.9, -3.2], [-3.3, -2.3], [1.0, -4.6]];
-const BOSS_AT: [number, number] = [0.4, -3.9];
+const LANES: Array<[number, number]> = [[0, -2.3], [-2.3, -2.7], [2.3, -2.7], [-4.2, -2.2], [4.2, -2.2]];
+const BOSS_AT: [number, number] = [0, -3.9];
 export function foePosition(lane: number, boss: boolean, _withBoss = false) {
   if (boss) return new THREE.Vector3(BOSS_AT[0], 0, BOSS_AT[1]);
   const p = LANES[Math.max(0, lane) % LANES.length];
@@ -34,7 +35,7 @@ export function actorSubject(a: BattleActor, home: THREE.Vector3, hero = false):
 export const BANDS = { diceY: 0.655, diceX: 0.6, top: 0.09 };
 export const DIE_PX = 64;
 /** the classic battle camera (R5): eye / look / fov as the director takes them */
-const EYE0 = new THREE.Vector3(0.3, 13.4, 14.9), LOOK0 = new THREE.Vector3(0, -0.6, -3.6), FOV0 = 36;
+const EYE0 = new THREE.Vector3(0.3, 13.4, 14.9), LOOK0 = new THREE.Vector3(0, -0.6, -2.4), FOV0 = 40;
 
 export interface CameraFit { eye: THREE.Vector3; look: THREE.Vector3; fov: number; pitch: number; distance: number; fits: boolean;
   /** the dice sockets: centre on the ground and scale (1 = a 0.8 m die) */
@@ -72,7 +73,7 @@ function placeField(eye: THREE.Vector3, look: THREE.Vector3, o: FitOpts, subject
   const hero = subjects.find(s => s.hero), foes = subjects.filter(s => !s.hero);
   const heroZ = hero ? (hero.box.min.z + hero.box.max.z) / 2 : 2.6;
   const foeZ = foes.length ? Math.max(...foes.map(f => f.box.max.z)) : -2.0;
-  const c = new THREE.Vector3(1.3, 0, (heroZ + foeZ) / 2);   // right of the hero column so a full row never sits on him
+  const c = new THREE.Vector3(0, 0, (heroZ + foeZ) / 2);   // on the centre line; the sockets leave a lane open in the middle (diceField)
   const fwd = look.clone().sub(eye).normalize(), vf = _cam.fov * Math.PI / 180, focal = (o.H / 2) / Math.tan(vf / 2);
   let s = 1;
   for (let i = 0; i < 3; i++) { const dep = c.clone().setY(0.4 * s).sub(eye).dot(fwd); s = DIE_PX * o.k * dep / (0.8 * focal); }

@@ -45,6 +45,7 @@ export function setPixel(on: boolean, size?: number) {
 export const togglePixel = () => setPixel(!PX.on);
 export function stepPixelSize(d: number) { PX.size = Math.max(1, Math.min(3, PX.size + d)); if (!PX.on) PX.on = true; changed(); return PX.size; }
 
+function isPhone() { try { const n = globalThis.navigator as Navigator | undefined, s = globalThis.screen as Screen | undefined; return !!n && (n.maxTouchPoints ?? 0) > 0 && !!s && Math.min(s.width, s.height) < 900; } catch { return false; } }
 /** URL switch: #px / #px2 / #name&px (hash tokens), ?px / ?px=1|2|3 (query). Returns the hash without the px token. */
 export function readPixelFlag(hash: string, query: (k: string) => string | null): string {
   const toks = hash.split(/[&+,]/).filter(Boolean), rest: string[] = [];
@@ -52,6 +53,8 @@ export function readPixelFlag(hash: string, query: (k: string) => string | null)
   for (const t of toks) { const m = /^px([123])?$/.exec(t); if (m) { on = true; if (m[1]) size = +m[1]; } else if (t === 'std') on = false; else rest.push(t); }
   const q = query('px');
   if (q != null) { on = q !== '0'; if (/^[123]$/.test(q)) size = +q; }
+  // phones: 2x/3x art pixels are not readable there (user: 「2x还是太不清晰了在手机上」) — 1x unless the URL asks; a settings switch comes later
+  if (q == null && !/px[123]/.test(hash) && isPhone()) size = 1;
   PX.on = on; PX.size = size; PXU.uPx.value = on ? 1 : 0;
   return rest.join('&');
 }

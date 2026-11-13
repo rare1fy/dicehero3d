@@ -12,8 +12,11 @@ import { toon } from '../look/toon';
 import { DICE3D, type Die3D } from '../dice/die3d';
 
 /** unit-size local slot offsets from c: 1.3 apart (≥ 1.6 die widths → ≥ 120 ref px centre to centre at 80 px dice) */
-const N = 6, GAP = 1.2, SMILE = 0.3;
-export const SLOT_LOCAL = Array.from({ length: N }, (_, i) => { const u = (i - (N - 1) / 2) / ((N - 1) / 2); return V3((i - (N - 1) / 2) * GAP, 0, SMILE * (1 - u * u) - SMILE * 0.45); });
+const N = 6, GAP = 1.12, SMILE = 0.3;
+/** three sockets each side of the centre line, with a lane open in the middle so the hero and the enemy straight across from him
+ *  keep a clear line (user 2026-11-13: hero on the centre line, 「站位还是太斜了」) */
+const XS = [-3.5, -2.35, -1.2, 1.2, 2.35, 3.5];
+export const SLOT_LOCAL = XS.map(x => { const u = x / 3.5; return V3(x * GAP / 1.15, 0, SMILE * (1 - u * u) - SMILE * 0.45); });
 /** which slots n dice take first: the most central */
 const PREF = [2, 3, 1, 4, 0, 5];
 
