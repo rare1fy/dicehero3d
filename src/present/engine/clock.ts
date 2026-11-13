@@ -12,13 +12,15 @@ export const FX = {
   slowmoScale: 1,
   /** Current game-time multiplier (derived each frame). */
   timeScale: 1,
-  /** Global speed (bot fast-forward, debug). */
+  /** Global speed (bot fast-forward, debug, the battle-speed setting). */
   speed: 1,
+  /** screen-shake multiplier (settings: off / weak / normal) */
+  shakeScale: 1,
 };
 export const HITSTOP_SCALE = 0.04;
 export const TRAUMA_DECAY = 2.2;
 
-export const shake = (a: number) => { FX.trauma = Math.min(1, FX.trauma + a); };
+export const shake = (a: number) => { FX.trauma = Math.min(1, FX.trauma + a * FX.shakeScale); };
 export const hitstop = (s: number) => { FX.hitstop = Math.max(FX.hitstop, s); };
 export const slowmo = (s: number, scale = 0.35) => { FX.slowmo = Math.max(FX.slowmo, s); FX.slowmoScale = scale; };
 

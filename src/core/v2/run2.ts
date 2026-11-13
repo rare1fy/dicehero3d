@@ -69,6 +69,13 @@ export class Run2 {
     this.enterNode();
   }
 
+  /** continue a saved run (state at the start of a node + the RNG state then); nothing is re-rolled */
+  static restore(s: RunState, rngState: number): Run2 {
+    const r = Object.create(Run2.prototype) as Run2;
+    r.s = structuredClone(s); r.rng = createRng(rngState >>> 0); r.battle = null;
+    return r;
+  }
+
   node(): RunNode & { idx: number } { return { idx: this.s.node, ...this.s.nodes[this.s.node] }; }
   pending(): Choice | null { return this.s.queue[0] || null; }
 

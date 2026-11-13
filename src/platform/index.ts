@@ -25,11 +25,14 @@ export function makeCanvas(w: number, h: number): any {
   return c;
 }
 
+/** haptics switch (settings) */
+export const VIBE = { on: true };
 export function initPlatform(): Platform {
   const p = createPlatform() as Platform;
   landscapeOnPortrait(p);
   const mini = p.name === 'wx' ? wx : p.name === 'tt' ? tt : null;
   p.vibrate = (level: VibeLevel) => {
+    if (!VIBE.on) return;
     try {
       if (mini && mini.vibrateShort) { mini.vibrateShort({ type: level }); return; }
       const nav: any = G.navigator;

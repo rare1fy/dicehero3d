@@ -9,3 +9,6 @@ docs/refs/clips/
 # Blender work files and preview renders (the shipped model is src/assets/models/fishman.glb)
 art/fishman/
 art/kaykit_src/
+
+# agent screenshot folders (large; kept locally only)
+docs/handoff/reports/shots_*/

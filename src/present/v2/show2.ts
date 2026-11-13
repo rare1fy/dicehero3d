@@ -28,6 +28,12 @@ import { audio } from '../../audio/audio';
 import type { Platform } from '../../platform/index';
 import type { Battle2, BoardRow, RowRef } from '../../core/v2/battle2';
 import { Run2, type Choice, type ShopItem, type LevelCard } from '../../core/v2/run2';
+import { Menu, type MenuKey } from './meta/menu';
+import { titleMenu, pauseMenu, type MetaHost } from './meta/screens';
+import { PREFS, SPEEDS, loadPrefs, tickPrefs } from './meta/prefs';
+import { saveRun, clearRun, loadRun } from './meta/save';
+import { PauseButton } from './meta/pauseBtn';
+import { safeInsets } from './hud/hud';
 import type { Ev2, GainReason } from '../../core/v2/events2';
 import type { ClassId, DieKind, StatusV2 } from '../../core/v2/types';
 import { CLASSES, TALENT_FILLERS, talentDef, relicV2, rowDef, slotRow, xpToNext, ECON, enemyCfgV2 } from '../../core/v2/data';
@@ -67,7 +73,7 @@ const ROMAN = ['', 'I', 'II', 'III'];
 const gainSpecial = (r: GainReason): SpecialId | undefined => (r === 'fury' || r === 'furyUlt' ? 'fury' : r === 'shadow' || r === 'precise' || r === 'mark' ? 'shadowres' : r === 'titan' ? 'titan' : undefined);
 const hex = (s: string) => parseInt(s.slice(1), 16);
 
-type Mode = 'select' | 'battle' | 'choice' | 'shop' | 'over';
+type Mode = 'title' | 'select' | 'battle' | 'choice' | 'shop' | 'over';
 
 export class V2Show {
   run: Run2 | null = null; b: Battle2 | null = null; mode: Mode = 'select'; busy = true; flying = false; result: null | 'win' | 'lose' = null;
@@ -103,6 +109,7 @@ export class V2Show {
     this.hud = new BattleHud(L, this.ov);
     this.loot = new Loot(L, 'warrior'); this.mech = new ClassMech(L, skin);
     this.banner = new Banner(this.ov); this.toast = new Toast(this.ov); this.screen = new Screen(this.ov);
+    this.menu = new Menu(this.ov); this.pauseBtn = new PauseButton(this.ov); loadPrefs();
     this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10);
     this.giveUp = this.ov.pane(11, true); this.endPane = this.ov.pane(11);
     this.loot.heroAt = () => (this.hero ? this.hero.chest() : V3(-2, 1.2, 3));
@@ -117,7 +124,43 @@ export class V2Show {
     platform.onResize(() => this.layout());
     this.bindKeys();
     this.layout();
-    this.classSelect();
+    this.title();
+  }
+
+  // ------------------------------------------------------------ meta screens (console shell: title / pause / settings / save)
+  menu: Menu; pauseBtn: PauseButton; paused = false;
+  private host(): MetaHost {
+    return { menu: this.menu, newRun: () => { this.menu.close(); this.classSelect(); }, continueRun: () => this.continueRun(), toTitle: () => this.toTitle(),
+      abandonRun: () => { clearRun(); this.toTitle(); }, resume: () => this.resume() };
+  }
+  /** title screen over the forest path, the camera drifting slowly */
+  title() {
+    this.mode = 'title'; this.paused = false; this.result = null; this.botBusy = false; this.screen.close(); this.reopen = null; this.cleanupWorld(); GRADE.desat = 0;
+    this.hudRun(false); this.hudBattle(false); this.pauseBtn.show(false); FX.speed = SPEEDS[PREFS.speed];
+    this.stage = showStage(SCENES.find(s => s.id === 'n_trail')!);
+    this.picks = CLASS_IDS.map((c, i) => { const a = new BattleActor(c); a.place(V3(-2.6 + i * 2.6, 0, -1.2 - (i === 1 ? 0.6 : 0))); a.faceToward(V3(-2.6 + i * 2.6, 0, 12)); return a; });
+    shot('title', staticShot(V3(4.6, 3.2, 9.5), V3(-0.4, 1.7, -1.0), 38), { cut: true });
+    titleMenu(this.host());
+  }
+  private continueRun() {
+    const run = loadRun(); if (!run) { this.toast.show('没有可继续的存档'); titleMenu(this.host()); return; }
+    this.menu.close(); this.startRun(run, `continue ${run.s.classId} node ${run.s.node}`);
+  }
+  private toTitle() { this.menu.close(); this.paused = false; this.b = null; this.batch = []; this.botQ = []; this.title(); }
+  private pause() {
+    if (this.menu.on || !(this.mode === 'battle' || this.mode === 'shop' || this.mode === 'choice')) return;
+    this.paused = true; this.drag = null; pauseMenu(this.host()); cue('click', 0.5);
+  }
+  private resume() { this.menu.close(); this.paused = false; FX.speed = SPEEDS[PREFS.speed]; if (this.mode === 'choice' || this.mode === 'shop') this.reopen?.(); }
+  private menuKey(e: KeyboardEvent): boolean {
+    const map: Record<string, MenuKey> = { arrowup: 'up', w: 'up', arrowdown: 'down', s: 'down', arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', enter: 'ok', ' ': 'ok', escape: 'back', backspace: 'back' };
+    const k = map[e.key.toLowerCase()]; if (!k) return false; e.preventDefault(); this.menu.key(k); return true;
+  }
+  /** Start on a gamepad = pause (menus handle their own D-pad / A / B) */
+  private startWas = false;
+  private pollStart() {
+    const p = Array.from((globalThis.navigator as Navigator | undefined)?.getGamepads?.() ?? []).find(x => x && x.connected); if (!p) return;
+    const st = !!p.buttons[9]?.pressed; if (st && !this.startWas) { if (this.paused) this.resume(); else this.pause(); } this.startWas = st;
   }
 
   // ------------------------------------------------------------ layout
@@ -126,6 +169,7 @@ export class V2Show {
     this.L.resize(W, H, dpr); this.ov.resize(W, H, dpr);
     // R5: the HUD rebuilt to the approved mockup (hud/hud.ts lays out the flask, prep dice, purse and the new widgets)
     this.hud.layout(W, H, this.flask, this.tray, this.loot);
+    this.pauseBtn.layout(W, safeInsets().r, k); this.menu.refresh();
     this.mech.place(-500, -500, 3); this.tablet.place(W - 260 * k, H * 0.42, 250 * k);
     CAM.shift = W > H ? Math.round(H * 0.06) : 0;
     if (this.mode === 'battle' && this.hero && this.b) { this.reframePending = true; void this.reframe(true, 0); }
@@ -173,12 +217,16 @@ export class V2Show {
   }
 
   pick(c: ClassId, seed = (Date.now() % 100000) | 0) {
+    this.startRun(new Run2({ seed, classId: c }), `pick ${c} seed ${seed}`);
+  }
+  private startRun(run: Run2, logLine: string) {
+    const c = run.s.classId;
     this.screen.close(); this.reopen = null; cue('select', 0.8); void audio.unlock().then(() => audio.playMusic('bgm_battle', 0.6));
-    this.cls = c; this.run = new Run2({ seed, classId: c }); this.result = null; this.tauntSeen = false;
+    this.cls = c; this.run = run; this.result = null; this.tauntSeen = false; this.paused = false; FX.speed = SPEEDS[PREFS.speed];
     const skin: SuitSkin = { cls: c, scheme: 'A', plain: true };
     this.tray.skin = skin; this.mech.setClass(c); this.mech.setSkin(skin); this.loot.setClass(c);
     this.loot.gold = this.loot.shownGold = this.run.s.gold; this.loot.level = this.run.s.level; this.loot.xp = this.loot.shownXp = this.run.s.xp; this.loot.xpMax = xpToNext(this.run.s.level);
-    this.log.push(`pick ${c} seed ${seed}`);
+    this.log.push(logLine);
     void this.nextNode();
   }
 
@@ -202,6 +250,7 @@ export class V2Show {
   }
   async nextNode(): Promise<void> {
     const run = this.run!; const ph = run.s.phase;
+    saveRun(run);   // console standard: autosave at the start of every node (deleted on win / death)
     if (ph === 'win') return this.resultScreen(true);
     if (ph === 'dead') return this.resultScreen(false);
     if (ph === 'shop') return this.enterShop();
@@ -807,6 +856,7 @@ export class V2Show {
   leaveShop() { this.screen.close(); this.reopen = null; this.run!.next(); void this.nextNode(); }
 
   resultScreen(win: boolean) {
+    clearRun(); this.pauseBtn.show(false);
     this.mode = 'over'; this.result = win ? 'win' : 'lose'; this.busy = true; this.hudBattle(false);
     const run = this.run!; this.loot.gold = run.s.gold; this.botQ = []; this.log.push(`result ${this.result} lv ${run.s.level} gold ${run.s.gold}`);
     if (win && this.hero) { this.hero.cheer(); cue('win'); }
@@ -894,7 +944,7 @@ export class V2Show {
     this.hud.reroll.set({ free: live ? ri.free : 0, blood: ri.free > 0 ? null : ri.bloodCost, can, sel: this.sel.length, maxLamps: this.lampsMax });
     // v3 auto end: no strikes left or no dice on the field → end the turn by itself (the mage's keep pick waits for its button)
     const kiA = live ? b.keepInfo() : null;
-    if (live && b.mustEndTurn() && !(kiA?.need) && !this.autoEndArmed) { this.autoEndArmed = true; after(0.45, () => { this.autoEndArmed = false; const bb = this.b; if (bb && !this.busy && bb.s.phase === 'player' && bb.mustEndTurn() && !bb.keepInfo()?.need) this.act({ k: 'end' }); }); }
+    if (live && PREFS.autoEnd && b.mustEndTurn() && !(kiA?.need) && !this.autoEndArmed) { this.autoEndArmed = true; after(0.45, () => { this.autoEndArmed = false; const bb = this.b; if (bb && !this.busy && bb.s.phase === 'player' && bb.mustEndTurn() && !bb.keepInfo()?.need) this.act({ k: 'end' }); }); }
     // mage after the strike: which leftovers stay (cyan)
     const ki = live ? b.keepInfo() : null, keepSet = new Set(ki?.need ? (this.keep ?? ki.selected) : []);
     for (const d of this.dice.values()) if (!this.sel.includes(d.uid!)) { const kp = keepSet.has(d.uid!); d.glow = kp ? 1.1 : (d.suit?.special ? 0.5 : 0); d.glowCol.set(kp ? 0x6ad8ff : 0xb860ff); d.lift = kp ? 0.55 : 0; }
@@ -943,6 +993,9 @@ export class V2Show {
   // ------------------------------------------------------------ per frame
   private frame(dt: number) {
     const t = clock.time;
+    this.menu.update(clock.rdt); tickPrefs(); this.pollStart();
+    if (this.paused) FX.speed = 0;
+    this.pauseBtn.show(!this.menu.on && (this.mode === 'battle' || this.mode === 'shop' || this.mode === 'choice'));
     // R7B #6 (user: 「放大的技能按钮长按不动的时候要出 tips 才行吧」): holding the play button still for 0.4 s opens its tip
     const D = this.drag; if (D && !D.moved && !D.tip) { D.held += dt; if (D.held >= 0.4 && this.hud.bar.tips[D.i]) { D.tip = true; this.hud.bar.tipOn = D.i; this.hud.bar.endAim(); cue('tick', 0.4); } }
     this.hero?.update(dt); for (const a of this.foes.values()) a.update(dt); for (const a of this.picks) a.update(dt);
@@ -1006,7 +1059,10 @@ export class V2Show {
     return best;
   }
   private pointer(type: string, x: number, y: number): boolean {
-    if (type === 'down') { void audio.unlock(); this.flow.hurry(); }
+    if (type === 'down') void audio.unlock();
+    if (this.menu.on) return this.menu.pointer(type, x, y);
+    if (this.pauseBtn.on && this.pauseBtn.hit(x, y)) { if (type === 'down') this.pauseBtn.press(true); else if (type === 'up') { this.pauseBtn.press(false); this.pause(); } else if (type === 'cancel') this.pauseBtn.press(false); return true; }
+    if (type === 'down') this.flow.hurry();
     if (this.screen.pointer(type, x, y)) return true;
     if (this.mode !== 'battle' || !this.b) return false;
     if (this.drag) return this.dragPointer(type, x, y);
@@ -1067,6 +1123,8 @@ export class V2Show {
   private bindKeys() {
     if (typeof window === 'undefined' || !window.addEventListener) return;
     window.addEventListener('keydown', e => {
+      if (this.menu.on) { this.menuKey(e); return; }
+      if (e.key === 'Escape' && (this.mode === 'shop' || this.mode === 'choice' || (this.mode === 'battle' && !this.sel.length))) { e.preventDefault(); this.pause(); return; }
       if (this.mode !== 'battle' || !this.b) return;
       const k = e.key.toLowerCase();
       if (k === 'r') this.hud.reroll.tap(); else if (k === 'e') this.hud.chant.tap();
