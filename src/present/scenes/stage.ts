@@ -96,7 +96,11 @@ export function showStage(def: SceneDef, options: { combat?: boolean } = {}): St
   const ctx: Ctx = {
     cards, cut,
     cutEaves(h) { eaves = h; },
-    ambient(a) { amb.push(a); },
+    ambient(a) {
+      // FIX6 §5: in a fight the cyan fireflies stay up the path (never over the HUD band) and turn a pale warm green, dimmer
+      if (options.combat && a.kind === 'fireflies') { const ar = a.area ?? { x0: -9, z0: -11, x1: 9, z1: 6 }; a = { ...a, color: 0xb8d89a, rate: a.rate * 0.6, area: { ...ar, z1: Math.min(ar.z1, -0.5) } }; }
+      amb.push(a);
+    },
     shaft(x, z, o) { shaft(root, x, z, { color: md.moon, ...o }); },
     w,
     light(p, color, intensity = 5, dist = 7) {

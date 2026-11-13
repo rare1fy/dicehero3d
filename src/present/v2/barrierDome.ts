@@ -20,12 +20,15 @@ export class BarrierDome {
     this.flow = new THREE.InstancedMesh(new THREE.BoxGeometry(0.035,0.025,0.035),this.flowMat,32); this.root.add(this.flow);
     this.root.visible=false;
   }
+  /** a poison / burn tick went through: the dome thins out for a moment instead of flashing like a block (DoT ignores the barrier) */
+  pierce() { this.thin = 0.7; }
+  private thin = 0;
   update(dt: number, hero: BattleActor, barrier: number, dice: number) {
-    this.t+=dt; this.root.visible=barrier>0; if (!this.root.visible) return;
-    const n=Math.max(1,Math.min(6,dice)), r=Math.max(hero.top+0.18,hero.width*0.7);
+    this.t+=dt; this.thin=Math.max(0,this.thin-dt); this.root.visible=barrier>0; if (!this.root.visible) return;
+    const n=Math.max(1,Math.min(6,dice)), r=Math.max(hero.top+0.18,hero.width*0.7), see=1-0.8*Math.min(1,this.thin/0.25);
     this.root.position.copy(hero.root.position); this.root.position.y=hero.home.y+0.02; this.root.scale.setScalar(r);
-    this.mat.opacity=(0.025+n*0.012)*(0.95+0.05*Math.sin(this.t*2)); this.rim.opacity=0.18+n*0.045;
-    this.flowMat.opacity=0.2+n*0.055;
+    this.mat.opacity=(0.025+n*0.012)*(0.95+0.05*Math.sin(this.t*2))*see; this.rim.opacity=(0.18+n*0.045)*see;
+    this.flowMat.opacity=(0.2+n*0.055)*see;
     const m=new THREE.Matrix4(), p=new THREE.Vector3();
     for(let i=0;i<32;i++) { const h=((i*0.618+this.t*0.06)%1)*0.96, a=i*2.4+this.t*0.16, rad=Math.sqrt(1-h*h); p.set(Math.cos(a)*rad,h,Math.sin(a)*rad); m.makeTranslation(p.x,p.y,p.z); this.flow.setMatrixAt(i,m); }
     this.flow.instanceMatrix.needsUpdate=true;

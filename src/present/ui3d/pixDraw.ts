@@ -72,12 +72,15 @@ export class PixPen {
    * Fusion Pixel 中文 / 字母：fp = 每个字体像素占几个设备像素（整数，≥ 1）；(x, y) 为格坐标（左上，align 改锚点）。
    * 描边为 1 个字体像素的四向深色（字体像素 = 1u 时就是 1u 描边）。返回宽（格，向上取整）。
    */
-  text(t: string, x: number, y: number, o: { col: string; fp?: number; line?: string | null; align?: 'left' | 'center' | 'right'; shadow?: string | null }) {
+  text(t: string, x: number, y: number, o: { col: string; fp?: number; line?: string | null; align?: 'left' | 'center' | 'right'; shadow?: string | null; thin?: boolean }) {
     const fp = Math.max(1, Math.round(o.fp ?? this.u)), u = this.u, wDev = pixW(t) * fp;
     let px = (this.ox + x) * u; if (o.align === 'center') px -= wDev / 2; else if (o.align === 'right') px -= wDev;
     px = Math.round(px); const py = Math.round((this.oy + y) * u);
     if (o.shadow) drawPix(this.g, t, px, py + fp, { scale: fp, color: o.shadow, outline: null });
-    drawPix(this.g, t, px, py, { scale: fp, color: o.col, outline: o.line === null ? null : o.line ?? '#0a0710' });
+    // thin = a 1-device-px outline (small labels: a full font-pixel outline would close the counters of 口 etc.)
+    const thin = o.thin ?? fp < u, line = o.line === null ? null : o.line ?? '#0a0710';
+    if (line && thin) for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1]]) drawPix(this.g, t, px + dx, py + dy, { scale: fp, color: line, outline: null });
+    drawPix(this.g, t, px, py, { scale: fp, color: o.col, outline: thin ? null : line });
     return Math.ceil(wDev / u);
   }
 }

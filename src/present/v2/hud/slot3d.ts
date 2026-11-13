@@ -11,7 +11,8 @@ import { PixPlate } from './pixPlate';
 import { lampRow } from './pixParts';
 import { GRID, PAL } from '../../ui3d/pixelGrid';
 import type { PixModel } from '../../ui3d/pixMesh';
-import { pill, label, glyph, rr, type Glyph, type G } from './draw';
+import type { Glyph } from './draw';
+import { paintSlotFront } from './slotFront';
 import { lerp, ease } from '../../engine/clock';
 import { cue } from '../../../audio/cues';
 
@@ -31,7 +32,7 @@ export class Slot3D {
   /** current / target px pose and morph */
   cx = 0; cy = 0; size = 80; tx = 0; ty = 0; ts = 80; big = 0; tBig = 0; dim = 0; tDim = 0; vis = 0; tVis = 1;
   st: SlotState = { lit: false, tier: 0, dead: false, ready: false }; press = 0; aimK = 0; k = 1;
-  private lift = 4; private shownTier = 0; private bump = new Spring(500, 18); private popT = 1; private flashT = 0; private t = Math.random() * 6; private wave = 1;
+  private lift = 4; private shownTier = 0; bump = new Spring(500, 18); private popT = 1; private flashT = 0; t = Math.random() * 6; private wave = 1;
   constructor(private L: UiLayer, private ov: Overlay, public def: SlotDef, private sparks: UiSparks) {
     // R6: the pixel plate (28 cells idle, 20 shrunk, 66×56 the play button, 48×40 two buttons side by side); root unit = 1 CSS px
     this.pp = new PixPlate([[28, 28], [20, 20], [66, 56], [48, 40]], { rim: PAL.iron, face: PAL.face }); this.root.add(this.pp.root, this.fx);
@@ -50,7 +51,7 @@ export class Slot3D {
     this.badge = patternBadge(def.badge || def.kind); this.badge.scale.multiplyScalar(0.3); this.fx.add(this.badge);
     this.icon = skillIcon(def.name); this.iconG.add(this.icon);
     L.scene.add(this.root, this.iconG);
-    this.tag = ov.pane(9, true); this.val = ov.pane(15, true); this.tgt = ov.pane(15, true); this.ext = ov.pane(15, true); this.cmb = ov.pane(15, true);
+    this.tag = ov.pane(9); this.val = ov.pane(15); this.tgt = ov.pane(15); this.ext = ov.pane(15); this.cmb = ov.pane(15);
   }
   setDef(def: SlotDef) {
     if (def.name === this.def.name && def.kind === this.def.kind && def.up === this.def.up && def.badge === this.def.badge) { this.def = def; return; }
@@ -85,6 +86,8 @@ export class Slot3D {
     const sc = this.size / 2 * (1 + bp * 0.012) * Math.max(0.01, this.vis), uc = GRID.uc;
     this.fx.scale.set(sc * (1 + B * 0.16), sc * (1.04 - B * 0.06), sc); this.fx.position.z = -0.34 * sc;
     this.pp.root.scale.setScalar(uc); this.pp.pressK = Math.min(1, this.press);
+    // R7: at rest the shell has exactly the cell count of its target size (1 voxel = 1 art pixel); mid-morph the nearest one is scaled
+    const tB = this.tBig, tw = Math.round(this.ts * (1 + tB * 0.16) / uc), th = Math.round(this.ts * (1.04 - tB * 0.06) / uc); this.pp.ensure(tw, th);
     const pv = this.pp.use(sc * 2 * (1 + B * 0.16) / uc, sc * 2 * (1.04 - B * 0.06) / uc);
     // rim / face by state (Figma 附录 A: 可用 = gold rim; dead = grey)
     this.pp.setRim(s.dead ? PAL.dead : B > 0.5 ? (tier >= 3 ? PAL.pale : tier === 2 ? PAL.goldHot : PAL.gold) : s.ready ? PAL.gold : PAL.iron);
@@ -127,39 +130,7 @@ export class Slot3D {
     // the front layer (crisp panes)
     this.paintFront(B, tier);
   }
-  private paintFront(B: number, tier: number) {
-    const ov = this.ov, s = this.st, on = this.vis > 0.3;
-    // tag capsule under the small slot
-    const tw = 18 + this.def.tag.length * 17, th = 26;
-    this.tag.paint(['g', this.def.tag, s.dead, this.dim > 0.5].join('|'), tw, th, (g: G, k) => { const c = tagColor(this.def.tag); pill(g, 1, 1, tw - 2, th - 2, k, { rim: s.dead ? 'rgba(120,110,130,0.4)' : c + 'aa', r: 9 }); label(g, this.def.tag, tw / 2, th / 2, 15, k, { col: s.dead ? '#8a8292' : c }); });
-    this.tag.at(this.cx - tw / 2, this.cy + this.size * 0.55 + 3 + th * (this.k - 1) / 2); this.tag.scale = this.k; this.tag.alpha = on ? (1 - B) * (1 - this.dim * 0.4) * this.vis : 0; this.tag.visible = this.tag.alpha > 0.02;
-    // value pill (big)
-    const v = s.value != null && s.value > 0 ? String(s.value) : '', mk = s.valKind && s.valKind !== 'dmg' ? s.valKind : null, vw = 34 + v.length * 22 + (mk ? 26 : 0), vh = 46;
-    const MK = { armor: ['shield', '#4a9aff'], barrier: ['ring', '#5ae0ff'], heal: ['heart', '#ff5a6a'] } as const;
-    this.val.paint(['v', v, tier, mk].join('|'), vw, vh, (g: G, k) => { pill(g, 2, 2, vw - 4, vh - 4, k, { rim: 'rgba(255,230,170,0.55)', r: 16, rimW: 2 }); if (mk) glyph(g, MK[mk][0], 24, vh / 2, 26, k, MK[mk][1]); label(g, v, vw / 2 + (mk ? 12 : 0), vh / 2 + 1, 34, k, { grad: ['#ffffff', '#ffe6a8'] }); });
-    this.val.at(this.cx - vw / 2, this.cy - vh / 2 + this.size * 0.13); this.val.scale = this.k * (0.85 + 0.15 * B) * (1 + this.bump.x * 0.01); this.val.alpha = v && on ? Math.max(0, B * 2 - 1) : 0; this.val.visible = this.val.alpha > 0.02;
-    // target portrait (bottom right): one enemy, or a crowd when it hits all
-    const n = s.all ? 3 : 1, pw = 44 + (n - 1) * 16, ph = 44;
-    this.tgt.paint(['t', n, s.targetKind, s.targetId].join('|'), pw, ph, (g: G, k) => { for (let i = n - 1; i >= 0; i--) { foeHead(g, 22 + i * 16, 22, 19, k); if(!s.all) { const ic: Glyph = s.targetKind==='guardian'?'shield':s.targetKind==='caster'?'star':'skull'; glyph(g,ic,22,24,23,k,s.targetKind==='guardian'?'#7abfff':'#e4d7b8'); } } });
-    this.tgt.at(this.cx + this.size * 0.42 - pw / 2 - (n - 1) * 8, this.cy + this.size * 0.12 - ph / 2); this.tgt.scale = this.k; this.tgt.alpha = on ? Math.max(0, B * 2 - 1) : 0; this.tgt.visible = this.tgt.alpha > 0.02;
-    // tier-2 extra effect (e.g. 冻结) hung on the right edge
-    const ex = s.extra && tier >= 2 ? s.extra : null;
-    this.ext.paint(['x', ex].join('|'), 36, 36, (g: G, k) => { if (!ex) return; g.beginPath(); g.arc(18 * k, 18 * k, 16 * k, 0, Math.PI * 2); g.fillStyle = 'rgba(14,12,24,0.85)'; g.fill(); g.lineWidth = 2 * k; g.strokeStyle = '#ffb040'; g.stroke(); glyph(g, ex, 18, 18, 22, k, '#9ae8ff'); });
-    // rogue v4: the combo dagger plaque hung on the button's upper left (orange 「末刀」 on the last strike)
-    const cb = s.combo && (s.combo.pct > 0 || s.combo.last) ? s.combo : null, ct = cb ? (cb.last ? `末刀 +${cb.pct}%` : `+${cb.pct}%`) : '', cw = 40 + ct.length * 13, chh = 30;
-    this.cmb.paint(['c', ct, cb?.last].join('|'), cw, chh, (g: G, k) => { if (!cb) return; const col = cb.last ? '#ff9a30' : '#d8b0ff'; pill(g, 1, 1, cw - 2, chh - 2, k, { rim: col, r: 8, rimW: 2 }); glyph(g, 'sword', 17, chh / 2, 20, k, col); label(g, ct, 30 + (cw - 34) / 2, chh / 2, 15, k, { col }); });
-    this.cmb.scale = this.k; this.cmb.at(this.cx - this.size * 0.5 - cw / 2, this.cy - this.size * 0.42 - chh / 2); this.cmb.alpha = cb && on ? Math.max(0, B * 2 - 1) * (cb.last ? 0.75 + 0.25 * Math.sin(this.t * 8) : 1) : 0; this.cmb.visible = this.cmb.alpha > 0.02;
-    this.ext.at(this.cx + this.size * 0.66 - 18, this.cy - this.size * 0.22 - 18); this.ext.scale = this.k; this.ext.alpha = ex && on ? Math.max(0, B * 2 - 1) : 0; this.ext.visible = this.ext.alpha > 0.02;
-  }
+  private paintFront(B: number, tier: number) { paintSlotFront(this, B, tier); }
   hideAll() { this.tVis = 0; }
   dispose() { this.L.scene.remove(this.root, this.iconG); this.pp.dispose(); for (const p of [this.tag, this.val, this.tgt, this.ext, this.cmb]) this.ov.drop(p); }
-}
-
-/** a small beast head (red eyes, ears) for the target portrait */
-function foeHead(g: G, cx: number, cy: number, r: number, k: number) {
-  g.save(); g.beginPath(); g.arc(cx * k, cy * k, r * k, 0, Math.PI * 2); g.fillStyle = 'rgba(16,12,24,0.9)'; g.fill(); g.lineWidth = 1.6 * k; g.strokeStyle = '#ff5a4a'; g.stroke();
-  g.fillStyle = '#6a5a86'; g.beginPath(); g.moveTo((cx - r * 0.62) * k, (cy - r * 0.2) * k); g.lineTo((cx - r * 0.42) * k, (cy - r * 0.78) * k); g.lineTo((cx - r * 0.1) * k, (cy - r * 0.36) * k);
-  g.lineTo((cx + r * 0.1) * k, (cy - r * 0.36) * k); g.lineTo((cx + r * 0.42) * k, (cy - r * 0.78) * k); g.lineTo((cx + r * 0.62) * k, (cy - r * 0.2) * k); g.lineTo((cx + r * 0.4) * k, (cy + r * 0.56) * k); g.lineTo((cx - r * 0.4) * k, (cy + r * 0.56) * k); g.closePath(); g.fill();
-  g.fillStyle = '#ff3a2a'; g.shadowColor = '#ff2a1a'; g.shadowBlur = 4 * k; rr(g, (cx - r * 0.36) * k, (cy - r * 0.06) * k, r * 0.24 * k, r * 0.16 * k, 1); g.fill(); rr(g, (cx + r * 0.12) * k, (cy - r * 0.06) * k, r * 0.24 * k, r * 0.16 * k, 1); g.fill();
-  g.restore();
 }

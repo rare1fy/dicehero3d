@@ -34,13 +34,13 @@ export function lampsFor(r: BoardRow | null, tier: string | null | undefined) {
 }
 
 // ---------------------------------------------------------------- bot recorder
-export type BotAct = { k: 'reroll'; uids: number[] } | { k: 'play'; ref: RowRef; uids: number[]; target?: number; mark?: KnifeShape } | { k: 'end' };
+export type BotAct = { k: 'reroll'; uids: number[] } | { k: 'play'; ref: RowRef; uids: number[]; target?: number; mark?: KnifeShape; loose?: 'chop' | 'guard' } | { k: 'end' };
 /** Plays the current turn with botTurn on a clone and returns the actions it took, in order (the live battle is untouched). */
 export function recordBotTurn(b: Battle2, rnd: () => number): BotAct[] {
   const c = b.clone(), log: BotAct[] = [];
   const rr = c.reroll.bind(c), pl = c.play.bind(c), en = c.endTurn.bind(c);
   c.reroll = (uids: number[]) => { const r = rr(uids); if (r.ok) log.push({ k: 'reroll', uids: uids.slice() }); return r; };
-  c.play = (ref, uids, target, opts) => { const r = pl(ref, uids, target, opts); if (r.ok) log.push({ k: 'play', ref, uids: uids.slice(), target, mark: opts?.mark }); return r; };
+  c.play = (ref, uids, target, opts) => { const r = pl(ref, uids, target, opts); if (r.ok) log.push({ k: 'play', ref, uids: uids.slice(), target, mark: opts?.mark, loose: opts?.loose }); return r; };
   c.endTurn = () => { const r = en(); if (r.ok) log.push({ k: 'end' }); return r; };
   botTurn(c, rnd);
   return log;

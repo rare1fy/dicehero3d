@@ -16,7 +16,7 @@ import { pixGlyph, CHIP } from './pixIcons';
 import { BAR_H, PILL_H, CHIP_STEP, intentW, paintIntent, paintBar, paintArmor, paintTaunt, paintLock, paintChip, paintBubble, bubbleSize, paintBoss, bossSize, type IntentView } from './platePaint';
 import { installPixDebug } from './plateDemo';
 
-export interface FoeView { uid: number; at: THREE.Vector3; foot: THREE.Vector3; width: number; hp: number; maxHp: number; armor: number; big: boolean; boss?: boolean; taunt?: boolean; protected?: boolean; dying?: boolean;
+export interface FoeView { uid: number; at: THREE.Vector3; foot: THREE.Vector3; width: number; hp: number; maxHp: number; armor: number; big: boolean; boss?: boolean; taunt?: boolean; protected?: boolean; dying?: boolean; /** R6_CONTRACT: where the lost-HP ghost starts (the HP before the hit frame); omitted = the plate tracks it itself */ trail?: number;
   intent: { kind: string; value?: number; status?: string } | null; statuses: Array<{ type: StatusV2; value: number; duration?: number }> }
 
 export const ST_GLYPH: Record<StatusV2, { g: Glyph; col: string }> = {
@@ -59,7 +59,7 @@ export class FoePlates {
     this.t += dt; this.target = target; this.tauntFlash = Math.max(0, this.tauntFlash - dt); const seen = new Set<number>(), uc = GRID.uc;
     for (const f of foes) {
       seen.add(f.uid); let pl = this.plates.get(f.uid); if (!pl) { pl = { p: this.ov.pane(5), trail: new HpTrail(), x: 0, y: 0, frozen: false, foe: f, shake: 0, lay: null }; this.plates.set(f.uid, pl); }
-      pl.foe = f; pl.shake = Math.max(0, pl.shake - dt); const trail = pl.trail.update(f.hp, dt);
+      pl.foe = f; pl.shake = Math.max(0, pl.shake - dt); if (f.trail != null && f.trail > pl.trail.hp) pl.trail.update(f.trail, 0); const trail = pl.trail.update(f.hp, dt);
       this.paint(pl, f, live, trail);
       const sp = worldToUi(f.at); if (!pl.frozen) { pl.x = sp.x; pl.y = sp.y; }
       const wobble = Math.round(Math.sin(pl.shake * 70) * Math.min(1, pl.shake * 5) * 2.4) * uc;   // the deny shake moves in whole cells

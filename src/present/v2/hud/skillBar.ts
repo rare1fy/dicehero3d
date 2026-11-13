@@ -9,7 +9,9 @@ import { UiSparks } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
 import { Slot3D, type SlotDef, type SlotState } from './slot3d';
 import { AimArrow } from './arrow';
-import { pill, label, rr, type G } from './draw';
+import { paintCells, textCellsW, textCellsH, labelFp, bigFp, cutMask, cutDist, type PixPen } from '../../ui3d/pixDraw';
+import { INK } from './pixIcons';
+import { paintNumeralFace } from '../../dice/numFace';
 import { cue } from '../../../audio/cues';
 
 export type { SlotDef, SlotState };
@@ -23,7 +25,7 @@ export class SkillBar {
   aiming = -1;
   constructor(private L: UiLayer, private ov: Overlay) {
     this.arrow = new AimArrow(L); this.sparks = new UiSparks(L.scene, 120);
-    this.disc = ov.pane(9, true); this.tip = ov.pane(12, true);
+    this.disc = ov.pane(9); this.tip = ov.pane(12);
   }
   /** R0 = the right edge of the HUD region, top = the safe-area top */
   R0 = 1280; top = 0;
@@ -39,19 +41,21 @@ export class SkillBar {
   /** per-slot state + the selection (count and values, for the no-match disc) */
   set(states: SlotState[], selVals: number[]) {
     states.forEach((s, i) => this.slots[i]?.set(s)); this.selVals = selVals.slice(0, 6);
-    const key = this.slots.map(s => (s.st.lit ? 1 : 0)).join('') + '|' + (selVals.length > 0 ? 1 : 0);
+    const key = this.slots.map(s => (s.st.lit ? 1 : 0) + (s.tVis > 0.5 ? 2 : 0)).join('') + '|' + (selVals.length > 0 ? 1 : 0);
     if (key !== this.litWas) { this.litWas = key; this.place(); }
   }
   /** the layout targets for the current mode (ref coords × k, right-anchored) */
   private place(snap = false) {
     // UX_V3 §1b (phone hold): idle slots 84 wide, gap 10, outer edge ≥ 64 from the right; the play button at (right − 200, 548);
     // shrunk slots ≥ 56; the thumb disc where the button would be. R(x) = x reference px in from the right edge.
-    const k = this.k, n = this.slots.length, R = (x: number) => this.R0 - x * k, Y = (y: number) => this.top + y * k;
-    const lit = this.slots.map((s, i) => (s.st.lit ? i : -1)).filter(i => i >= 0), none = !lit.length && this.selVals.length > 0;
+    const k = this.k, R = (x: number) => this.R0 - x * k, Y = (y: number) => this.top + y * k;
+    // slots the stage hid (tVis = 0, e.g. the warrior's 劈砍 while unlit) take no room in the row
+    const shown = this.slots.map((_, i) => i).filter(i => !this.on || this.slots[i].tVis > 0.5), n = shown.length;
+    const lit = shown.filter(i => this.slots[i].st.lit), none = !lit.length && this.selVals.length > 0;
     if (!lit.length && !none) {   // the resting row
-      this.slots.forEach((s, i) => { s.tx = R(106 + (n - 1 - i) * 94); s.ty = Y(598); s.ts = 84 * k; s.tBig = 0; s.tDim = 0; });
+      shown.forEach((i, j) => { const s = this.slots[i]; s.tx = R(106 + (n - 1 - j) * 94); s.ty = Y(598); s.ts = 84 * k; s.tBig = 0; s.tDim = 0; });
     } else {
-      const big = lit.length, rest = this.slots.map((_, i) => i).filter(i => !lit.includes(i)), bs = big > 1 ? 124 : 170, step = 148;
+      const big = lit.length, rest = shown.filter(i => !lit.includes(i)), bs = big > 1 ? 124 : 170, step = 148;
       lit.forEach((i, j) => { const s = this.slots[i]; s.tx = R(200 + (big - 1 - j) * step); s.ty = Y(big > 1 ? 556 : 548); s.ts = bs * k; s.tBig = 1; s.tDim = 0; });
       const edge = none ? 200 + 80 : 200 + (big - 1) * step + bs * 0.58;   // the left edge of the button(s) / disc
       rest.forEach((i, j) => { const s = this.slots[i]; s.tx = R(edge + 10 + 29 + (rest.length - 1 - j) * 66); s.ty = Y(600); s.ts = 58 * k; s.tBig = 0; s.tDim = none ? 0.55 : 0.25; });
@@ -88,44 +92,36 @@ export class SkillBar {
     // the no-match disc at the thumb position: grey dashed ring + the selected dice in miniature
     const none = this.on && !this.slots.some(s => s.st.lit) && this.selVals.length > 0;
     this.discK += ((none ? 1 : 0) - this.discK) * Math.min(1, dt * 12);
-    const ds = 150, vals = this.selVals.join(',');
-    this.disc.paint('d' + vals, ds, ds, (g: G, k) => drawDisc(g, k, ds, this.selVals));
-    this.disc.at(this.R0 - 200 * this.k - ds / 2, this.top + 548 * this.k - ds / 2); this.disc.scale = this.k * (0.85 + 0.15 * this.discK); this.disc.rot = Math.sin(this.t * 0.6) * 0.03;
+    const vals = this.selVals.join(','), dc = 50;
+    paintCells(this.disc, 'd' + vals, dc, dc, pen => drawDisc(pen, dc, this.selVals));
+    this.disc.at(Math.round(this.R0 - 200 * this.k - this.disc.w / 2), Math.round(this.top + 548 * this.k - this.disc.h / 2)); this.disc.scale = 1;
     this.disc.alpha = this.discK; this.disc.visible = this.discK > 0.02;
     this.drawTip();
   }
   private drawTip() {
     const i = this.tipOn, td = this.tips[i], s = this.slots[i];
     if (!this.on || !td || !s) { this.tip.visible = false; return; }
-    const w = 300, lh = 22, h = 46 + td.lines.length * lh;
-    this.tip.paint('tip' + i + td.title + td.lines.join('|'), w, h, (g: G, k) => {
-      pill(g, 0, 0, w, h, k, { r: 12, rim: 'rgba(230,190,110,0.6)' });
-      label(g, td.title, 14, 22, 18, k, { align: 'left', col: '#ffe6a0' });
-      g.font = `600 ${15 * k}px "Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif`; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = '#e8dcc8';
-      td.lines.forEach((l, j) => g.fillText(l, 14 * k, (48 + j * lh) * k));
+    const fp = labelFp(), bf = Math.max(fp, bigFp() >> 1), lh = textCellsH(fp) + 1, w = Math.max(textCellsW(td.title, bf), ...td.lines.map(l => textCellsW(l, fp))) + 8, h = textCellsH(bf) + 7 + td.lines.length * lh;
+    paintCells(this.tip, 'tip' + i + td.title + td.lines.join('|') + fp, w, h, pen => {
+      pen.box(0, 0, w, h, { fill: 'rgba(18,16,28,0.92)', line: INK, rim: '#a8742a', hi: null, cut: 2 });
+      pen.text(td.title, 4, 3, { col: '#ffe6a0', fp: bf });
+      td.lines.forEach((l, j) => pen.text(l, 4, 5 + textCellsH(bf) + j * lh, { col: '#e8dcc8', fp }));
     });
-    this.tip.at(Math.max(8, s.cx - w + 40), Math.max(8, s.cy - s.size * 0.6 - h - 10)); this.tip.visible = true;
+    const tw = this.tip.w, th = this.tip.h;
+    this.tip.at(Math.round(Math.max(8, s.cx - tw + 40)), Math.round(Math.max(8, s.cy - s.size * 0.6 - th - 10))); this.tip.visible = true;
   }
 }
 
-function drawDisc(g: G, k: number, ds: number, vals: number[]) {
-  const c = ds / 2;
-  g.save(); g.beginPath(); g.arc(c * k, c * k, (c - 8) * k, 0, Math.PI * 2); g.fillStyle = 'rgba(20,18,28,0.55)'; g.fill();
-  g.setLineDash([10 * k, 8 * k]); g.lineWidth = 3 * k; g.strokeStyle = 'rgba(190,186,200,0.7)'; g.stroke(); g.setLineDash([]); g.restore();
-  const n = vals.length, sz = n > 4 ? 26 : 32, cols = n > 3 ? 3 : n, rows = Math.ceil(n / cols);
+/** the no-match disc (art cells): a grey dashed octagon ring (1-cell dashes on the grid) + the selected dice as numeral faces */
+function drawDisc(pen: PixPen, dc: number, vals: number[]) {
+  const cut = Math.round(dc * 0.29), inner = cutMask(dc - 4, dc - 4, cut - 1), ring = cutDist(dc, dc, cut);
+  pen.fill(2, 2, dc - 4, dc - 4, inner, 'rgba(20,18,28,0.55)');
+  pen.fill(0, 0, dc, dc, (x, y) => { const d = ring(x, y); return d >= 1 && d <= 2 && Math.floor((x + y) / 4) % 2 === 0; }, 'rgba(190,186,200,0.75)');
+  const n = vals.length, T = n > 4 ? 10 : 12, cols = n > 3 ? 3 : n, rows = Math.ceil(n / cols), gap = 2;
   vals.forEach((v, i) => {
-    const r = Math.floor(i / cols), cIdx = i % cols, inRow = Math.min(cols, n - r * cols);
-    const x = c + (cIdx - (inRow - 1) / 2) * (sz + 8), y = c + (r - (rows - 1) / 2) * (sz + 8);
-    miniDie(g, x, y, sz, k, v, (i % 2 ? 1 : -1) * 0.12);
+    const r = Math.floor(i / cols), c = i % cols, inRow = Math.min(cols, n - r * cols);
+    const x = Math.round(dc / 2 + (c - inRow / 2) * (T + gap) + gap / 2), y = Math.round(dc / 2 + (r - rows / 2) * (T + gap) + gap / 2);
+    pen.rect(x + 1, y + 1, T, T, 'rgba(0,0,0,0.5)');
+    paintNumeralFace(pen.g, (pen.ox + x) * pen.u, (pen.oy + y) * pen.u, T, Math.max(1, Math.min(6, v)), { px: pen.u, tone: 'dim', scale: 1 });
   });
-}
-const PIPS: Record<number, Array<[number, number]>> = { 1: [[0, 0]], 2: [[-1, -1], [1, 1]], 3: [[-1, -1], [0, 0], [1, 1]], 4: [[-1, -1], [1, -1], [-1, 1], [1, 1]], 5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]], 6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]] };
-/** a little grey die (front face + a darker bottom/right side for thickness) */
-export function miniDie(g: G, x: number, y: number, s: number, k: number, v: number, rot = 0) {
-  g.save(); g.translate(x * k, y * k); g.rotate(rot);
-  const h = s / 2, d = s * 0.16;
-  g.fillStyle = '#5a5664'; rr(g, (-h + d) * k, (-h + d) * k, s * k, s * k, 4 * k); g.fill();
-  g.fillStyle = '#b8b4c2'; rr(g, -h * k, -h * k, s * k, s * k, 4 * k); g.fill(); g.lineWidth = 1.5 * k; g.strokeStyle = 'rgba(10,8,16,0.8)'; g.stroke();
-  g.fillStyle = '#2a2632'; for (const [px, py] of PIPS[Math.max(1, Math.min(6, v))]) { g.beginPath(); g.arc(px * s * 0.26 * k, py * s * 0.26 * k, s * 0.09 * k, 0, Math.PI * 2); g.fill(); }
-  g.restore();
 }

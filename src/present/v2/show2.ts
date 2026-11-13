@@ -59,9 +59,9 @@ const NODE_SCENE: Record<string, string> = { normal: 'n_trail', elite: 'n_lumber
 const NODE_CN: Record<string, [string, string]> = { normal: ['雾林小径', '普通战 · 两波'], elite: ['废弃伐木场', '精英 · 狼人首领'], midBoss: ['墓园祭坛', '首领 · 枯骨巫妖'], shop: ['林边货车', '商人'] };
 const CLASS_IDS: ClassId[] = ['warrior', 'mage', 'rogue'];
 const CLASS_LINES: Record<ClassId, string[]> = {
-  warrior: ['散骰可一次交 1～3 颗', '卖血重投，攒血怒加伤', '斩首 / 完防：下回合 +1 骰'],
-  mage: ['不出手 = 吟唱：骰子留场，下回合多骰', '吟唱得屏障，挨打叠反噬', '满环交 4 颗以上：星辰骰'],
-  rogue: ['一回合两刀，第一刀后免费重投', '两刀同技能：精准连击', '暗影残骰留到下回合'],
+  warrior: ['散骰 1～3 颗：劈砍或铁壁二选一', '斩杀再动；完防下回合 +1 骰', '卖血重投，斩首或完防还你一半'],
+  mage: ['骰子留场，每回合补 1 颗（最多 6）', '交 3 颗以内是小咒，照样吟唱', '交 4 颗以上释放大招；吟唱有屏障'],
+  rogue: ['有骰子就能接着出手，刀鞘是上限（会成长）', '每多一刀 +20%', '袖箭、影步补骰续刀；背刺、影舞收尾'],
 };
 const ROMAN = ['', 'I', 'II', 'III'];
 const gainSpecial = (r: GainReason): SpecialId | undefined => (r === 'fury' || r === 'furyUlt' ? 'fury' : r === 'shadow' || r === 'precise' || r === 'mark' ? 'shadowres' : r === 'titan' ? 'titan' : undefined);
@@ -258,7 +258,7 @@ export class V2Show {
 
   act(a: BotAct) {
     const b = this.b; if (!b || this.mode !== 'battle' || this.busy) return false;
-    const r = a.k === 'reroll' ? b.reroll(a.uids) : a.k === 'play' ? b.play(a.ref, a.uids, a.target, a.mark ? { mark: a.mark } : undefined) : b.endTurn(this.keep ? { keep: this.keep } : undefined);
+    const r = a.k === 'reroll' ? b.reroll(a.uids) : a.k === 'play' ? b.play(a.ref, a.uids, a.target, a.mark || a.loose ? { ...(a.mark ? { mark: a.mark } : {}), ...(a.loose ? { loose: a.loose } : {}) } : undefined) : b.endTurn(this.keep ? { keep: this.keep } : undefined);
     if (!r.ok) { this.toast.show(r.reason, 1.0); cue('deny', 0.5); return false; }
     // UX_V3 2.2: a reroll keeps the selection (the rerolled dice stay picked; a pattern grows its button at once)
     if (a.k === 'play') this.clearSel(); else if (a.k === 'end') { this.clearSel(); this.keep = null; }
@@ -275,17 +275,25 @@ export class V2Show {
     const ref = this.slotRefs[i]; if (ref == null) return false;
     if (target != null && !this.chooseTarget(target, ref)) return false;
     const uid = target ?? this.targetUid ?? b.target()?.uid;
-    return this.act({ k: 'play', ref, uids: this.sel.slice(), target: uid ?? undefined });
+    return this.act({ k: 'play', ref, uids: this.sel.slice(), target: uid ?? undefined, loose: this.slotLoose[i] });
   }
+  /** v4.1 狂战: which loose-dice side a slot plays (the 劈砍 slot is slot 0, hidden unless lit; the class loose slot is 铁壁) */
+  private slotLoose: Array<'chop' | 'guard' | undefined> = [];
   private setupSlots(b: Battle2) {
     const kindOf = (r: BoardRow): SkillKind => (r.def.cond.t === 'straight' ? 'straight' : r.def.cond.t === 'array' ? 'array' : 'same');
     const order: SkillKind[] = ['same', 'straight', 'array'];
     const rows = this.rows.slice().sort((x, y) => order.indexOf(kindOf(x)) - order.indexOf(kindOf(y))).slice(0, 3);
-    const ba = b.cls.basicAttack;
+    const ba = b.cls.basicAttack, two = b.options([]).filter(o => o.ref === 'basic').length > 1;
     // R5: slot = icon + pattern badge + ≤4-char tag; the full name and the tier notes live in the tap tip
     const defs: SlotDef[] = [{ name: ba.name, kind: 'basic', tag: skillTag(ba.name), tagCol: '', up: skillUp(ba.name), badge: ba.maxDice > 1 ? 'handful' : undefined }];   // UX_V3 §8: 1–3 loose dice = a handful badge
     const tips: TipDef[] = [{ title: `${KIND_CN.basic} · ${ba.name}`, lines: [ba.maxDice > 1 ? `一次可交 1～${ba.maxDice} 颗，单体 ×${ba.coef}` : `只能交 1 颗，单体 ×${ba.coef}`, ...(ba.shadowify ? ['第一刀用它：补 1 颗暗影残骰'] : [])] }];
-    this.slotRefs = ['basic'];
+    this.slotRefs = ['basic']; this.slotLoose = [two ? 'guard' : undefined];
+    if (two) {   // FIX6 §8 / UX_V3 6.0: 散骰 = 劈砍 or 铁壁, two medium buttons side by side (劈砍 left, 铁壁 on the thumb)
+      if (defs[0].name === '铁壁') tips[0] = { title: `${KIND_CN.basic} · 铁壁`, lines: [`一次可交 1～${ba.maxDice} 颗，点数和 ×0.9 护甲`] };
+      defs.unshift({ name: '劈砍', kind: 'basic', tag: skillTag('劈砍'), tagCol: '', badge: 'handful' });
+      tips.unshift({ title: `${KIND_CN.basic} · 劈砍`, lines: [`一次可交 1～${ba.maxDice} 颗，单体伤害`] });
+      this.slotRefs.unshift('basic'); this.slotLoose.unshift('chop');
+    }
     for (const r of rows) {
       const k = kindOf(r), cn = KIND_CN[k], nm = r.name || r.def.name;
       defs.push({ name: nm, kind: k, tag: skillTag(nm), tagCol: '', up: skillUp(nm) });
@@ -643,6 +651,7 @@ export class V2Show {
     const hero = this.hero!, p = hero.chest(), pd = this.pd;
     pd.barrier = Math.max(0, pd.barrier - e.byBarrier); pd.armor = Math.max(0, pd.armor - e.byArmor); pd.hp = Math.max(0, pd.hp - e.hpDmg);
     if (e.dmg > 0) this.flask.hit(e.dmg, { ...pd });
+    if (e.isDot) this.hfx.dotPierce();   // FIX6 §7: poison / burn go through the barrier: the dome thins, nothing reads as a block
     if (e.byBarrier) popPix(`-${e.byBarrier}`, p.clone().add(V3(-0.6, 0.8, 0)), { color: '#8ad8ff', h: 0.42 });
     if (e.byArmor) { popPix(`-${e.byArmor}`, p.clone().add(V3(0.6, 0.6, 0)), { color: '#9ad0ff', h: 0.42 }); fxShield(hero.home, 0.9); cue('block'); if (!e.hpDmg) hero.block(); }
     if (e.hpDmg > 0) {
@@ -664,7 +673,11 @@ export class V2Show {
       await playDeath(a, { boss: true, from: this.hero?.home, ratio: (lastHit.get(uid) ?? 0) / Math.max(1, d.maxHp) });
       const st = this.stage; anim(1.6, k => st?.phase2(1 - k), undefined, { real: true });
     } else {
-      await playDeath(a, { from: this.hero?.home, ratio: (lastHit.get(uid) ?? 0) / Math.max(1, d?.maxHp ?? 1) });
+      // user: 「击杀了敌人过后后续的流程现在一直在等敌人的尸体消失」 — the flow goes on after the fall; the body sinks in the background
+      const fall = playDeath(a, { from: this.hero?.home, ratio: (lastHit.get(uid) ?? 0) / Math.max(1, d?.maxHp ?? 1) });
+      void fall.then(() => { if (d) d.gone = true; this.framing.delete(uid); if (a.top > 3.0) this.reframePending = true; });
+      await wait(0.35);
+      return;
     }
     if (d) d.gone = true; this.framing.delete(uid);
     if (d?.boss) for(const key of this.framing.keys()) if(key<0) this.framing.delete(key);
@@ -856,12 +869,12 @@ export class V2Show {
     const states: SlotState[] = [];
     let topTier = 0, anyLit = false;
     this.slotRefs.forEach((ref, si) => {
-      const i = ref === 'basic' ? n : ref, o = opts?.[i], row = ref === 'basic' ? null : this.rows.find(r => r.ref === ref) || null;
+      const lo = this.slotLoose[si], i = ref === 'basic' ? (lo ? opts?.findIndex(x => x.ref === 'basic' && x.loose === lo) ?? -1 : n) : ref, o = opts?.[i], row = ref === 'basic' ? null : this.rows.find(r => r.ref === ref) || null;
       if (!o) { states.push({ lit: false, tier: 0, dead: !live, ready: false }); return; }
       const dead = o.reason === 'strike' || o.reason === 'chant' || (o.reason as string) === 'used', ready = !dead && (row ? !!o.bestTier : b.dice().length > 0);
       if (!o.ok) { states.push({ lit: false, tier: 0, dead, ready }); if (ready && !this.readyWas[si]) cue('tick', 0.25); this.readyWas[si] = ready; return; }
       this.readyWas[si] = ready;
-      const tier = row ? lampsFor(row, o.tier) : 1, pv = displayPreview(b, o.ref, this.sel, tid, this.disp);
+      const tier = row ? lampsFor(row, o.tier) : 1, pv = displayPreview(b, o.ref, this.sel, tid, this.disp, lo);
       if (pv) for (const h of pv.hpHits) { const old = this.hud.plates.selectionPreview.find(p => p.uid === h.uid); if (old) old.dmg = Math.max(old.dmg,h.dmg); else this.hud.plates.selectionPreview.push({uid:h.uid,dmg:h.dmg}); }
       const fx = row ? row.def.tiers[o.tier!]?.effects || [] : [], all = fx.some(e => e.t === 'dmg' && e.target === 'all');
       const value = pv ? pv.total || pv.armor || pv.barrier || pv.heal : 0, valKind = !pv || pv.total ? 'dmg' as const : pv.armor ? 'armor' as const : pv.barrier ? 'barrier' as const : 'heal' as const;
@@ -938,6 +951,8 @@ export class V2Show {
     const H = this.hud, b = this.b, inBattle = this.mode === 'battle' && !!b;
     H.top.gold = this.loot.shownGold; H.top.setRelics(this.run ? this.run.s.relics.map(id => { try { const r = relicV2(id); return { id, name: r.name, desc: r.desc }; } catch { return { id, name: id, desc: '' }; } }) : []);
     H.update(dt);
+    // v4.1 狂战: the 劈砍 slot only shows while it is lit (beside 铁壁); otherwise the bar reads as the usual four slots
+    if (this.slotLoose[0] === 'chop' && H.bar.slots[0]) H.bar.slots[0].tVis = H.bar.on && H.bar.slots[0].st.lit ? 1 : 0;
     if (inBattle) {
       const live = !this.busy && b!.s.phase === 'player' && !b!.s.result;
       const kiEnd = live ? b!.keepInfo() : null;
@@ -1027,7 +1042,7 @@ export class V2Show {
         bar.aim(D.i, x, y, allowed || upField, foe != null && !allowed);
         if (foe != null && allowed) {
           this.foes.get(foe)?.tint(0xff0a0a, 0.8);
-          const ref = this.slotRefs[D.i], pv = ref != null ? displayPreview(b, ref, this.sel, foe, this.disp) : null, hit = pv?.hpHits.find(h => h.uid === foe);
+          const ref = this.slotRefs[D.i], pv = ref != null ? displayPreview(b, ref, this.sel, foe, this.disp, this.slotLoose[D.i]) : null, hit = pv?.hpHits.find(h => h.uid === foe);
           this.hud.plates.preview = hit ? { uid: foe, dmg: hit.dmg } : null;
         } else this.hud.plates.preview = null;
       }

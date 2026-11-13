@@ -33,11 +33,11 @@ export function canAim(b: Battle2, uid: number, ref?: RowRef, uids: number[] = [
 }
 
 /** 斩杀段用演出血量，并通过规则事件取实际掉血量（含护甲/无视护甲），不另写伤害规则。 */
-export function displayPreview(b: Battle2, ref: RowRef, uids: number[], target: number | undefined, foes: Map<number, FoeDisp>) {
-  const c=b.clone();
+export function displayPreview(b: Battle2, ref: RowRef, uids: number[], target: number | undefined, foes: Map<number, FoeDisp>, loose?: 'chop' | 'guard') {
+  const c=b.clone(), opts = loose ? { loose } : undefined;
   for(const [uid,d] of foes) { const e=c.enemy(uid); if(e&&!d.gone) { e.hp=d.hp; e.maxHp=d.maxHp; e.armor=d.armor; e.statuses=structuredClone(d.statuses); e.dead=d.hp<=0; } }
-  const pv=c.preview(ref,uids,target); if(!pv)return null;
-  const r=c.play(ref,uids,target), hp=new Map<number,number>();
+  const pv=c.preview(ref,uids,target,opts); if(!pv)return null;
+  const r=c.play(ref,uids,target,opts), hp=new Map<number,number>();
   if(r.ok)for(const e of r.events) { if(e.t==='enemyTurn'||e.t==='waveClear')break; if(e.t==='hit')hp.set(e.uid,(hp.get(e.uid)??0)+e.hpDmg); }
   return {...pv,hpHits:[...hp].map(([uid,dmg])=>({uid,dmg}))};
 }

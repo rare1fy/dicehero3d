@@ -7,7 +7,8 @@ import type { UiLayer } from '../../ui3d/layer';
 import { UiSparks, Spring } from '../../ui3d/vox';
 import type { Overlay, Pane } from '../overlay';
 import { relicModel, relicPedestal, glowRing, modelLook } from './models';
-import { pill, label, type G } from './draw';
+import { paintCells, textCellsW, textCellsH, labelFp, bigFp, digitCellsW, DIGIT_CELLS_H } from '../../ui3d/pixDraw';
+import { INK } from './pixIcons';
 
 function slab(w: number, h: number, r: number, depth: number, mat: THREE.Material) {
   const s = new THREE.Shape(), x = -w / 2, y = -h / 2;
@@ -24,7 +25,7 @@ export class TopLeft {
     const body = slab(1.38, 0.41, 0.2, 0.06, new THREE.MeshBasicMaterial({ color: 0x14121c, transparent: true, opacity: 0.8, depthWrite: false }));
     const rim = slab(1.42, 0.45, 0.22, 0.04, new THREE.MeshBasicMaterial({ color: 0x8a82a0, transparent: true, opacity: 0.35, depthWrite: false })); rim.position.z = -0.03;
     this.pill.add(rim, body); this.pill.renderOrder = 1; L.scene.add(this.pill);
-    this.num = ov.pane(8, true); this.tip = ov.pane(12, true); this.sparks = new UiSparks(L.scene, 60);
+    this.num = ov.pane(8); this.tip = ov.pane(12); this.sparks = new UiSparks(L.scene, 60);
   }
   place(x: number, y: number, k: number) { this.x = x; this.y = y; this.k = k; }
   /** purse px (the 3D bag sits on the capsule's left end) */
@@ -50,9 +51,9 @@ export class TopLeft {
   update(dt: number) {
     this.t += dt; const L = this.L, k = this.k, vis = this.on;
     this.pill.visible = vis; L.at(this.x, this.y, -2, this.pill.position); this.pill.scale.setScalar(L.px(100 * k));
-    const g = Math.round(this.gold), txt = String(g), w = 90, h = 40;
-    this.num.paint('n' + txt, w, h, (c: G, kk) => label(c, txt, 4, h / 2, 30, kk, { align: 'left', col: '#ffffff', sw: 4 }));
-    this.num.scale = k; this.num.at(this.x - 6 * k - w / 2 + w * k / 2, this.y - h / 2); this.num.visible = vis;
+    const g = Math.round(this.gold), txt = String(g), ds = 1, w = digitCellsW(txt, ds) + 3, h = DIGIT_CELLS_H * ds + 3;
+    paintCells(this.num, 'n' + txt, w, h, pen => pen.digits(txt, 1, 1, { col: '#ffffff', scale: ds, shadow: 'rgba(0,0,0,0.6)' }));
+    this.num.at(Math.round(this.x - 14 * k), Math.round(this.y - this.num.h / 2)); this.num.visible = vis;
     this.relics.forEach((r, i) => {
       r.x = this.x - 16 * k + i * 76 * k; r.y = this.y + 72 * k; r.g.visible = vis;   // tappable: ≥ 64 from the safe edge (UX_V3 §1b)
       const p = r.pop.step(0, dt); r.fire = Math.max(0, r.fire - dt / 1.2);
@@ -66,9 +67,8 @@ export class TopLeft {
     this.sparks.update(dt);
     const r = this.relics[this.tipOn];
     if (vis && r) {
-      const tw = 280, th = 66;
-      this.tip.paint('rt' + r.id, tw, th, (c: G, kk) => { pill(c, 0, 0, tw, th, kk, { r: 12, rim: 'rgba(230,190,110,0.6)' }); label(c, r.name, 14, 20, 18, kk, { align: 'left', col: '#ffe6a0' });
-        c.font = `600 ${14 * kk}px "Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif`; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillStyle = '#e8dcc8'; c.fillText(r.desc.slice(0, 20), 14 * kk, 46 * kk); });
+      const fp = labelFp(), bf = Math.max(fp, bigFp() >> 1), d = r.desc.slice(0, 20), tw = Math.max(textCellsW(r.name, bf), textCellsW(d, fp)) + 8, th = textCellsH(bf) + textCellsH(fp) + 9;
+      paintCells(this.tip, 'rt' + r.id + fp, tw, th, pen => { pen.box(0, 0, tw, th, { fill: 'rgba(18,16,28,0.92)', line: INK, rim: '#a8742a', hi: null, cut: 2 }); pen.text(r.name, 4, 3, { col: '#ffe6a0', fp: bf }); pen.text(d, 4, 5 + textCellsH(bf), { col: '#e8dcc8', fp }); });
       this.tip.at(r.x - 20, r.y + 24 * k); this.tip.visible = true;
     } else this.tip.visible = false;
   }

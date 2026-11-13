@@ -79,6 +79,8 @@ export class HeroFx {
   }
 
   /** call every frame; hero / b null (or not in battle) hides everything */
+  /** a DoT tick hit the hero: the barrier dome steps aside (poison / burn ignore it) */
+  dotPierce() { this.dome.pierce(); }
   update(dt: number, hero: BattleActor | null, b: Battle2 | null, cls: ClassId, on: boolean, shown: Battle2['s'] | null = null) {
     this.t += dt; this.cls = cls;
     const live = on && !!hero && !!b && hero.root.visible && !hero.dead;

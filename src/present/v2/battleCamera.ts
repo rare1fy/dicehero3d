@@ -79,7 +79,7 @@ function placeField(eye: THREE.Vector3, look: THREE.Vector3, o: FitOpts, subject
   const fwd = look.clone().sub(eye).normalize(), vf = _cam.fov * Math.PI / 180, focal = (o.H / 2) / Math.tan(vf / 2);
   let s = 1;
   // the row starts just right of the hero whatever its scale (half width = 2.6 · GAP/1.15 · s, see diceField.ts)
-  for (let i = 0; i < 3; i++) { c.x = heroX + 0.9 + 2.55 * s; const dep = c.clone().setY(0.4 * s).sub(eye).dot(fwd); s = DIE_PX * o.k * dep / (0.8 * focal); }
-  c.x = heroX + 0.9 + 2.55 * s;
+  for (let i = 0; i < 3; i++) { c.x = heroX + 1.15 + 2.55 * s; const dep = c.clone().setY(0.4 * s).sub(eye).dot(fwd); s = DIE_PX * o.k * dep / (0.8 * focal); }
+  c.x = heroX + 1.15 + 2.55 * s;   // R7A: +0.25 so a 5th–6th mage die clears the staff
   return { c, s };
 }
