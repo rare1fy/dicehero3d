@@ -25,7 +25,9 @@ export function paintSlotFront(s: Slot3D, B: number, tier: number) {
     pen.text(tag, Math.floor(tw / 2), 2, { col: tc, fp, align: 'center' });
   });
   s.tag.at(R(s.cx - s.tag.w / 2), R(s.cy + s.size * 0.55 + 2 * uc));
-  s.tag.alpha = on ? (1 - B) * (1 - s.dim * 0.4) * s.vis : 0; s.tag.visible = s.tag.alpha > 0.02;
+  // user 11-13: 「选中技能的时候，下面的文字叠一起了」 — shrunk slots (beside a play button) have no room for a tag: it fades out with the shrink
+  const rest = Math.max(0, Math.min(1, (s.size / s.k - 64) / 16));
+  s.tag.alpha = on ? (1 - B) * rest * (1 - s.dim * 0.4) * s.vis : 0; s.tag.visible = s.tag.alpha > 0.02;
   // the value pill (play button): big square digits, 2 cells per digit cell
   const v = st.value != null && st.value > 0 ? String(st.value) : '', mk = st.valKind && st.valKind !== 'dmg' ? st.valKind : null, ds = 2;
   const vw = digitCellsW(v, ds) + 8 + (mk ? 12 : 0), vh = DIGIT_CELLS_H * ds + 7;

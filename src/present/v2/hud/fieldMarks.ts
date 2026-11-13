@@ -39,6 +39,7 @@ export class FieldMarks {
   /** sel: positions of the selected dice (badges, only when a reroll is available); keep: ground points under the dice that stay */
   update(dt: number, sel: THREE.Vector3[], keep: THREE.Vector3[]) {
     this.t += dt;
+    sel = [];   // user 11-13: the reroll badge over selected dice is gone
     sel.forEach((p, i) => { const b = this.badge(i); b.visible = true; b.position.copy(p).add(V3(0, 0.9 + Math.sin(this.t * 3 + i) * 0.05, 0)); b.quaternion.copy(camera.quaternion); });
     for (let i = sel.length; i < this.badges.length; i++) this.badges[i].visible = false;
     keep.forEach((p, i) => { const r = this.ring(i); r.visible = true; r.position.set(p.x, 0.04, p.z); r.scale.setScalar(1 + 0.06 * Math.sin(this.t * 4 + i)); r.rotation.z = this.t * 0.4; });

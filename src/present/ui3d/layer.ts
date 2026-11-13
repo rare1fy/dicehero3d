@@ -30,7 +30,7 @@ export class UiLayer implements Ui3DLayer {
     this.scene.onAfterRender = () => this.tiltOff();
   }
   /** max turn toward the screen centre (rad) and the idle sway; tilt = 0 turns it off */
-  tilt = 0.36; sway = 0.035;
+  tilt = 0.5; sway = 0.035;   // user 11-13: 「两边的UI没有稍微往里面斜一点」 — HUD groups sit at |nx| ≈ 0.6–0.85 → 17–25° (UX_V3 §5)
   private tilted: THREE.Object3D[] = []; private tq = new THREE.Quaternion(); private te = new THREE.Euler();
   /** the extra screen-space turn for a widget at CSS px (x, y) (also used by the UI → world hand-over) */
   tiltAt(x: number, y: number, ph = 0, out = new THREE.Quaternion()) {

@@ -24,7 +24,7 @@ const BLOOD_FACE = ramp(0x3a1418, { hi: 0x52202a }), DEAD_FACE = ramp(0x1e1c24, 
 export class RerollButton {
   root = new THREE.Group(); private pp: PixPlate; private mark: PixModel; private markG = new THREE.Group(); private orbit: THREE.Mesh;
   private lamps: PixModel | null = null; private lampN = 0;
-  private dice: THREE.Mesh[] = []; private diceG = new THREE.Group(); private sparks: UiSparks; private press = new Spring(420, 20); private down = false; private t = 0; private litK = 0;
+  private dice: THREE.Mesh[] = []; private diceG = new THREE.Group(); private orbitG = new THREE.Group(); private sparks: UiSparks; private press = new Spring(420, 20); private down = false; private t = 0; private litK = 0;
   private turn = 0; private turnT = 0; private flip = new Flip(); private markB: PixModel;
   private price: Pane; x = 0; y = 0; sizePx = 130; k = 1;
   v: RerollView = { free: 0, blood: null, can: false, sel: 0, maxLamps: 1 };
@@ -33,9 +33,9 @@ export class RerollButton {
     this.pp = new PixPlate([[40, 40]], { rim: PAL.gold, face: PAL.face }); this.root.add(this.pp.root);
     this.mark = markPix(rerollRows(), PAL.gold, 4); this.markG.add(this.mark); this.pp.root.add(this.markG);
     this.markB = markPix(rerollRows(), PAL.gold, 4); this.markB.rotation.x = Math.PI; this.pp.root.add(this.markB);
-    this.orbit = glowRing(0xffc848, 1.38, 1.44, 96); this.orbit.rotation.x = -1.05; this.orbit.rotation.y = 0.25; this.root.add(this.orbit);
+    // user 11-13: 「骰子环绕的路径也没对」 — ring and dice now live in one tilted group, so the dice ride the ring itself
+    this.orbit = glowRing(0xffc848, 1.38, 1.44, 96); this.orbitG.rotation.set(-1.05, 0.25, 0); this.orbitG.add(this.orbit, this.diceG); this.root.add(this.orbitG);
     for (let i = 0; i < 6; i++) { const d = numeralDie(); d.visible = false; this.diceG.add(d); this.dice.push(d); }
-    this.root.add(this.diceG);
     L.scene.add(this.root); this.sparks = new UiSparks(L.scene, 60);
     this.price = ov.pane(10);
   }
@@ -86,7 +86,7 @@ export class RerollButton {
     const markS = 1; if (Wc !== this.markW) this.buildMark(Wc); this.markG.scale.setScalar(markS); this.markG.position.set(0, 0, -2 * (1 - 0.5 * this.pp.pressK) - 0.5 * this.pp.pressK * pv.o.D);
     (this.orbit.material as THREE.MeshBasicMaterial).opacity = this.litK * 0.85; this.orbit.visible = this.litK > 0.02;
     (this.orbit.material as THREE.MeshBasicMaterial).color.setHex(bloodMode ? 0xff4030 : 0xffc848);
-    this.orbit.scale.setScalar(Wc / 2); this.orbit.position.z = -pv.o.D * 0.4;
+    this.orbitG.position.set(0, 0, -pv.o.D * 0.5); this.orbit.scale.setScalar(Wc / 2);
     // lamps = free rerolls left (the warrior's paid rerolls: a drop + price instead)
     const n = Math.max(1, Math.min(4, v.maxLamps)); this.setLamps(n);
     const lm = this.lamps!; lm.visible = !bloodMode; lm.position.set(0, pv.H / 2 - 1, 1 - this.pp.pressK * pv.o.D * 0.5);
@@ -96,8 +96,8 @@ export class RerollButton {
     const m = lit ? Math.min(6, v.sel) : 0, R = Wc / 2;
     this.dice.forEach((d, i) => {
       d.visible = i < m && this.litK > 0.05; if (!d.visible) return;
-      const a = this.t * 1.3 + (i / Math.max(1, m)) * Math.PI * 2, rx = 1.41 * R, ry = rx * Math.cos(1.05);
-      d.position.set(Math.cos(a) * rx, Math.sin(a) * ry * 0.9 - 0.05 * R, Math.sin(a) * 0.9 * R + 0.35 * R); d.scale.setScalar(0.34 * R * this.litK);
+      const a = this.t * 1.3 + (i / Math.max(1, m)) * Math.PI * 2, rr = 1.41 * R;   // the ring's mid radius (1.38–1.44) × the ring scale
+      d.position.set(Math.cos(a) * rr, Math.sin(a) * rr, 0); d.scale.setScalar(0.34 * R * this.litK);
       d.rotation.set(this.t * 1.7 + i, this.t * 1.1 + i * 2, 0.3); setNumeralTop(d, 1 + ((i * 3 + 2) % 6), bloodMode ? 'dim' : 'normal');
     });
     this.sparks.update(dt);

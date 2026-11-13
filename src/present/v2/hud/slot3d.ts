@@ -92,9 +92,14 @@ export class Slot3D {
     const tB = this.tBig, tw = Math.round(this.ts * (1 + tB * 0.16) / uc), th = Math.round(this.ts * (1.04 - tB * 0.06) / uc); this.pp.ensure(tw, th);
     const pv = this.pp.use(sc * 2 * (1 + B * 0.16) / uc, sc * 2 * (1.04 - B * 0.06) / uc);
     // rim / face by state (Figma 附录 A: 可用 = gold rim; dead = grey)
-    this.pp.setRim(s.dead ? PAL.dead : B > 0.5 ? (tier >= 3 ? PAL.pale : tier === 2 ? PAL.goldHot : PAL.gold) : s.ready ? PAL.gold : PAL.iron);
+    // user 11-13: 「可以触发的技能的状态UI语义提示不够，现在就是给材质换了个颜色，让人以为它本来就那样的」 — a ready (not yet lit) slot
+    // breathes: the rim swaps gold ↔ hot gold on each breath (no brightness boost above 1: that bloomed the slot white), a faint stepped
+    // glow ring breathes round it, the icon rises and bobs higher, and a pale glint crosses the rim every 1.6 s
+    const rdy = s.ready && !s.lit && !s.dead && B < 0.5 ? 1 - B * 2 : 0, breath = 0.5 + 0.5 * Math.sin(this.t * 4.2), sweep = ((this.t * 0.62) % 1);
+    const readyRim = sweep < 0.06 ? PAL.pale : breath > 0.55 ? PAL.goldHot : PAL.gold;
+    this.pp.setRim(s.dead ? PAL.dead : B > 0.5 ? (tier >= 3 ? PAL.pale : tier === 2 ? PAL.goldHot : PAL.gold) : s.ready ? readyRim : PAL.iron);
     this.pp.dim(1 - this.dim * 0.45, B > 0.5 ? 1 + B * (0.12 + 0.1 * Math.sin(this.t * 4) + this.flashT * 0.5) : 1);
-    this.pp.glowK = B * (0.55 + 0.2 * Math.sin(this.t * 3) + this.flashT * 0.5); this.pp.glowCol.setHex(tier >= 3 ? 0x80e0ff : 0xffb040);
+    this.pp.glowK = B * (0.55 + 0.2 * Math.sin(this.t * 3) + this.flashT * 0.5) + rdy * (0.04 + 0.06 * breath); this.pp.glowCol.setHex(tier >= 3 ? 0x80e0ff : 0xffb040);
     this.pp.outerK = B > 0.05 && tier >= 2 ? B * (0.5 + 0.3 * Math.sin(this.t * 6)) + this.flashT * 0.4 : 0; this.pp.outerCol.setHex(tier >= 3 ? 0x9ae8ff : 0xffa030);
     this.pp.update(); this.halo.visible = false; this.outer.visible = false;
     // pixel lamps on the top edge (big only): lit = tier
@@ -109,7 +114,7 @@ export class Slot3D {
     this.lamps.forEach((l, i) => { l.material = i < tier ? this.lampOn : this.lampOff; });
     const bs = 0.44 / (1 + B * 0.6); this.badge.scale.setScalar(bs); this.badge.position.set(lerp(0, -0.6, B), lerp(-0.8, -0.36, B), 0.42);
     // the floating icon: lift by state (dim 4 / ready 7 / tier 12 / 16 / 22 px), bob, spin on activation, tier-3 upgrade
-    const liftT = s.dead || this.dim > 0.5 ? 4 : s.lit ? [12, 12, 16, 22][Math.min(3, tier)] : s.ready ? 7 : 5;
+    const liftT = s.dead || this.dim > 0.5 ? 4 : s.lit ? [12, 12, 16, 22][Math.min(3, tier)] : s.ready ? 11 + 3 * Math.sin(this.t * 4.2) : 5;
     this.lift = lerp(this.lift, liftT, k);
     const pop = this.popT < 1 ? Math.sin(this.popT * Math.PI) * 16 : 0, bob = Math.sin(this.t * Math.PI) * 2;
     // R7B 追加 8（用户：「技能激活待释放的时候按钮上的技能图标模型要再放大一些」「甚至立起来一些」）：长成出牌按钮时图标放大到约 1.4 倍、
@@ -122,7 +127,7 @@ export class Slot3D {
     const want = tier >= 3 && B > 0.5 && this.def.up ? 1 : 0;
     if (want && !this.iconUp) { this.iconUp = skillIcon(this.def.up!); this.iconG.add(this.iconUp); }
     this.icon.visible = !(want && this.iconUp); if (this.iconUp) this.iconUp.visible = !!want;
-    const gl = s.dead ? 0.25 : s.lit ? [1.2, 1.2, 1.5, 1.9][Math.min(3, tier)] : s.ready ? 0.9 : 0.6, dm = s.dead ? 0.75 : this.dim * 0.6;
+    const gl = s.dead ? 0.25 : s.lit ? [1.2, 1.2, 1.5, 1.9][Math.min(3, tier)] : s.ready ? 0.95 + 0.12 * Math.sin(this.t * 4.2) : 0.6, dm = s.dead ? 0.75 : this.dim * 0.6;
     modelLook(this.icon, gl, dm); if (this.iconUp) modelLook(this.iconUp, gl, dm); modelLook(this.badge, 1, s.dead ? 0.6 : this.dim * 0.4);
     this.iconG.scale.setScalar(L.px(isz));
     const spin = this.popT < 1 ? ease.inOut(this.popT) * Math.PI * 2 : 0;

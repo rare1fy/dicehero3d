@@ -53,6 +53,7 @@ export class ChantButton {
     const Wc = Math.max(16, Math.round(this.sizePx / uc)); this.pp.ensure(Wc, Wc); if (Wc !== this.ringW) this.buildRing(Wc);
     L.at(this.x, this.y, 0, this.root.position); this.root.scale.setScalar(L.px(uc));
     this.pp.pressK = Math.max(0, Math.min(1, -p)); const pv = this.pp.use(Wc, Wc), sink = -2 - 0.5 * this.pp.pressK * pv.o.D;
+    if (v.live && this.flip.onBack && !this.flip.busy) this.flip.home();   // the player's turn again: turn back to the front
     const fa = this.flip.step(dt); this.pp.root.rotation.x = fa; this.pp.root.position.z = this.flip.lift(pv.H, pv.o.D);
     const mage = v.mage !== false, chantable = mage && v.live && !v.struck, full = v.ring >= 3 && chantable, high = v.live && v.risk >= 8;
     const ring = this.ring!; ring.visible = mage; ring.position.z = sink + 0.5;

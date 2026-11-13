@@ -73,7 +73,7 @@ export class BattleHud {
     this.reroll.place(X(200), Y(560), 124 * k, k);
     // left player zone (user: 「血瓶在中间感觉好孤独」): reroll + flask + status rows stacked to the flask's right, all on the left
     flask.place(X(350), Y(626), 136 * k); this.status.place(X(350), Y(632), 120 * k, k); this.status.stack = true;
-    this.chant.place(R(118), Y(400), 104 * k); this.chant.k = k;
+    this.chant.place(R(118), Y(330), 104 * k); this.chant.k = k;   // user 11-13: was y 400, it ran into the grown play button
     this.bar.layout(W, H, k, R0, sa.t); this.plates.k = k; this.bar.arrow.k = k;
     // the prep area: an irregular cluster above-left of the hero, over the reroll's top edge (no base)
     const spots = [[140, 436], [206, 452], [84, 452], [110, 376], [178, 370], [50, 392]];

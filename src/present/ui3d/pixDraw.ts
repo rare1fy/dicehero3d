@@ -91,7 +91,8 @@ export const textCellsH = (fp: number) => Math.ceil((PIX_H * fp) / GRID.u);
 export const digitCellsW = (t: string, scale = 1) => digitsW(t) * scale;
 export const DIGIT_CELLS_H = DIGIT_H;
 /** 标签字号：大数字 1u；标签用更小的整数倍（u ≥ 4 时取 u/2，手机上至少 1 个设备像素 = Fusion Pixel 原生 12px） */
-export const labelFp = () => Math.max(1, Math.floor(GRID.u / 2));
+// user 11-13: 「下面的标签文字也太小了，看不清」 — labels were half an art pixel per font pixel; now 2/3 (min 2 device px), tips keep it
+export const labelFp = () => Math.max(2, Math.round(GRID.u * 2 / 3));
 export const bigFp = () => GRID.u;
 
 /** 在一个 Pane 上按格作画：pane 尺寸 = 格数 × u（设备像素），nearest 采样，不缩放 */

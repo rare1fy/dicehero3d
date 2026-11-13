@@ -50,7 +50,7 @@ export class TopLeft {
   closeTip() { this.tipOn = -1; }
   update(dt: number) {
     this.t += dt; const L = this.L, k = this.k, vis = this.on;
-    this.pill.visible = vis; L.at(this.x, this.y, -2, this.pill.position); this.pill.scale.setScalar(L.px(100 * k));
+    this.pill.visible = false; L.at(this.x, this.y, -2, this.pill.position); this.pill.scale.setScalar(L.px(100 * k));
     const g = Math.round(this.gold), txt = String(g), ds = 1, w = digitCellsW(txt, ds) + 3, h = DIGIT_CELLS_H * ds + 3;
     paintCells(this.num, 'n' + txt, w, h, pen => pen.digits(txt, 1, 1, { col: '#ffffff', scale: ds, shadow: 'rgba(0,0,0,0.6)' }));
     this.num.at(Math.round(this.x - 14 * k), Math.round(this.y - this.num.h / 2)); this.num.visible = vis;

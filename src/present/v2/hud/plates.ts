@@ -50,7 +50,9 @@ export class FoePlates {
     const r1 = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 16), this.ringMat), r2 = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.66, 16), this.ringMat);
     this.ring.add(r1, r2);
     for (let i = 0; i < 4; i++) { const tk = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.26), this.ringMat); const a = i * Math.PI / 2; tk.position.set(Math.cos(a) * 1.08, Math.sin(a) * 1.08, 0); tk.rotation.z = a + Math.PI / 2; this.ring.add(tk); }
-    this.ring.rotation.x = -Math.PI / 2; this.ring.renderOrder = 9; this.ring.visible = false; this.ringMat.depthTest = false; scene.add(this.ring);
+    this.ring.rotation.x = -Math.PI / 2; this.ring.renderOrder = 9; this.ring.visible = false;
+    // user 11-13: 「目标红圈特效穿过模型了」 — the ring is a ground decal: depth-tested (the body hides it), offset toward the camera so it never z-fights the floor
+    this.ringMat.depthTest = true; this.ringMat.polygonOffset = true; this.ringMat.polygonOffsetFactor = -2; this.ringMat.polygonOffsetUnits = -2; scene.add(this.ring);
     installPixDebug(ov);
   }
   private get ka() { return GRID.ka || this.k; }
@@ -64,7 +66,7 @@ export class FoePlates {
       const sp = worldToUi(f.at); if (!pl.frozen) { pl.x = sp.x; pl.y = sp.y; }
       const wobble = Math.round(Math.sin(pl.shake * 70) * Math.min(1, pl.shake * 5) * 2.4) * uc;   // the deny shake moves in whole cells
       pl.p.at(pl.x - pl.p.w / 2 + wobble, pl.y - pl.p.h); pl.p.visible = f.dying || sp.z < 1;
-      if (f.taunt && !this.shields.has(f.uid)) { const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 12), new THREE.MeshBasicMaterial({ color: 0x409aff, transparent: true, opacity: 0.7, depthWrite: false, depthTest: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.renderOrder = 8; scene.add(m); this.shields.set(f.uid, m); }
+      if (f.taunt && !this.shields.has(f.uid)) { const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 12), new THREE.MeshBasicMaterial({ color: 0x409aff, transparent: true, opacity: 0.7, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.renderOrder = 8; scene.add(m); this.shields.set(f.uid, m); }
       const shield = this.shields.get(f.uid); if (shield) { shield.visible = !!f.taunt; shield.position.copy(f.foot).y += 0.07; shield.scale.setScalar(Math.max(0.9, f.width * 0.72)); (shield.material as THREE.MeshBasicMaterial).opacity = this.tauntFlash ? 0.5 + 0.5 * Math.abs(Math.sin(this.t * 24)) : 0.65; }
     }
     for (const [u, pl] of [...this.plates]) if (!seen.has(u)) { this.ov.drop(pl.p); this.plates.delete(u); }
@@ -73,7 +75,7 @@ export class FoePlates {
     const tf = foes.find(f => f.uid === target) || null; if (tf) this.lastTarget = tf;
     this.ringK += ((tf && !tf.dying ? 1 : 0) - this.ringK) * Math.min(1, dt * 8);
     const L = this.lastTarget; this.ring.visible = this.ringK > 0.02 && !!L;
-    if (L) { this.ring.position.set(L.foot.x, L.foot.y + 0.05, L.foot.z); const s = Math.max(0.8, L.width * 0.75) * (0.9 + 0.1 * this.ringK); this.ring.scale.setScalar(s); this.ring.rotation.z = this.t * 0.5; }
+    if (L) { this.ring.position.set(L.foot.x, L.foot.y + 0.03, L.foot.z); const s = Math.max(0.8, L.width * 0.75) * (0.9 + 0.1 * this.ringK); this.ring.scale.setScalar(s); this.ring.rotation.z = this.t * 0.5; }
     this.ringMat.color.setHex(L?.taunt ? 0x50aaff : 0xff3024).multiplyScalar(1.35);
     this.ringMat.opacity = this.ringK * (0.7 + 0.16 * Math.sin(this.t * 2));
     // the boss bar (top centre)
