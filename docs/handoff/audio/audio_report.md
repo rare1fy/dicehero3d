@@ -7,7 +7,7 @@
 - **音效**：106 条，344 个候选，都在 `sfx/out_dicehero_v2/mp3/`（同名 wav 在 `wav/`）。规格 `sfx/cues_dicehero_v2.json`，清单 `sfx/out_dicehero_v2/manifest.json`。
   - 生成器：Stable Audio 3 small-sfx，SAME-L 解码器。
   - 后处理：单声道 MP3 64 kbps，响度约 −16 LUFS，峰值不超过 −1 dBFS，首尾静音已裁掉。
-- **人物语音**：94 条，282 个候选（三职业各一套台词，加狼人、巫妖），在 `voice/out_dicehero_v2/mp3/`。
+- **人物语音**：104 条，312 个候选（三职业各一套台词，加狼人、巫妖），在 `voice/out_dicehero_v2/mp3/`。
   - 生成器：Breeze TTS 2，每条用 SenseVoice 回听，读错就重来；巫妖沿用锁定音色。
 - 修了一处流水线 bug：`gen_v2.py post` 处理「不许旋律」类循环音（`mag_chant_loop`）时，乐音检查拿到 None 后崩溃。改成循环音也做乐音检查。
 
