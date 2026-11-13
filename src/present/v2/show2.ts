@@ -80,7 +80,7 @@ export class V2Show {
     this.end = new StoneButton(L, LOOKS.end, 'end'); this.reroll = new StoneButton(L, LOOKS.reroll, 'reroll');
     this.loot = new Loot(L, 'warrior'); this.mech = new ClassMech(L, skin);
     this.banner = new Banner(this.ov); this.toast = new Toast(this.ov); this.screen = new Screen(this.ov);
-    this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10);
+    this.info = this.ov.pane(10); this.relicPane = this.ov.pane(10); this.freePane = this.ov.pane(10);
     this.loot.heroAt = () => (this.hero ? this.hero.chest() : V3(-2, 1.2, 3));
     this.tablet.onPick = (i) => this.playRow(i);
     this.end.onTap = () => this.act({ k: 'end' });
@@ -172,7 +172,7 @@ export class V2Show {
   private setStage(id: string) {
     this.cleanupWorld();
     this.stage = showStage(SCENES.find(s => s.id === id)!);
-    this.hero = new BattleActor(this.cls); this.hero.place(HERO_POS.clone(), Math.PI); this.hero.faceToward(V3(0, 0, -3));
+    this.hero = new BattleActor(this.cls); this.hero.place(HERO_POS.clone(), Math.PI); this.hero.faceToward(V3(0, 0, -3)); heroReadable(this.hero);
     shot('battle', staticShot(EYE, LOOK, 42), { cut: true });
   }
   async nextNode(): Promise<void> {
@@ -583,7 +583,7 @@ export class V2Show {
       const run = this.run!;
       const open = () => {
         const ov = this.ov, W = ov.w, H = ov.h, k = this.k, n = c.kind === 'levelUp' ? c.cards.length : c.options.length;
-        const cw = Math.min(300, (W - 80) / n - 20), ch = Math.min(320, H * 0.5), y0 = H * 0.5 - ch / 2 + 20 * k;
+        const cw = Math.min(300, (W - 80) / n - 20), ch = Math.min(280, H * 0.44), y0 = H * 0.5 - ch / 2 + 20 * k;
         this.screen.open(0.55);
         const title = c.kind === 'levelUp' ? `升级 · 第 ${run.s.level} 级` : c.kind === 'talent' ? '天赋 · 三选一' : '遗物 · 三选一';
         const sub = c.kind === 'levelUp' ? '技能碑：加一行 / 强化 / 改写' : c.kind === 'talent' ? '精英奖励' : '首领奖励';
@@ -690,7 +690,7 @@ export class V2Show {
   }
 
   // ------------------------------------------------------------ bot
-  private botGen = 0; private botQ: BotAct[] = []; private botTurnNo = -1;
+  private botGen = 0; private freeRolls = 0; private freePane!: Pane; private botQ: BotAct[] = []; private botTurnNo = -1;
   bot(on = true) {
     this.botOn = on; const gen = ++this.botGen;
     const loop = () => { if (!this.botOn || gen !== this.botGen) return; try { this.botTick(); } catch (e) { this.errors.push('[bot] ' + ((e as Error).stack || e)); } after(0.3, loop); };
@@ -727,17 +727,17 @@ export class V2Show {
       else if (o.ok) {
         const pv = b.preview(o.ref, this.sel, b.target()?.uid);
         v = { state: 'ready', tier: row ? lampsFor(row, o.tier) : 1, value: pv ? pv.total || pv.armor || pv.barrier || undefined : undefined };
-      } else if (o.reason === 'strike' || o.reason === 'chant' || (row && !o.bestTier)) v = { state: 'dead', tier: 0 };
-      else v = { state: 'idle', tier: row ? lampsFor(row, o.bestTier) : 0 };
+      } else if (o.reason === 'strike' || o.reason === 'chant') v = { state: 'dead', tier: 0 };
+      else v = { state: 'idle', tier: row && o.bestTier ? lampsFor(row, o.bestTier) : 0 };
       this.tablet.setView(i, v);
     }
     const ri = b.rerollInfo();
-    this.reroll.setBadge(ri.free, ri.free > 0 ? 0 : ri.bloodCost ?? 0);
+    this.reroll.setBadge(ri.free, ri.free > 0 ? 0 : ri.bloodCost ?? 0); this.freeRolls = live ? ri.free : 0;
     this.reroll.setEnabled(live && (ri.free > 0 || ri.bloodCost != null));
     this.end.setEnabled(live); this.end.breathe(live && b.mustEndTurn());
     // mage after the strike: which leftovers stay (cyan)
     const ki = live ? b.keepInfo() : null, keepSet = new Set(ki?.need ? (this.keep ?? ki.selected) : []);
-    for (const d of this.dice.values()) if (!this.sel.includes(d.uid!)) { const kp = keepSet.has(d.uid!); d.glow = kp ? 0.7 : (d.suit?.special ? 0.5 : 0); d.glowCol.set(kp ? 0x6ad8ff : 0xb860ff); d.lift = kp ? 0.3 : 0; }
+    for (const d of this.dice.values()) if (!this.sel.includes(d.uid!)) { const kp = keepSet.has(d.uid!); d.glow = kp ? 1.1 : (d.suit?.special ? 0.5 : 0); d.glowCol.set(kp ? 0x6ad8ff : 0xb860ff); d.lift = kp ? 0.55 : 0; }
   }
 
   // ------------------------------------------------------------ per frame
@@ -745,7 +745,11 @@ export class V2Show {
     const t = clock.time;
     this.hero?.update(dt); for (const a of this.foes.values()) a.update(dt); for (const a of this.picks) a.update(dt);
     this.tray.update(dt, t); this.flask.update(dt); this.loot.update(dt, t);
-    if (this.mode === 'battle' && this.b) { this.tablet.update(dt, t); this.end.update(dt); this.reroll.update(dt); this.mech.update(dt); this.drawRowNames(); this.drawInfo(); }
+    if (this.mode === 'battle' && this.b) { this.tablet.update(dt, t); this.end.update(dt); this.reroll.update(dt); this.mech.update(dt); this.drawRowNames(); this.drawInfo();
+      const rp = this.reroll, fs = Math.max(1, Math.round(this.ov.fp * this.ov.dpr)), ft = this.freeRolls > 0 ? `免费 ×${this.freeRolls}` : '';
+      if (ft) { const w = textW(ft, fs) / this.ov.dpr + 12, h = PIX_H * fs / this.ov.dpr + 8; this.freePane.paint(ft + fs, w, h, g => { panel(g, 0, 0, w * this.ov.dpr, h * this.ov.dpr, 2 * this.ov.dpr, { body: '#0e2214', rim: '#5ad07a', line: '#07050a', hi: '#1a3a22' }); text(g, ft, 6 * this.ov.dpr, 4 * this.ov.dpr, fs, '#b8ffc8'); }); this.freePane.at(rp.x - w / 2, rp.y - rp.sizePx * 0.62 - h); }
+      this.freePane.visible = !!ft; }
+    else this.freePane.visible = false;
     this.banner.update(dt); this.toast.update(dt); this.screen.update(dt);
     this.drawPlates(); this.drawRelics();
   }
@@ -754,21 +758,24 @@ export class V2Show {
     this.rowPanes.forEach((p, i) => {
       const r = this.tablet.rows[i]; if (!r) { p.visible = false; return; }
       const row = i < this.rows.length ? this.rows[i] : null, name = row ? `${row.name}${ROMAN[row.level]}` : this.b!.cls.basicAttack.name;
-      const st = r.view.state, col = st === 'ready' ? '#ffe9a8' : st === 'dead' ? '#6a6072' : '#c8bcd4', w = textW(name, s) / d + 8, h = PIX_H * s / d + 4;
-      p.paint(name + st + d, w, h, g => text(g, name, w * d - 2 * d, 2 * d, s, col, 'right'));
-      const c = this.L.toPx(r.g.getWorldPosition(V3()));
-      p.at(c.x - this.tablet.widthPx / 2 - w - 2, c.y - h / 2); p.visible = r.open > 0.5;
+      const st = r.view.state, col = st === 'ready' ? '#ffe9a8' : st === 'dead' ? '#6a6072' : '#e8dcf0', w = textW(name, s) / d + 6, h = PIX_H * s / d + 4;
+      p.paint(name + st + d, w, h, g => text(g, name, 2 * d, 2 * d, s, col, 'left'));
+      // on the plank face: right of the icon well, above the tier lamps
+      const c = this.L.toPx(r.g.localToWorld(V3(-8, 3.4, 2.2)));
+      p.at(c.x, c.y - h / 2); p.visible = r.open > 0.5;
     });
   }
   private drawInfo() {
-    const b = this.b!, ov = this.ov, d = ov.dpr, s = Math.max(1, Math.round(ov.fp * 0.75 * d)), p = b.s.player, lines: Array<[string, string]> = [];
+    const b = this.b!, ov = this.ov, d = ov.dpr, s = Math.max(1, Math.round(ov.fp * d)), p = b.s.player, lines: Array<[string, string]> = [];
     if (this.cls === 'warrior') { lines.push([`血怒 ${p.rage}/5`, '#ff8a7a']); const nd = b.s.phase === 'player' ? b.nextDice() : null; if (b.s.overflow > 0) lines.push([`溢出 ${b.s.overflow} 颗 · 本回合加伤`, '#ffb070']); else if (nd && nd.overflow > 0) lines.push([`下回合溢出 ${nd.overflow}`, '#ffb070']); }
-    else if (this.cls === 'mage') { lines.push([`吟唱 ${b.s.chantRing}/3${b.s.overcharge ? ' 过充' + b.s.overcharge : ''}`, '#8ac8ff']); const risk = b.s.phase === 'player' ? b.chantRisk() : 0; if (p.backlash || risk) lines.push([`反噬 ${p.backlash} 层${risk ? ` · 再吟唱多受 ${risk}` : ''}`, '#d090ff']); }
+    else if (this.cls === 'mage') { lines.push([`吟唱 ${b.s.chantRing}/3${b.s.overcharge ? ' 过充' + b.s.overcharge : ''}`, '#8ac8ff']); const risk = b.s.phase === 'player' ? b.chantRisk() : 0; if (p.backlash) lines.push([`反噬 ${p.backlash} 层`, '#d090ff']); if (risk) lines.push([`再吟唱 多受 ${risk}`, '#d090ff']); }
     else { lines.push([`第 ${Math.min(b.s.maxStrikes, b.s.strikesUsed + 1)}/${b.s.maxStrikes} 刀`, '#e0a8ff']); const sh = b.dice().filter(x => x.kind === 'shadowDie').length; if (sh) lines.push([`暗影残骰 ${sh}`, '#c890ff']); if (b.s.knifeMark) lines.push([`标记：${b.s.knifeMark.shape === 'straight' ? '顺子' : '同点'}`, '#ffd0ff']); }
+    if (this.cls === 'mage') { const ki = b.s.phase === 'player' && !this.busy ? b.keepInfo() : null; if (ki?.need) lines.unshift([`选 ${ki.cap} 颗保留 · 青光=留`, '#6ad8ff']); }
     const sts = p.statuses.map(x => `${ST_CN[x.type]}${x.value > 1 ? x.value : ''}`).join(' '); if (sts) lines.push([sts, '#c8e0a8']);
-    const key = lines.map(l => l[0]).join('|') + d, lh = PIX_H * s / d + 3, w = Math.max(...lines.map(l => textW(l[0], s) / d)) + 8, h = lines.length * lh + 4;
-    this.info.paint(key, w, h, g => lines.forEach((l, i) => text(g, l[0], 4 * d, (2 + i * lh) * d, s, l[1])));
-    const m = this.mech.anchor(); this.info.at(this.mech.x - 6, m.y - 44 * this.k - h); this.info.visible = true;
+    const key = lines.map(l => l[0]).join('|') + d, lh = PIX_H * s / d + 4, w = Math.max(...lines.map(l => textW(l[0], s) / d)) + 16, h = lines.length * lh + 10;
+    this.info.paint(key, w, h, g => { panel(g, 0, 0, w * d, h * d, 2 * d, { body: '#140e18', rim: '#4a3e56', line: '#07050a', hi: '#221a28' }); lines.forEach((l, i) => text(g, l[0], 8 * d, (5 + i * lh) * d, s, l[1])); });
+    // above the heart flask, clear of the flask, the potion list and the dice tray
+    this.info.at(12, this.ov.h - 230 * this.k - h); this.info.visible = true;
   }
   private drawRelics() {
     const run = this.run; if (!run || !this.L.on) { this.relicPane.visible = false; return; }
@@ -863,14 +870,17 @@ export class V2Show {
 
 interface CardData { title: string; tag: string; desc: string; col: string; ico: string[]; price?: string; dim?: boolean }
 function drawCard(g: CanvasRenderingContext2D, d: number, w: number, h: number, fp: number, c: CardData) {
-  const u = fp / 2, s2 = Math.max(1, Math.round(1.5 * u * d)), s1 = Math.max(1, Math.round(1 * u * d));
+  const u = fp / 2, tall = h > 200 * d, s2 = Math.max(1, Math.round((tall ? 3 : 2) * u * d)), s1 = Math.max(1, Math.round((tall ? 2 : 1.5) * u * d)), st = Math.max(1, Math.round(1.5 * u * d));
   panel(g, 0, 0, w, h, 3 * d, { body: c.dim ? '#141018' : '#1c1624', rim: c.dim ? '#4a4252' : c.col, line: '#07050a', hi: '#2c2234' });
-  icon(g, c.ico, w / 2 - 20 * d, 14 * d, 4 * d, { main: c.dim ? '#5a5262' : c.col, acc: '#fff2d8', dark: '#07050a' });
-  let y = 14 * d + 44 * d;
-  text(g, c.tag, w / 2, y, s1, c.dim ? '#6a6272' : '#b8a890', 'center'); y += PIX_H * s1 + 6 * d;
-  for (const ln of pixWrap(c.title, (w - 20 * d) / s2)) { text(g, ln, w / 2, y, s2, c.dim ? '#8a8292' : '#fff2d8', 'center'); y += PIX_H * s2 + 4 * d; }
-  y += 6 * d;
-  for (const ln of pixWrap(c.desc, (w - 24 * d) / s1)) { if (y > h - (c.price ? 40 : 14) * d) break; text(g, ln, w / 2, y, s1, c.dim ? '#7a7282' : '#e0d4c0', 'center'); y += PIX_H * s1 + 4 * d; }
+  const ic = tall ? 4 : 2.6, tl = pixWrap(c.title, (w - 20 * d) / s2), dl = pixWrap(c.desc, (w - 24 * d) / s1), ps = c.price ? 44 * d : 0;
+  const total = 10 * ic * d + 6 * d + PIX_H * st + 6 * d + tl.length * (PIX_H * s2 + 4 * d) + 6 * d + dl.length * (PIX_H * s1 + 4 * d);
+  const y0 = Math.max(12 * d, (h - ps - total) / 2);
+  icon(g, c.ico, w / 2 - 5 * ic * d, y0, ic * d, { main: c.dim ? '#5a5262' : c.col, acc: '#fff2d8', dark: '#07050a' });
+  let y = y0 + (10 * ic + 6) * d;
+  text(g, c.tag, w / 2, y, st, c.dim ? '#6a6272' : '#b8a890', 'center'); y += PIX_H * st + 6 * d;
+  for (const ln of tl) { text(g, ln, w / 2, y, s2, c.dim ? '#8a8292' : '#fff2d8', 'center'); y += PIX_H * s2 + 4 * d; }
+  y += 6 * d; const sd = s1;
+  for (const ln of dl) { if (y > h - ps - 10 * d - PIX_H * sd) break; text(g, ln, w / 2, y, sd, c.dim ? '#7a7282' : '#e0d4c0', 'center'); y += PIX_H * sd + 4 * d; }
   if (c.price) { icon(g, ICON.coin, w / 2 - textW(c.price, s2) / 2 - 16 * d, h - 30 * d, 1.2 * d, { main: '#ffc640', acc: '#fff0a0' }); text(g, c.price, w / 2 + 6 * d, h - 32 * d, s2, c.dim ? '#a08a60' : '#ffe08a', 'center'); }
 }
 function drawBtn(g: CanvasRenderingContext2D, d: number, w: number, h: number, fp: number, label: string, col: string) {
@@ -882,6 +892,20 @@ function rowCondCN(id: string) { try { const d = rowDef(id); return d.tierRule.s
 function ghost(d: Die3D, on: boolean, special?: SpecialId) {
   d.mat.transparent = on; d.mat.opacity = on ? 0.38 : 1; d.mat.depthWrite = !on; d.mat.needsUpdate = true;
   d.glow = on ? 0.55 : special ? 0.6 : 0; if (on) d.glowCol.set(0xe8f0ff);
+}
+/** the battle camera looks down on the hero: tone down near-white materials (silver helm, white hair) so the silhouette reads, and
+ *  add a dark contact disc under the feet to separate it from the ground. Only touches this actor's own material clones. */
+function heroReadable(a: BattleActor) {
+  // voxel actors use white material × vertex colours, so this scales the whole figure; keeps it under the bloom threshold
+  for (const m of a.meshes) { const mat = m.material as THREE.MeshToonMaterial; if (mat?.color) mat.color.multiplyScalar(0.95); }
+  // glow parts (staff orb, eyes) use shared unlit materials: clone per hero and halve them so the bloom stops swallowing the figure
+  a.root.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh && m.material instanceof THREE.MeshBasicMaterial && m.material.vertexColors) { const c = m.material.clone(); c.color.multiplyScalar(0.7); m.material = c; } });
+  for (const f of (a as unknown as { flashMats: Array<{ m: THREE.MeshToonMaterial; base: THREE.Color }> }).flashMats) f.base.multiplyScalar(0.4);
+  // a dark contact disc with a pale rim under the feet: separates the figure from the ground from the top-down camera
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.72, 24), new THREE.MeshBasicMaterial({ color: 0xe8d8b0, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.035; ring.renderOrder = 1; a.root.add(ring);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(0.62, 20), new THREE.MeshBasicMaterial({ color: 0x07050a, transparent: true, opacity: 0.55, depthWrite: false }));
+  disc.rotation.x = -Math.PI / 2; disc.position.y = 0.03; disc.renderOrder = 1; a.root.add(disc);
 }
 function mulberry(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function cameraRef() { return CAMERA; }

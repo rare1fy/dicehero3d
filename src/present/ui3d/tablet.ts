@@ -9,7 +9,7 @@ import { voxModel, iconCells, hexN, Spring, UiSparks } from './vox';
 import { SUITS, COND_ICONS, type SuitId } from './suitData';
 import { cue } from '../../audio/cues';
 
-export type RowCond = { kind: 'suit'; suit: SuitId } | { kind: 'pair' | 'straight' | 'sum' | 'big' | 'any' };
+export type RowCond = { kind: 'suit'; suit: SuitId } | { kind: 'mix'; suits: SuitId[] } | { kind: 'pair' | 'straight' | 'sum' | 'big' | 'any' };
 export interface TabletRow { id: string; cond: RowCond; /** lamp count (tiers) shown, ≤ 5 */ tiers?: number }
 /** ready = satisfied by the selection (lit, lifted); idle = playable this turn but not by the selection; dead = cannot be played this turn */
 export interface RowView { state: 'ready' | 'idle' | 'dead'; /** lamps lit (0..tiers) */ tier: number; /** predicted value, e.g. 18 */ value?: number | string; /** lamp colour per tier (default warm gold → violet) */ }
@@ -57,11 +57,20 @@ export class SkillTablet {
     }, { centre: [0, RH / 2, 0] });
     g.add(plank);
     // condition icon (relief), 10×10 rows → scaled to 7 cells
-    const rows = def.cond.kind === 'suit' ? SUITS[def.cond.suit].icon : COND_ICONS[def.cond.kind];
-    const S = def.cond.kind === 'suit' ? SUITS[def.cond.suit] : null;
-    const col = S ? hexN(S.col) : 0xe8dcc0, acc = S?.accent ? hexN(S.accent) : col, dk = S ? hexN(S.dark) : 0x3a3040;
-    const icon = voxModel(1, set => iconCells(set, rows, 0, 0, 0, 2, ch => (ch === 'd' ? { c: dk } : ch === 'o' ? { c: acc, g: 1 } : { c: col })), { centre: [5, 5, 0] });
-    icon.scale.setScalar(0.7); icon.position.set(-RW / 2 + 5, 0, 2.2); g.add(icon);
+    const mk = (S: { icon: string[]; col: string; accent?: string; dark: string } | null, rows: string[]) => {
+      const col = S ? hexN(S.col) : 0xe8dcc0, acc = S?.accent ? hexN(S.accent) : col, dk = S ? hexN(S.dark) : 0x3a3040;
+      return voxModel(1, set => iconCells(set, rows, 0, 0, 0, 2, ch => (ch === 'd' ? { c: dk } : ch === 'o' ? { c: acc, g: 1 } : { c: col })), { centre: [5, 5, 0] });
+    };
+    let icon: THREE.Group;
+    if (def.cond.kind === 'mix') {
+      // mixed-suit row: two suit icons side by side
+      const two = [...new Set(def.cond.suits)].slice(0, 2); icon = new THREE.Group();
+      two.forEach((sid, j) => { const m = mk(SUITS[sid], SUITS[sid].icon); m.scale.setScalar(0.4); m.position.set(two.length < 2 ? 0 : j ? 2 : -2, 0, 0); icon.add(m); });
+    } else {
+      const cd = def.cond, S = cd.kind === 'suit' ? SUITS[cd.suit] : null;
+      icon = mk(S, cd.kind === 'suit' ? SUITS[cd.suit].icon : COND_ICONS[cd.kind]); icon.scale.setScalar(0.7);
+    }
+    icon.position.set(-RW / 2 + 5, 0, 2.2); g.add(icon);
     // lamps
     const lamps: THREE.Mesh[] = [], lampMats: THREE.MeshBasicMaterial[] = [];
     for (let t = 0; t < tiers; t++) {

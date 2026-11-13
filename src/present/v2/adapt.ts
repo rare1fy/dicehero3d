@@ -19,6 +19,7 @@ export function uiSpecial(k: DieKind): SpecialId | undefined {
 export function tabletRow(r: BoardRow): TabletRow {
   const ic = r.def.icon; let cond: RowCond;
   if ((ic.kind === 'suit' || ic.kind === 'one') && ic.suit && uiSuit(ic.suit)) cond = { kind: 'suit', suit: uiSuit(ic.suit)! };
+  else if (ic.kind === 'mix' && ic.suits?.length) cond = { kind: 'mix', suits: ic.suits.map(uiSuit).filter((s): s is SuitId => !!s) };
   else if (ic.kind === 'straight') cond = { kind: 'straight' };
   else if (ic.kind === 'same' || ic.kind === 'pairs' || ic.kind === 'twoPair' || ic.kind === 'fullHouse') cond = { kind: 'pair' };
   else if (ic.kind === 'sum') cond = { kind: 'sum' };
