@@ -8,11 +8,12 @@
 import * as THREE from 'three';
 import type { BattleActor } from '../bestiary/battle';
 
-// user: 「站位还是太斜了」 — the hero stands on the path's centre line facing straight up it, the first enemy straight across from him
-export const HERO_POS = new THREE.Vector3(0, 0, 3.4);
+// user 2026-11-13: 「继续调调站位，你看看这版的站位」 (show-01: fishman vs lich) — the hero a little left of the centre line, seen from
+// behind, facing the enemy straight up the path; the camera close enough that the hero is big; the dice right-front of him
+export const HERO_POS = new THREE.Vector3(-1.6, 0, 3.0);
 /** the classic lanes up the path (no distance rule any more: enemies stand at their lane from the start) */
-const LANES: Array<[number, number]> = [[0, -2.3], [-2.3, -2.7], [2.3, -2.7], [-4.2, -2.2], [4.2, -2.2]];
-const BOSS_AT: [number, number] = [0, -3.9];
+const LANES: Array<[number, number]> = [[0, -1.9], [-2.3, -2.5], [2.3, -2.5], [-4.0, -2.0], [4.0, -2.0]];
+const BOSS_AT: [number, number] = [0, -3.6];
 export function foePosition(lane: number, boss: boolean, _withBoss = false) {
   if (boss) return new THREE.Vector3(BOSS_AT[0], 0, BOSS_AT[1]);
   const p = LANES[Math.max(0, lane) % LANES.length];
@@ -35,7 +36,7 @@ export function actorSubject(a: BattleActor, home: THREE.Vector3, hero = false):
 export const BANDS = { diceY: 0.655, diceX: 0.6, top: 0.09 };
 export const DIE_PX = 64;
 /** the classic battle camera (R5): eye / look / fov as the director takes them */
-const EYE0 = new THREE.Vector3(0.3, 13.4, 14.9), LOOK0 = new THREE.Vector3(0, -0.6, -2.4), FOV0 = 40;
+const LOOK0 = new THREE.Vector3(0, -0.6, -2.4), EYE0 = LOOK0.clone().add(new THREE.Vector3(0.3, 14.0, 17.3).multiplyScalar(0.62)), FOV0 = 42;   // closer: the hero reads big, as in show-01
 
 export interface CameraFit { eye: THREE.Vector3; look: THREE.Vector3; fov: number; pitch: number; distance: number; fits: boolean;
   /** the dice sockets: centre on the ground and scale (1 = a 0.8 m die) */
@@ -73,9 +74,12 @@ function placeField(eye: THREE.Vector3, look: THREE.Vector3, o: FitOpts, subject
   const hero = subjects.find(s => s.hero), foes = subjects.filter(s => !s.hero);
   const heroZ = hero ? (hero.box.min.z + hero.box.max.z) / 2 : 2.6;
   const foeZ = foes.length ? Math.max(...foes.map(f => f.box.max.z)) : -2.0;
-  const c = new THREE.Vector3(0, 0, (heroZ + foeZ) / 2);   // on the centre line; the sockets leave a lane open in the middle (diceField)
+  const heroX = hero ? (hero.box.min.x + hero.box.max.x) / 2 : -1.6;
+  const c = new THREE.Vector3(0, 0, heroZ - (heroZ - foeZ) * 0.45);   // right-front of the hero, between him and the enemies (show-01)
   const fwd = look.clone().sub(eye).normalize(), vf = _cam.fov * Math.PI / 180, focal = (o.H / 2) / Math.tan(vf / 2);
   let s = 1;
-  for (let i = 0; i < 3; i++) { const dep = c.clone().setY(0.4 * s).sub(eye).dot(fwd); s = DIE_PX * o.k * dep / (0.8 * focal); }
+  // the row starts just right of the hero whatever its scale (half width = 2.6 · GAP/1.15 · s, see diceField.ts)
+  for (let i = 0; i < 3; i++) { c.x = heroX + 0.9 + 2.55 * s; const dep = c.clone().setY(0.4 * s).sub(eye).dot(fwd); s = DIE_PX * o.k * dep / (0.8 * focal); }
+  c.x = heroX + 0.9 + 2.55 * s;
   return { c, s };
 }

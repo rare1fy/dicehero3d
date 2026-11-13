@@ -15,8 +15,8 @@ import { DICE3D, type Die3D } from '../dice/die3d';
 const N = 6, GAP = 1.12, SMILE = 0.3;
 /** three sockets each side of the centre line, with a lane open in the middle so the hero and the enemy straight across from him
  *  keep a clear line (user 2026-11-13: hero on the centre line, 「站位还是太斜了」) */
-const XS = [-3.5, -2.35, -1.2, 1.2, 2.35, 3.5];
-export const SLOT_LOCAL = XS.map(x => { const u = x / 3.5; return V3(x * GAP / 1.15, 0, SMILE * (1 - u * u) - SMILE * 0.45); });
+const XS = [-2.6, -1.56, -0.52, 0.52, 1.56, 2.6];   // one compact smile row (show-01 kept the dice in a small cluster)
+export const SLOT_LOCAL = XS.map(x => { const u = x / 2.6; return V3(x * GAP / 1.15, 0, SMILE * (1 - u * u) - SMILE * 0.45); });
 /** which slots n dice take first: the most central */
 const PREF = [2, 3, 1, 4, 0, 5];
 
