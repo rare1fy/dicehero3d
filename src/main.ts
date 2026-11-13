@@ -19,6 +19,7 @@ import { initLegoEnv, legoEnvTex } from './present/look/legokit';
 import { figCast, setFigEnv } from './present/bestiary/figs';
 import { ui3dDemo, ui3dPointer } from './present/ui3d/demo';
 import { V2Show } from './present/v2/show2';
+import { installTunePanel } from './present/v2/tunePanel';
 import { GRADE } from './present/look/post';
 import { PX, PXU, readPixelFlag, installPixelKeys, setPixel } from './present/look/pixel';
 import type { Env } from './present/look/env';
@@ -70,6 +71,7 @@ Promise.resolve().then(() => {
   }
   if (entry0 === 'v2' || hash === 'v2') {   // the rules-v2 slice (present/v2/show2.ts) builds its own stages (no default arena)
     const V = new V2Show(platform);
+    installTunePanel(V);   // user 11-14: camera / UI perspective sliders, values shown on screen
     dh.add({ v2: () => ({ run: V.run, battle: V.b }), show2: () => V, bot: (on = true) => V.bot(on), goto: (k: 'normal' | 'elite' | 'shop' | 'boss') => V.goto(k), pick: (c: 'warrior' | 'mage' | 'rogue', seed?: number) => V.pick(c, seed), idle: () => V.idle(), speed: (s: number) => { FX.speed = s; } });
     gfx.start(() => {}, () => { V.L.renderText(gfx.renderer); V.ov.render(gfx.renderer); frames++; });
     dh.ready(); return;

@@ -16,13 +16,16 @@ function foeHead(pen: PixPen, x: number, y: number) {
   pen.icon(FOE_HEAD, x + 3, y + 3, { b: '#6a5a86', r: '#ff3a2a', k: '#2a2036' }, { outline: null });
 }
 
+/** the tag's font size: the label size, one step smaller while the capsule would be wider than the row step */
+function tagFp(tag: string, fp: number, max: number) { let f = fp; while (f > 1 && (textCellsW(tag, f) + 9) * GRID.uc > max) f--; return f; }
+
 export function paintSlotFront(s: Slot3D, B: number, tier: number) {
   const st = s.st, on = s.vis > 0.3, uc = GRID.uc, fp = labelFp(), R = Math.round;
   // the tag capsule under the small slot
-  const tag = s.def.tag, tc = st.dead ? '#8a8292' : tagColor(tag), tw = textCellsW(tag, fp) + 8, th = textCellsH(fp) + 6;
-  paintCells(s.tag, ['g2', tag, tc, fp].join('|'), tw + 1, th + 1, pen => {
+  const tag = s.def.tag, tc = st.dead ? '#8a8292' : tagColor(tag), tfp = tagFp(tag, fp, s.tagMax), tw = textCellsW(tag, tfp) + 8, th = textCellsH(tfp) + 6;
+  paintCells(s.tag, ['g2', tag, tc, tfp].join('|'), tw + 1, th + 1, pen => {
     pen.panel(0, 0, tw, th, st.dead ? PANEL.disabled : panelWith(PANEL.normal, tc), 2);
-    pen.text(tag, Math.floor(tw / 2), 3, { col: tc, fp, align: 'center' });
+    pen.text(tag, Math.floor(tw / 2), 3, { col: tc, fp: tfp, align: 'center' });
   });
   s.tag.at(R(s.cx - s.tag.w / 2), R(s.cy + s.size * 0.55 + 2 * uc));
   // user 11-13: 「选中技能的时候，下面的文字叠一起了」 — shrunk slots (beside a play button) have no room for a tag: it fades out with the shrink

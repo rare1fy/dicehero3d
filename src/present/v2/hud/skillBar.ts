@@ -45,20 +45,26 @@ export class SkillBar {
     if (key !== this.litWas) { this.litWas = key; this.place(); }
   }
   /** the layout targets for the current mode (ref coords × k, right-anchored) */
+  /** slot spacing multiplier (tuning panel: 技能间距) */
+  spacing = 1;
+  /** re-run the layout (after a spacing change) */
+  relayout() { this.place(); }
   private place(snap = false) {
     // UX_V3 §1b (phone hold): idle slots 84 wide, gap 10, outer edge ≥ 64 from the right; the play button at (right − 200, 548);
     // shrunk slots ≥ 56; the thumb disc where the button would be. R(x) = x reference px in from the right edge.
-    const k = this.k, R = (x: number) => this.R0 - x * k, Y = (y: number) => this.top + y * k;
+    // user 11-14: 「右侧的技能都挨得太近了，叠一起了」 — the stronger UI turn shows each slot's extruded side, so the steps grew
+    // (idle 94 → 112, two play buttons 148 → 160, the shrunk row 66 → 80, 24 clear of the button); × spacing from the tuning panel
+    const k = this.k, sp = this.spacing, R = (x: number) => this.R0 - x * k, Y = (y: number) => this.top + y * k, idleStep = 112 * sp;
     // slots the stage hid (tVis = 0, e.g. the warrior's 劈砍 while unlit) take no room in the row
     const shown = this.slots.map((_, i) => i).filter(i => !this.on || this.slots[i].tVis > 0.5), n = shown.length;
     const lit = shown.filter(i => this.slots[i].st.lit), none = !lit.length && this.selVals.length > 0;
     if (!lit.length && !none) {   // the resting row
-      shown.forEach((i, j) => { const s = this.slots[i]; s.tx = R(106 + (n - 1 - j) * 94); s.ty = Y(598); s.ts = 84 * k; s.tBig = 0; s.tDim = 0; });
+      shown.forEach((i, j) => { const s = this.slots[i]; s.tx = R(106 + (n - 1 - j) * idleStep); s.ty = Y(598); s.ts = 84 * k; s.tBig = 0; s.tDim = 0; s.tagMax = idleStep * k * 0.94; });
     } else {
-      const big = lit.length, rest = shown.filter(i => !lit.includes(i)), bs = big > 1 ? 124 : 170, step = 148;
+      const big = lit.length, rest = shown.filter(i => !lit.includes(i)), bs = big > 1 ? 124 : 170, step = 160 * sp;
       lit.forEach((i, j) => { const s = this.slots[i]; s.tx = R(200 + (big - 1 - j) * step); s.ty = Y(big > 1 ? 556 : 548); s.ts = bs * k; s.tBig = 1; s.tDim = 0; });
       const edge = none ? 200 + 80 : 200 + (big - 1) * step + bs * 0.58;   // the left edge of the button(s) / disc
-      rest.forEach((i, j) => { const s = this.slots[i]; s.tx = R(edge + 10 + 29 + (rest.length - 1 - j) * 66); s.ty = Y(600); s.ts = 58 * k; s.tBig = 0; s.tDim = none ? 0.55 : 0.25; });
+      rest.forEach((i, j) => { const s = this.slots[i]; s.tx = R(edge + 24 + 29 + (rest.length - 1 - j) * 80 * sp); s.ty = Y(600); s.ts = 58 * k; s.tBig = 0; s.tDim = none ? 0.55 : 0.25; });
     }
     if (snap) for (const s of this.slots) { s.cx = s.tx; s.cy = s.ty; s.size = s.ts; s.big = s.tBig; }
   }

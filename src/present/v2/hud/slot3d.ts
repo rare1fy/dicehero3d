@@ -40,6 +40,8 @@ export class Slot3D {
   /** current / target px pose and morph */
   cx = 0; cy = 0; size = 80; tx = 0; ty = 0; ts = 80; big = 0; tBig = 0; dim = 0; tDim = 0; vis = 0; tVis = 1;
   st: SlotState = { lit: false, tier: 0, dead: false, ready: false }; press = 0; aimK = 0; k = 1;
+  /** widest the tag capsule may be (px): the row step, so neighbouring tags never overlap */
+  tagMax = 9999;
   /** where the aim arrow ends (CSS px), set by the skill bar while this slot is aimed */
   aim: { x: number; y: number } | null = null;
   private lift = 4; private shownTier = 0; bump = new Spring(500, 18); private popT = 1; private flashT = 0; t = Math.random() * 6; private wave = 1;
